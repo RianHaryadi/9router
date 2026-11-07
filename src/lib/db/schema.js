@@ -3,7 +3,7 @@
 // pre-change safety backup in migrate.js: when the stored version is lower,
 // one lightweight DB backup is taken before applying schema changes. Forgetting
 // to bump only skips that backup — it does NOT break the additive auto-sync.
-export const SCHEMA_VERSION = 2;
+export const SCHEMA_VERSION = 3;
 
 export const PRAGMA_SQL = `
 PRAGMA journal_mode = WAL;
@@ -125,12 +125,19 @@ export const TABLES = {
       status: "TEXT",
       tokens: "TEXT",
       meta: "TEXT",
+      // Observability (v3): real latency/TTFT + project attribution + fallback
+      // count. Additive — picked up by syncSchemaFromTables() on boot.
+      latencyMs: "INTEGER DEFAULT 0",
+      ttftMs: "INTEGER DEFAULT 0",
+      projectName: "TEXT",
+      fallbackCount: "INTEGER DEFAULT 0",
     },
     indexes: [
       "CREATE INDEX IF NOT EXISTS idx_uh_ts ON usageHistory(timestamp DESC)",
       "CREATE INDEX IF NOT EXISTS idx_uh_provider ON usageHistory(provider)",
       "CREATE INDEX IF NOT EXISTS idx_uh_model ON usageHistory(model)",
       "CREATE INDEX IF NOT EXISTS idx_uh_conn ON usageHistory(connectionId)",
+      "CREATE INDEX IF NOT EXISTS idx_uh_project ON usageHistory(projectName)",
     ],
   },
   usageDaily: {
@@ -154,6 +161,29 @@ export const TABLES = {
       "CREATE INDEX IF NOT EXISTS idx_rd_provider ON requestDetails(provider)",
       "CREATE INDEX IF NOT EXISTS idx_rd_model ON requestDetails(model)",
       "CREATE INDEX IF NOT EXISTS idx_rd_conn ON requestDetails(connectionId)",
+    ],
+  },
+  fallbackEvents: {
+    columns: {
+      id: "TEXT PRIMARY KEY",
+      timestamp: "TEXT NOT NULL",
+      requestId: "TEXT",
+      provider: "TEXT",
+      model: "TEXT",
+      connectionId: "TEXT",
+      apiKey: "TEXT",
+      projectName: "TEXT",
+      fromProvider: "TEXT",
+      fromModel: "TEXT",
+      status: "INTEGER",
+      reason: "TEXT",
+      cooldownMs: "INTEGER",
+      latencyMs: "INTEGER",
+    },
+    indexes: [
+      "CREATE INDEX IF NOT EXISTS idx_fe_ts ON fallbackEvents(timestamp DESC)",
+      "CREATE INDEX IF NOT EXISTS idx_fe_provider ON fallbackEvents(provider)",
+      "CREATE INDEX IF NOT EXISTS idx_fe_request ON fallbackEvents(requestId)",
     ],
   },
 };

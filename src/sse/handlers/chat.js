@@ -8,6 +8,9 @@ import {
   isValidApiKey,
 } from "../services/auth.js";
 import { handleAntigravityQuotaError, clearAntigravityStrikes } from "../services/antigravityQuota.js";
+import { recordSuccess, recordFailure } from "../services/healthBreaker.js";
+import { checkFallbackError } from "open-sse/services/accountFallback.js";
+import { resolveProviderId } from "@/shared/constants/providers.js";
 import { getSettings } from "@/lib/localDb";
 import { getModelInfo, getComboModels } from "../services/model.js";
 import { handleChatCore } from "open-sse/handlers/chatCore.js";
@@ -264,6 +267,8 @@ async function handleSingleModelChat(body, modelStr, clientRawRequest = null, re
   }
 
   const { provider, model } = modelInfo;
+  // Canonical provider id so breaker keys match the ones auth.js filters on.
+  const breakerProvider = resolveProviderId(provider);
 
   // Routing shown in the unified "▶" line (client model → provider/model)
 
@@ -354,6 +359,9 @@ async function handleSingleModelChat(body, modelStr, clientRawRequest = null, re
         await clearAccountError(credentials.connectionId, credentials, model);
         // "Consecutive" strikes: a success clears the breaker for this pair.
         clearAntigravityStrikes(credentials.connectionId, model);
+        // Health breaker: a success closes connection+model (and the
+        // provider+model aggregate) and resets their failure counters.
+        recordSuccess({ connectionId: credentials.connectionId, provider: breakerProvider, model });
       }
     });
 
@@ -369,6 +377,23 @@ async function handleSingleModelChat(body, modelStr, clientRawRequest = null, re
       );
       if (quotaResetMs) resetsAtMs = quotaResetMs;
     }
+
+    // Health breaker: request-scoped rejections (400 context overflow etc,
+    // flagged by checkFallbackError) are caused by the request, not the
+    // account/provider, and must NOT count as breaker failures.
+    // markAccountUnavailable does not report requestScoped, so classify the
+    // error here. Antigravity quota exhaustion (409/429 with a precise
+    // resetAt) is account-scoped by definition and always counts.
+    const requestScoped = !quotaResetMs
+      && checkFallbackError(result.status, result.error, 0, breakerProvider).requestScoped === true;
+    recordFailure({
+      connectionId: credentials.connectionId,
+      provider: breakerProvider,
+      model,
+      status: result.status,
+      errorText: result.error,
+      requestScoped,
+    });
 
     // Exhausted Antigravity model is blocked only in RAM cache until upstream resetAt.
     // Do not persist a modelLock_* for this path.

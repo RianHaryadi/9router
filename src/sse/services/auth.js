@@ -4,6 +4,7 @@ import { formatRetryAfter, checkFallbackError, isModelLockActive, buildModelLock
 import { MAX_RATE_LIMIT_COOLDOWN_MS } from "open-sse/config/errorConfig.js";
 import { resolveProviderId, FREE_PROVIDERS } from "@/shared/constants/providers.js";
 import { getAntigravityQuotaCache, getAntigravityModelQuota } from "./antigravityQuota.js";
+import { filterByHealth } from "./healthBreaker.js";
 import * as log from "../utils/logger.js";
 
 // Mutex to prevent race conditions during account selection
@@ -84,7 +85,7 @@ export async function getProviderCredentials(provider, excludeConnectionIds = nu
     const antigravityQuotaCache = isAntigravity && model ? getAntigravityQuotaCache() : null;
 
     // Filter out model-locked, excluded, and Antigravity quota-exhausted connections.
-    const availableConnections = connections.filter(c => {
+    const baseAvailable = connections.filter(c => {
       if (excludeSet.has(c.id)) return false;
       if (isModelLockActive(c, model)) return false;
       const enabled = c.providerSpecificData?.enabledModels;
@@ -101,6 +102,20 @@ export async function getProviderCredentials(provider, excludeConnectionIds = nu
       }
       return true;
     });
+
+    // Health breaker (state.md "Keputusan desain" #4): skip connections whose
+    // breaker is open for this model — but only while at least one healthy
+    // alternative exists. If every candidate is breaker-blocked, fall back to
+    // the pre-breaker list: the open state stays informational (surfaced in
+    // the UI) instead of deadlocking account selection.
+    const { healthy, blocked: breakerBlocked } = filterByHealth(baseAvailable, providerId, model);
+    if (breakerBlocked.length > 0) {
+      log.debug(
+        "AUTH",
+        `${provider} | breaker blocked ${breakerBlocked.length}/${baseAvailable.length} connection(s) for ${model || "any model"}${healthy.length === 0 ? " — all blocked, using pre-breaker list" : ""}`
+      );
+    }
+    const availableConnections = healthy.length > 0 ? healthy : baseAvailable;
 
     log.debug("AUTH", `${provider} | available: ${availableConnections.length}/${connections.length}`);
     connections.forEach(c => {

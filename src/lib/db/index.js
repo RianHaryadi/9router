@@ -69,6 +69,16 @@ export {
   saveRequestDetail, getRequestDetails, getRequestDetailById, getDistinctProviders,
 } from "./repos/requestDetailsRepo.js";
 
+// Fallback events (chain log)
+export {
+  saveFallbackEvent, getFallbackEvents, getFallbackSummary, pruneFallbackEvents,
+} from "./repos/fallbackRepo.js";
+
+// Metrics (latency percentiles, spend per project, provider health)
+export {
+  getLatencyPercentiles, getSpendByProject, getProviderHealthSnapshot,
+} from "./repos/metricsRepo.js";
+
 // Export/import full DB
 export async function exportDb() {
   const db = await getAdapter();
