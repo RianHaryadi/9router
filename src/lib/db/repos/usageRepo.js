@@ -2,6 +2,7 @@ import { EventEmitter } from "events";
 import { getAdapter } from "../driver.js";
 import { parseJson, stringifyJson } from "../helpers/jsonCol.js";
 import { getMeta, setMeta } from "../helpers/metaStore.js";
+import { applyBudgetSpend } from "./apiKeysRepo.js";
 
 function maskApiKey(key) {
   if (!key || typeof key !== "string") return null;
@@ -318,6 +319,20 @@ export async function saveRequestUsage(entry) {
     if (inserted) {
       pushToRing(entry);
       scheduleStatsEvent("update", 250);
+
+      // Per-key budget attribution (Fase 2): atomically add this request's cost
+      // (USD -> cents) to the key's monthly spend. Fail-open: any error here
+      // never breaks usage recording. Rollover reset is handled in the chat
+      // gate on the next gated request, so the counter may briefly lag.
+      const ak = entry.apiKey && typeof entry.apiKey === "string" ? entry.apiKey.trim() : null;
+      const costCents = Math.round((entry.cost || 0) * 100);
+      if (ak && costCents > 0) {
+        try {
+          await applyBudgetSpend(ak, costCents);
+        } catch {
+          /* attribution is best-effort */
+        }
+      }
     }
   } catch (e) {
     console.error("Failed to save usage stats:", e);

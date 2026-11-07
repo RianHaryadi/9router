@@ -20,6 +20,8 @@ import { appendPxpipeEvent } from "@/lib/pxpipe/events.js";
 import { errorResponse, unavailableResponse } from "open-sse/utils/error.js";
 import { upstreamResponseHeaders } from "open-sse/utils/upstreamHeaders.js";
 import { handleComboChat, handleFusionChat, detectRequiredCapabilities } from "open-sse/services/combo.js";
+import { getApiKeyBudget, resetBudgetSpend } from "@/lib/db/repos/apiKeysRepo.js";
+import { checkBudget, isBudgetPeriodRolledOver } from "@/custom/budget/check.js";
 import { augmentModelsWithCapacityAdapter, withCapacityAdapterStripping, getActiveAdapterStrategy } from "open-sse/services/capacityAdapter.js";
 import { handleBypassRequest } from "open-sse/utils/bypassHandler.js";
 import { HTTP_STATUS } from "open-sse/config/runtimeConfig.js";
@@ -159,6 +161,46 @@ export async function handleChat(request, clientRawRequest = null) {
   const keyAccess = await getKeyAccessContext(request);
   const keyAccessDenied = await enforceKeyAccess(keyAccess, modelStr);
   if (keyAccessDenied) return keyAccessDenied;
+
+  // ── Per-key monthly budget gate (Fase 2) ──────────────────────────────
+  // Only enforce when a key is presented (unauthenticated requests are unlimited).
+  // Gate uses cost=0 (pre-flight); actual cost attribution happens in usageRepo
+  // after the upstream response, so the counter is always behind by one request.
+  if (apiKey) {
+    try {
+      const budget = await getApiKeyBudget(apiKey);
+      if (budget && budget.budgetLimitCents !== null) {
+        const now = Date.now();
+        // Detect and one-time-reset rollover before gate evaluation.
+        if (isBudgetPeriodRolledOver(budget.budgetStartedAt, budget.budgetPeriod, now)) {
+          await resetBudgetSpend(apiKey, new Date(now).toISOString());
+        }
+        const result = checkBudget({
+          budgetLimitCents: budget.budgetLimitCents,
+          budgetPeriod: budget.budgetPeriod,
+          budgetStartedAt: budget.budgetStartedAt,
+          budgetSpentCents: budget.budgetSpentCents,
+          costCents: 0, // pre-flight gate
+          now,
+        });
+        if (!result.allowed) {
+          log.warn("BUDGET", `API key over limit`, {
+            remaining: result.remainingCents,
+            usedPct: result.usedPct,
+          });
+          return errorResponse(HTTP_STATUS.PAYMENT_REQUIRED, "budget exhausted for this key");
+        }
+        if (result.usedPct !== null && result.usedPct >= 80) {
+          log.warn("BUDGET", `API key at ${result.usedPct}% budget`, {
+            remaining: result.remainingCents,
+          });
+        }
+      }
+    } catch {
+      // fail-open: DB or logic error never blocks a request
+    }
+  }
+  // ── End budget gate ────────────────────────────────────────────────────
 
   // Per-request observability identity (design decisions 5 & 6): ONE id and
   // ONE project label shared by every fallback event and usage row of this

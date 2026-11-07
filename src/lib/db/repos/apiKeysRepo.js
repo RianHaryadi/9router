@@ -13,6 +13,11 @@ function rowToKey(row) {
     isActive: row.isActive === 1 || row.isActive === true,
     createdAt: row.createdAt,
     access: keyAccessFromColumns(row.accessRestricted, row.accessAllow),
+    // Per-key budget (additive; older rows read as unlimited/monthly/0)
+    budgetLimitCents: row.budgetLimitCents != null ? row.budgetLimitCents : null,
+    budgetPeriod: row.budgetPeriod || "monthly",
+    budgetStartedAt: row.budgetStartedAt || null,
+    budgetSpentCents: row.budgetSpentCents != null ? row.budgetSpentCents : 0,
   };
 }
 
@@ -86,4 +91,66 @@ export async function validateApiKey(key) {
   const row = db.get(`SELECT isActive FROM apiKeys WHERE key = ?`, [key]);
   if (!row) return false;
   return row.isActive === 1 || row.isActive === true;
+}
+
+/** Read-only budget row for a presented API key (fail-open -> unlimited defaults). */
+export async function getApiKeyBudget(key) {
+  if (!key) return null;
+  try {
+    const db = await getAdapter();
+    return rowToKey(
+      db.get(
+        `SELECT budgetLimitCents, budgetPeriod, budgetStartedAt, budgetSpentCents FROM apiKeys WHERE key = ?`,
+        [key]
+      )
+    );
+  } catch {
+    return null; // fail-open on DB error: treat as no budget row
+  }
+}
+
+/**
+ * Increment a key's cumulative monthly spend. Optionally resets the counter
+ * first when the period has rolled over (single atomic UPDATE, not a read-modify-write).
+ * Returns the new spent value, or null on failure (fail-open).
+ * @param {string} key
+ * @param {number} costCents  non-negative integer
+ * @param {{resetIfRolledOver?: boolean, period?: string, startedAt?: string|null, now?: number}} [opts]
+ */
+export async function applyBudgetSpend(key, costCents, opts = {}) {
+  if (!key || !(costCents > 0)) return null;
+  try {
+    const db = await getAdapter();
+    const { resetIfRolledOver = false, period = "monthly", startedAt = null, now = Date.now() } = opts;
+    const rollover = resetIfRolledOver && startedAt && period === "monthly"
+        ? now - new Date(startedAt).getTime() >= 30 * 24 * 3600 * 1000
+        : false;
+    if (rollover) {
+      db.run(
+        `UPDATE apiKeys SET budgetSpentCents = ?, budgetStartedAt = ? WHERE key = ?`,
+        [costCents, new Date(now).toISOString(), key]
+      );
+    } else {
+      db.run(`UPDATE apiKeys SET budgetSpentCents = budgetSpentCents + ? WHERE key = ?`, [
+        Math.max(0, Math.round(costCents)),
+        key,
+      ]);
+    }
+    const row = db.get(`SELECT budgetSpentCents FROM apiKeys WHERE key = ?`, [key]);
+    return row ? row.budgetSpentCents : null;
+  } catch {
+    return null; // fail-open on DB error
+  }
+}
+
+/** Explicitly reset a key's budget spend (manual admin reset or new billing period). */
+export async function resetBudgetSpend(key, startedAt = new Date().toISOString()) {
+  if (!key) return false;
+  try {
+    const db = await getAdapter();
+    db.run(`UPDATE apiKeys SET budgetSpentCents = 0, budgetStartedAt = ? WHERE key = ?`, [startedAt, key]);
+    return true;
+  } catch {
+    return false;
+  }
 }
