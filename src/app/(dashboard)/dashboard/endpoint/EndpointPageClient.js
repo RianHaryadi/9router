@@ -675,6 +675,67 @@ export default function APIPageClient({ machineId }) {
     }
   };
 
+  // Per-key monthly budget (dollars in UI, cents in DB)
+  const [budgetDrafts, setBudgetDrafts] = useState({});
+  const [savingBudgetId, setSavingBudgetId] = useState(null);
+
+  const budgetDraftOf = (key) => {
+    const d = budgetDrafts[key.id] || {};
+    return {
+      unlimited: d.unlimited ?? (key.budgetLimitCents == null),
+      dollars: d.dollars !== undefined ? d.dollars : (key.budgetLimitCents == null ? "" : (key.budgetLimitCents / 100).toFixed(2)),
+    };
+  };
+
+  const setBudgetDraft = (id, patch) =>
+    setBudgetDrafts((prev) => ({ ...prev, [id]: { ...(prev[id] || {}), ...patch } }));
+
+  const handleSaveBudget = async (key) => {
+    const draft = budgetDraftOf(key);
+    let budgetLimitCents = null;
+    if (!draft.unlimited) {
+      const dollars = Number(draft.dollars);
+      if (draft.dollars === "" || Number.isNaN(dollars) || dollars < 0) return;
+      budgetLimitCents = Math.round(dollars * 100);
+    }
+    setSavingBudgetId(key.id);
+    try {
+      const res = await fetch(`/api/keys/${key.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ budgetLimitCents, budgetPeriod: "monthly" }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.key) {
+        setKeys((prev) => prev.map((k) => (k.id === key.id ? { ...k, ...data.key } : k)));
+      } else {
+        console.log("Error saving budget:", data.error || res.status);
+      }
+    } catch (error) {
+      console.log("Error saving budget:", error);
+    } finally {
+      setSavingBudgetId(null);
+    }
+  };
+
+  const handleResetBudget = async (key) => {
+    setSavingBudgetId(key.id);
+    try {
+      const res = await fetch(`/api/keys/${key.id}/reset-budget`, { method: "POST" });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.key) {
+        setKeys((prev) => prev.map((k) => (k.id === key.id ? { ...k, ...data.key } : k)));
+        setBudgetDrafts((prev) => ({ ...prev, [key.id]: { unlimited: true, dollars: "" } }));
+      } else {
+        console.log("Error resetting budget:", data.error || res.status);
+      }
+    } catch (error) {
+      console.log("Error resetting budget:", error);
+    } finally {
+      setSavingBudgetId(null);
+    }
+  };
+
   // Save a key's access (restricted flag + allow list).
   const handleUpdateKeyAccess = async (id, access) => {
     try {
@@ -1068,6 +1129,73 @@ export default function APIPageClient({ machineId }) {
                       }
                     })}
                   />
+                  {/* Per-key monthly budget */}
+                  <div className="mt-3 pt-3 border-t border-black/[0.03] dark:border-white/[0.03]">
+                    {(() => {
+                      const draft = budgetDraftOf(key);
+                      const usedPct = key.budgetLimitCents == null ? null : (key.budgetLimitCents > 0 ? Math.min(100, Math.round(((key.budgetSpentCents || 0) / key.budgetLimitCents) * 100)) : 100);
+                      return (
+                        <>
+                          <div className="flex items-center gap-2 text-xs text-text-muted flex-wrap">
+                            <span>Monthly budget:</span>
+                            {key.budgetLimitCents == null ? (
+                              <span>Unlimited</span>
+                            ) : (
+                              <span>${(key.budgetSpentCents || 0) / 100} / ${key.budgetLimitCents / 100} used ({usedPct}%)</span>
+                            )}
+                          </div>
+                          {key.budgetLimitCents != null && (
+                            <div className="mt-1 h-1.5 w-full max-w-xs rounded-full bg-surface-2 overflow-hidden">
+                              <div
+                                className={`h-full ${usedPct >= 80 ? "bg-red-500" : usedPct >= 50 ? "bg-amber-500" : "bg-green-500"}`}
+                                style={{ width: `${usedPct}%` }}
+                              />
+                            </div>
+                          )}
+                          <div className="mt-2 flex items-center gap-2 flex-wrap">
+                            <input
+                              aria-label="Monthly budget in USD"
+                              type="number"
+                              min="0"
+                              step="0.01"
+                              disabled={draft.unlimited || savingBudgetId === key.id}
+                              value={draft.unlimited ? "" : draft.dollars}
+                              onChange={(e) => setBudgetDraft(key.id, { dollars: e.target.value })}
+                              placeholder="0.00"
+                              className="w-24 rounded-md border border-border bg-bg px-2 py-1 text-sm"
+                            />
+                            <label className="flex items-center gap-1 text-xs text-text-muted cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={draft.unlimited}
+                                disabled={savingBudgetId === key.id}
+                                onChange={(e) => setBudgetDraft(key.id, { unlimited: e.target.checked })}
+                                className="accent-brand-500"
+                              />
+                              Unlimited
+                            </label>
+                            <button
+                              onClick={() => handleSaveBudget(key)}
+                              disabled={savingBudgetId === key.id}
+                              className="rounded-md bg-primary px-2 py-1 text-xs text-white disabled:opacity-50"
+                            >
+                              {savingBudgetId === key.id ? "Saving..." : "Save"}
+                            </button>
+                            {(key.budgetSpentCents || 0) > 0 && (
+                              <button
+                                onClick={() => handleResetBudget(key)}
+                                disabled={savingBudgetId === key.id}
+                                title="Reset this month's spend to zero"
+                                className="rounded-md px-2 py-1 text-xs text-red-500 border border-red-500/30 hover:bg-red-500/10 disabled:opacity-50"
+                              >
+                                Reset spend
+                              </button>
+                            )}
+                          </div>
+                        </>
+                      );
+                    })()}
+                  </div>
                 </div>
                 <div className="flex items-center gap-2 shrink-0 pt-0.5">
                   <Toggle

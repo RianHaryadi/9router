@@ -71,9 +71,24 @@ export async function updateApiKey(id, data) {
     if (!row) return;
     const merged = { ...rowToKey(row), ...data };
     const cols = keyAccessToColumns(merged.access);
+
+    // Budget fields. The client may set budgetLimitCents (number >= 0 or null =
+    // unlimited) and budgetPeriod ('monthly'). Spent/startedAt are server-owned:
+    // ignore any client writes to them (counter bumps flow via usageRepo; admin
+    // reset flows via reset-budget endpoint).
+    let budgetLimitCents = data.budgetLimitCents !== undefined ? data.budgetLimitCents : row.budgetLimitCents;
+    let budgetPeriod = data.budgetPeriod !== undefined ? data.budgetPeriod : row.budgetPeriod || "monthly";
+    if (budgetLimitCents == null) budgetLimitCents = null; // null literal stays NULL (unlimited)
+    let budgetStartedAt = row.budgetStartedAt || null;
+    // unlimited -> finite transition seeds the period start if not already set
+    if (budgetLimitCents != null && budgetStartedAt == null) {
+      budgetStartedAt = new Date().toISOString();
+    }
+    const budgetSpentCents = row.budgetSpentCents != null ? row.budgetSpentCents : 0;
+
     db.run(
-      `UPDATE apiKeys SET key = ?, name = ?, machineId = ?, isActive = ?, accessRestricted = ?, accessAllow = ? WHERE id = ?`,
-      [merged.key, merged.name, merged.machineId, merged.isActive ? 1 : 0, cols.accessRestricted, cols.accessAllow, id]
+      `UPDATE apiKeys SET key = ?, name = ?, machineId = ?, isActive = ?, accessRestricted = ?, accessAllow = ?, budgetLimitCents = ?, budgetPeriod = ?, budgetStartedAt = ?, budgetSpentCents = ? WHERE id = ?`,
+      [merged.key, merged.name, merged.machineId, merged.isActive ? 1 : 0, cols.accessRestricted, cols.accessAllow, budgetLimitCents, budgetPeriod, budgetStartedAt, budgetSpentCents, id]
     );
     result = rowToKey(db.get(`SELECT * FROM apiKeys WHERE id = ?`, [id]));
   });
@@ -140,6 +155,18 @@ export async function applyBudgetSpend(key, costCents, opts = {}) {
     return row ? row.budgetSpentCents : null;
   } catch {
     return null; // fail-open on DB error
+  }
+}
+
+/** Explicitly reset a key's budget spend by its id (admin "reset" button). */
+export async function resetApiKeyBudgetById(id, startedAt = new Date().toISOString()) {
+  if (!id) return false;
+  try {
+    const db = await getAdapter();
+    db.run(`UPDATE apiKeys SET budgetSpentCents = 0, budgetStartedAt = ? WHERE id = ?`, [startedAt, id]);
+    return true;
+  } catch {
+    return false;
   }
 }
 

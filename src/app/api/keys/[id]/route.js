@@ -22,7 +22,7 @@ export async function PUT(request, { params }) {
   try {
     const { id } = await params;
     const body = await request.json();
-    const { isActive, access } = body;
+    const { isActive, access, budgetLimitCents, budgetPeriod } = body;
 
     const existing = await getApiKeyById(id);
     if (!existing) {
@@ -36,6 +36,23 @@ export async function PUT(request, { params }) {
       if (!checked.ok) return NextResponse.json({ error: checked.error }, { status: 400 });
       updateData.access = checked.value;
     }
+
+    // Per-key monthly budget. budgetLimitCents: number >= 0, or null (= unlimited).
+    if (budgetLimitCents !== undefined) {
+      if (budgetLimitCents === null) {
+        updateData.budgetLimitCents = null;
+      } else {
+        const cents = Number(budgetLimitCents);
+        if (!Number.isInteger(cents) || cents < 0) {
+          return NextResponse.json({ error: "budgetLimitCents must be a non-negative integer or null" }, { status: 400 });
+        }
+        updateData.budgetLimitCents = cents;
+      }
+    }
+    if (budgetPeriod !== undefined && budgetPeriod !== "monthly") {
+      return NextResponse.json({ error: "budgetPeriod must be 'monthly'" }, { status: 400 });
+    }
+    if (budgetPeriod !== undefined) updateData.budgetPeriod = budgetPeriod;
 
     const updated = await updateApiKey(id, updateData);
 
