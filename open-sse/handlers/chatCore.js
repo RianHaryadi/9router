@@ -33,6 +33,7 @@ import { stripUnsupportedModalities } from "../translator/concerns/modality.js";
 import { prefetchRemoteImages } from "../translator/concerns/prefetch.js";
 import { defaultClaudeToolType, shouldDefaultClaudeToolType } from "../translator/concerns/toolCall.js";
 import { resolveSessionId } from "../utils/sessionManager.js";
+import { runCustomPipeline } from "@/custom/pipeline.js";
 
 /**
  * Core chat handler - shared between SSE and Worker
@@ -327,6 +328,19 @@ export async function handleChatCore({ body, modelInfo, credentials, log, onCred
     if (pxpipeSummary?.applied) xf.push(`PXPIPE:${pxpipeSummary.imageCount}img`);
     try { onPxpipeEvent?.({ provider, model, ...pxpipeSummary }); } catch { /* stats must not break requests */ }
   }
+
+  // Custom transform pipeline (src/custom) — one fail-open hook after every
+  // saver so custom behaviours layer cleanly. No-op unless config adds them.
+  const customDiag = runCustomPipeline({
+    body: translatedBody,
+    finalFormat,
+    modelInfo: { provider, model },
+    clientTool,
+    ctx: { lastProvider: provider },
+    config: { tokens: false }, // telemetry off by default; wire on via settings
+  });
+  if (customDiag?.applied?.length && customDiag.applied.length > 0) xf.push(`CUSTOM:${customDiag.applied.length}`);
+  if (customDiag?.toolWarnings?.length) xf.push(`RT:${customDiag.toolWarnings.length}`);
 
   if (xf.length && log?.line) log.line(reqTag, "⚙", xf.join(" · "));
 
