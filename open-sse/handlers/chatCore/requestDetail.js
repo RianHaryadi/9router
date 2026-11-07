@@ -115,7 +115,20 @@ export function formatDoneLine({ usage, latency }) {
   return `DONE ${latency?.total ?? 0}ms${ttftStr} · ${inStr} · OUT ${outTok}`;
 }
 
-export function saveUsageStats({ provider, model, tokens, connectionId, apiKey, endpoint, label = "USAGE", silent = false }) {
+/**
+ * Request-scoped observability fields as they ride on clientRawRequest into
+ * chatCore's shared context (the same object path apiKey takes). Read them at
+ * save time so they reflect every fallback that happened before this attempt.
+ */
+export function requestObservability(clientRawRequest) {
+  return {
+    projectName: clientRawRequest?.projectName ?? null,
+    fallbackCount: clientRawRequest?.fallbackCount ?? 0,
+    requestId: clientRawRequest?.requestId ?? null,
+  };
+}
+
+export function saveUsageStats({ provider, model, tokens, connectionId, apiKey, endpoint, label = "USAGE", silent = false, latency = null, projectName = null, fallbackCount = null, requestId = null }) {
   if (!tokens || typeof tokens !== "object") return;
 
   const inTokens = tokens.input_tokens ?? tokens.prompt_tokens ?? 0;
@@ -143,6 +156,13 @@ export function saveUsageStats({ provider, model, tokens, connectionId, apiKey, 
     timestamp: new Date().toISOString(),
     connectionId: connectionId || undefined,
     apiKey: apiKey || undefined,
-    endpoint: endpoint || null
+    endpoint: endpoint || null,
+    // Observability (T3): real per-request latency + attribution. usageHistory
+    // has no requestId column (yet) — it is accepted and ignored there.
+    latencyMs: latency?.total ?? 0,
+    ttftMs: latency?.ttft ?? 0,
+    projectName: projectName ?? null,
+    fallbackCount: fallbackCount ?? 0,
+    requestId: requestId ?? null,
   }).catch(() => {});
 }

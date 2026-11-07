@@ -31,6 +31,64 @@ import { getProjectIdForConnection } from "open-sse/services/projectId.js";
 import { stripModelContextMarker } from "open-sse/utils/modelMarkers.js";
 import { getKeyAccessContext, enforceKeyAccess, filterAdapterModels } from "../services/keyAccess.js";
 import { resolveSmartChoice } from "../services/systemoneRouter.js";
+import { createRequestId, resolveProjectName } from "../services/requestContext.js";
+import { saveFallbackEvent } from "@/lib/db/repos/fallbackRepo.js";
+import { getApiKeyByKey } from "@/lib/db/repos/apiKeysRepo.js";
+import { getAdapterSync } from "@/lib/db/driver.js";
+
+/**
+ * Persist one fallback event without ever touching request latency:
+ * fire-and-forget, errors swallowed — observability must not break chat.
+ * The adapter check keeps a log line from being the thing that OPENS the
+ * database (a test process with no DATA_DIR would otherwise create/touch the
+ * real ~/.9router DB); in the app getSettings() has it up long before a
+ * request can fail over, so no event is ever dropped there.
+ */
+function logFallbackEvent(payload) {
+  try {
+    getAdapterSync();
+    Promise.resolve(saveFallbackEvent(payload)).catch(() => { });
+  } catch { /* a failed write must never reach the request */ }
+}
+
+/** apiKeys.name for project attribution; null when the key is unknown/local. */
+async function lookupApiKeyName(apiKey) {
+  if (!apiKey) return null;
+  try {
+    const record = await getApiKeyByKey(apiKey);
+    return record?.name || null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Build the combo `onFallback` callback (option A): open-sse stays DB-free and
+ * this layer owns persistence + request attribution. Every event also bumps the
+ * per-request fallback counter that lands in usageHistory.fallbackCount.
+ */
+function makeComboFallbackReporter({ requestId, projectName, apiKey, clientRawRequest }) {
+  return (evt) => {
+    if (!evt) return;
+    if (clientRawRequest) {
+      clientRawRequest.fallbackCount = (clientRawRequest.fallbackCount || 0) + 1;
+    }
+    logFallbackEvent({
+      requestId: evt.requestId ?? requestId,
+      projectName: evt.projectName ?? projectName,
+      apiKey: evt.apiKey ?? apiKey ?? null,
+      connectionId: evt.connectionId ?? null,
+      provider: evt.provider ?? null,
+      model: evt.model ?? null,
+      fromProvider: evt.fromProvider ?? null,
+      fromModel: evt.fromModel ?? null,
+      status: evt.status ?? null,
+      reason: evt.reason == null ? null : String(evt.reason).slice(0, 500),
+      cooldownMs: evt.cooldownMs ?? null,
+      latencyMs: evt.latencyMs ?? null,
+    });
+  };
+}
 
 /**
  * Handle chat completion request
@@ -102,6 +160,23 @@ export async function handleChat(request, clientRawRequest = null) {
   const keyAccessDenied = await enforceKeyAccess(keyAccess, modelStr);
   if (keyAccessDenied) return keyAccessDenied;
 
+  // Per-request observability identity (design decisions 5 & 6): ONE id and
+  // ONE project label shared by every fallback event and usage row of this
+  // request. apiKeyName comes from the access context for restricted keys,
+  // otherwise from the apiKeys row itself.
+  const requestId = createRequestId();
+  const projectName = resolveProjectName(
+    request?.headers || clientRawRequest?.headers || null,
+    keyAccess?.keyName || await lookupApiKeyName(apiKey)
+  );
+  // clientRawRequest is the object that travels into chatCore's shared context
+  // (the same path apiKey takes), so the usage-saving handlers read this meta
+  // straight off it — no chatCore signature change needed downstream.
+  clientRawRequest.requestId = requestId;
+  clientRawRequest.projectName = projectName;
+  clientRawRequest.fallbackCount = 0;
+  const reportComboFallback = makeComboFallbackReporter({ requestId, projectName, apiKey, clientRawRequest });
+
   // Bypass naming/warmup requests before combo rotation to avoid wasting rotation slots
   const userAgent = request?.headers?.get("user-agent") || "";
   const bypassResponse = handleBypassRequest(body, modelStr, userAgent, !!settings.ccFilterNaming);
@@ -130,7 +205,7 @@ export async function handleChat(request, clientRawRequest = null) {
             const { tools, tool_choice, ...cleanBody } = clientRawRequest.body || {};
             cleanRawReq = { ...clientRawRequest, body: cleanBody };
           }
-          return handleSingleModelChat(b, m, cleanRawReq, request, apiKey);
+          return handleSingleModelChat(b, m, cleanRawReq, request, apiKey, null, requestId, projectName);
         },
         log,
         comboName: modelStr,
@@ -146,7 +221,7 @@ export async function handleChat(request, clientRawRequest = null) {
       body,
       models: augmentedModels,
       handleSingleModel: withCapacityAdapterStripping(
-        (b, m) => handleSingleModelChat(b, m, clientRawRequest, request, apiKey),
+        (b, m) => handleSingleModelChat(b, m, clientRawRequest, request, apiKey, null, requestId, projectName),
         adapterAdded
       ),
       log,
@@ -154,6 +229,11 @@ export async function handleChat(request, clientRawRequest = null) {
       comboStrategy,
       comboStickyLimit,
       sessionId,
+      // Observability (T3): one id/label per inbound request + combo switch log
+      requestId,
+      projectName,
+      apiKey,
+      onFallback: reportComboFallback,
       smartPolicy: comboCfg.smartPolicy || "smart",
       sessionSticky: comboCfg.sessionSticky !== false,
       confidenceThreshold: typeof comboCfg.confidenceThreshold === "number" ? comboCfg.confidenceThreshold : 0.8,
@@ -178,22 +258,29 @@ export async function handleChat(request, clientRawRequest = null) {
       body,
       models: soloAugmented,
       handleSingleModel: withCapacityAdapterStripping(
-        (b, m) => handleSingleModelChat(b, m, clientRawRequest, request, apiKey),
+        (b, m) => handleSingleModelChat(b, m, clientRawRequest, request, apiKey, null, requestId, projectName),
         adapterAdded
       ),
       log,
       comboName: modelStr,
-      comboStrategy: getActiveAdapterStrategy(requiredCapabilities, settings)
+      comboStrategy: getActiveAdapterStrategy(requiredCapabilities, settings),
+      // Observability (T3): one id/label per inbound request + combo switch log
+      requestId,
+      projectName,
+      apiKey,
+      onFallback: reportComboFallback,
     });
   }
 
-  return handleSingleModelChat(body, modelStr, clientRawRequest, request, apiKey, contextMarker ? `${modelStr.slice(modelStr.indexOf("/") + 1)}[${contextMarker}]` : null);
+  return handleSingleModelChat(body, modelStr, clientRawRequest, request, apiKey, contextMarker ? `${modelStr.slice(modelStr.indexOf("/") + 1)}[${contextMarker}]` : null, requestId, projectName);
 }
 
 /**
  * Handle single model chat request
  */
-async function handleSingleModelChat(body, modelStr, clientRawRequest = null, request = null, apiKey = null, requestedModel = null) {
+async function handleSingleModelChat(body, modelStr, clientRawRequest = null, request = null, apiKey = null, requestedModel = null, requestId = null, projectName = null) {
+  // Start of this attempt — feeds latencyMs on any fallback event below.
+  const requestStart = Date.now();
   const modelInfo = await getModelInfo(modelStr);
 
   // If provider is null, this might be a combo name - check and handle
@@ -223,7 +310,7 @@ async function handleSingleModelChat(body, modelStr, clientRawRequest = null, re
               const { tools, tool_choice, ...cleanBody } = clientRawRequest.body || {};
               cleanRawReq = { ...clientRawRequest, body: cleanBody };
             }
-            return handleSingleModelChat(b, m, cleanRawReq, request, apiKey);
+            return handleSingleModelChat(b, m, cleanRawReq, request, apiKey, null, requestId, projectName);
           },
           log,
           comboName: modelStr,
@@ -241,7 +328,7 @@ async function handleSingleModelChat(body, modelStr, clientRawRequest = null, re
         body,
         models: augmentedModels,
         handleSingleModel: withCapacityAdapterStripping(
-          (b, m) => handleSingleModelChat(b, m, clientRawRequest, request, apiKey),
+          (b, m) => handleSingleModelChat(b, m, clientRawRequest, request, apiKey, null, requestId, projectName),
           adapterAdded
         ),
         log,
@@ -249,6 +336,10 @@ async function handleSingleModelChat(body, modelStr, clientRawRequest = null, re
         comboStrategy,
         comboStickyLimit,
         sessionId: nestedSessionId,
+        requestId,
+        projectName,
+        apiKey,
+        onFallback: makeComboFallbackReporter({ requestId, projectName, apiKey, clientRawRequest }),
         smartPolicy: comboCfg.smartPolicy || "smart",
         sessionSticky: comboCfg.sessionSticky !== false,
         confidenceThreshold: typeof comboCfg.confidenceThreshold === "number" ? comboCfg.confidenceThreshold : 0.8,
@@ -397,9 +488,16 @@ async function handleSingleModelChat(body, modelStr, clientRawRequest = null, re
 
     // Exhausted Antigravity model is blocked only in RAM cache until upstream resetAt.
     // Do not persist a modelLock_* for this path.
-    const shouldFallback = provider === "antigravity" && quotaResetMs
-      ? true
-      : (await markAccountUnavailable(credentials.connectionId, result.status, result.error, provider, model, resetsAtMs)).shouldFallback;
+    // The cooldown is kept: it is recorded on the fallback event below.
+    let shouldFallback;
+    let fallbackCooldownMs = null;
+    if (provider === "antigravity" && quotaResetMs) {
+      shouldFallback = true;
+      fallbackCooldownMs = quotaResetMs;
+    } else {
+      ({ shouldFallback, cooldownMs: fallbackCooldownMs } =
+        await markAccountUnavailable(credentials.connectionId, result.status, result.error, provider, model, resetsAtMs));
+    }
 
     if (shouldFallback) {
       log.warn("FALLBACK", `⇄ ACC:${credentials.connectionName} UNAVAILABLE (${result.status}) → NEXT ACCOUNT`);
@@ -407,6 +505,27 @@ async function handleSingleModelChat(body, modelStr, clientRawRequest = null, re
       lastError = result.error;
       lastStatus = result.status;
       lastHeaders = upstreamResponseHeaders(result.response?.headers);
+      // Per-request fallback counter. It lives on clientRawRequest (the object
+      // chatCore passes to the usage handlers) so combo members accumulate into
+      // the same request total → usageHistory.fallbackCount.
+      if (clientRawRequest) {
+        clientRawRequest.fallbackCount = (clientRawRequest.fallbackCount || 0) + 1;
+      }
+      // Fallback chain log — fire-and-forget so it never adds request latency.
+      logFallbackEvent({
+        requestId,
+        projectName,
+        provider,
+        model,
+        connectionId: credentials.connectionId || null,
+        apiKey: apiKey || null,
+        fromProvider: provider,
+        fromModel: model,
+        status: result.status ?? null,
+        reason: result.error == null ? null : String(result.error).slice(0, 500),
+        cooldownMs: fallbackCooldownMs ?? null,
+        latencyMs: Date.now() - requestStart,
+      });
       continue;
     }
 
