@@ -4,7 +4,8 @@
 > Dokumen ini memetakan jalur request `/v1` dari entry sampai provider, menetapkan titik hook
 > minimal untuk transform pipeline (Fase 1), dan mencatat fitur apa yang **sudah ada** di upstream.
 >
-> Semua nomornomor baris mengacu pada commit `1fe586bb` + commit fork `37ea6db8`.
+> Nomor baris mengacu pada upstream `1fe586bb` (v0.5.112) + commit fork `37ea6db8`.
+> Perubahan di branch lain dapat menggeser ±5 baris — selalu verifikasi dengan `grep -n`.
 > Roadmap fitur: [`../ROADMAP.md`](../ROADMAP.md). Aturan kerja: [`../AGENT.md`](../AGENT.md).
 
 ---
@@ -39,14 +40,14 @@ HANDLER           src/sse/handlers/chat.js:98   handleChat
   │  ├─ 180-183   handleBypassRequest
   │  ├─ 185       detectRequiredCapabilities
   │  ├─ 188-256   COMBO: getComboModels → strategi → handleComboChat
-  │  │              open-sse/services/combo.js:354
+  │  │              open-sse/services/combo.js:360
   │  │              ├─ getRotatedModels   :231   (sticky round-robin)
   │  │              ├─ reorderByCapabilities :86
   │  │              └─ smart policy       :382-460 (systemoneRouter, session-sticky)
   │  └─ 275       handleSingleModelChat(body, modelStr, ...)
   │                 src/sse/handlers/chat.js:281
   │                 └─ while(true) loop fallback akun   :375-560
-  │                     ├─ 376  getProviderCredentials   src/sse/services/auth.js:28
+  │                     ├─ 376  getProviderCredentials   src/sse/services/auth.js:29
   │                     │        └─ filter: exclude set / modelLock / enabledModels /
   │                     │           antigravity quota / healthBreaker (fork)
   │                     ├─ 396  checkAndRefreshToken
@@ -126,7 +127,7 @@ Alias lain di `next.config.mjs:71-99`: `/codex/:path*` → `/api/v1/responses`.
 | Strategi combo | `src/sse/handlers/chat.js:188-256` | `fallback` / `round-robin` / `smart` / `fusion` |
 | Rotasi member | `open-sse/services/combo.js:231` `getRotatedModels` | sticky round-robin, `comboStickyRoundRobinLimit` (default 1) |
 | Smart policy | `open-sse/services/combo.js:382-460` | System One router, session-sticky (`systemoneRouter.js:170`) |
-| Pemilihan akun | `src/sse/services/auth.js:28` `getProviderCredentials` | `fill-first` (default) / `round-robin` |
+| Pemilihan akun | `src/sse/services/auth.js:29` `getProviderCredentials` | `fill-first` (default) / `round-robin` |
 | Round-robin akun | `src/sse/services/auth.js:174-196` | sticky `stickyRoundRobinLimit` (default 3) |
 
 ### 1.5 Format translation
