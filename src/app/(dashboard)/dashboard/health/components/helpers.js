@@ -14,4 +14,3 @@ export function money(value) {
 export function date(value) {
   return value ? new Date(value).toLocaleString() : "—";
 }
-

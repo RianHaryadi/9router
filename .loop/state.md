@@ -24,7 +24,7 @@ Upstream remote: upstream = decolua/9router (untuk rebase-sync ke fork)
 - [x] T2 — Health breaker service + wiring | PASS (24/24 test, eslint clean) | commit 37ea6db8
 - [x] T3 — Fallback chain logging + requestId + project attribution | PASS — worker MATI karena free usage limit, tapi hasil kerjanya lengkap; diverifikasi manual oleh orchestrator (e2e DB test, 16 placeholder=16 kolom, clientRawRequest aman, latency masuk ke 3 handler) | commit 59e5530b
 - [x] T4 — Latency/TTFT ke usageHistory + metrics API | PASS (reviewer 11/11 test, build exit 0) | commit 59e5530b
-- [x] T5 — Dashboard UI halaman Health & Spend | eslint bersih; focused test 2 passed; build exit 0; full-suite/regression comparison pending
+- [x] T5 — Dashboard UI halaman Health & Spend | eslint bersih; focused test 14 passed (vitest v22); build exit 0; baseline alias/oauth/providers byte-for-byte equal. DataState di-split ke file sendiri (helpers.js pure JS agar test-importable).
 - [x] T6 — Verifikasi akhir | PASS — full suite 4306 pass / 27 fail, 27 fail identik dengan baseline upstream (worktree 1fe586bb), 0 regresi baru. 1 regresi (key-access-migration hardcode `schema-1-to-2`) ketemu & diperbaiki | commit 09359384
 
 ## Log
