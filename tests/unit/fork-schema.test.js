@@ -10,9 +10,12 @@ import {
   getLatencyPercentiles, getSpendByProject, getProviderHealthSnapshot,
 } from "../../src/lib/db/repos/metricsRepo.js";
 
-describe("fork schema v3 — usageHistory observability columns", () => {
-  it("bumps SCHEMA_VERSION to 3", () => {
-    expect(SCHEMA_VERSION).toBe(3);
+describe("fork schema v4 — observability + per-key budget columns", () => {
+  it("bumps SCHEMA_VERSION to 4", () => {
+    // v4 added apiKeys budget columns (budgetLimitCents/budgetPeriod/
+    // budgetStartedAt/budgetSpentCents) for the per-key monthly budget feature
+    // (Fase 2). Version bumps +1 every schema change per schema.js contract.
+    expect(SCHEMA_VERSION).toBe(4);
   });
 
   it("adds latencyMs, ttftMs, projectName, fallbackCount to usageHistory", () => {

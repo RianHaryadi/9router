@@ -17,6 +17,7 @@
 import { estimateBodyTokens } from "./rtk/tokenMeter.js";
 import { repairToolArguments, shouldRetryToolCall } from "./toolcall/repair.js";
 import { rankByCacheWarm } from "./cache/awareRouting.js";
+import { classifyComplexity, pickRouteTier } from "./routing/complexity.js";
 
 /**
  * Run the custom pipeline. Mutates `body` like the other savers do.
@@ -83,6 +84,15 @@ export function runCustomPipeline(opts = {}) {
       const ordered = rankByCacheWarm(config.cacheWarm.models || [], ctx);
       diag.cacheRank = ordered;
       diag.applied.push(`cache-warm:${ordered.join(",")}`);
+    }
+
+    // 6) Complexity routing: classify the request content surface; the
+    //    classification itself never mutates the body — it only exposes
+    //    advisory data (for the caller to pick cheap/strong models).
+    if (config.complexity) {
+      const c = classifyComplexity(body);
+      diag.complexity = { level: c.level, score: c.score, reasons: c.reasons };
+      diag.applied.push(`route-tier:${c.level}`);
     }
   } catch {
     // fail-open: any custom error never breaks the request
@@ -155,3 +165,6 @@ export { shouldCompressTool, collectCompressibleToolIndices } from "./rtk/whitel
 export { guardedInjectCaveman, guardedInjectPonytail, isEndUserFacing } from "./transform/index.js";
 export { repairToolArguments, shouldRetryToolCall } from "./toolcall/repair.js";
 export { rankByCacheWarm, pickCacheWarmModel } from "./cache/awareRouting.js";
+export { createSemanticCache } from "./cache/semantic.js";
+export { createIdempotencyStore } from "./idempotency/index.js";
+export { classifyComplexity, pickRouteTier } from "./routing/complexity.js";
