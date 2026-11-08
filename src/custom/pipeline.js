@@ -168,3 +168,4 @@ export { rankByCacheWarm, pickCacheWarmModel } from "./cache/awareRouting.js";
 export { createSemanticCache } from "./cache/semantic.js";
 export { createIdempotencyStore } from "./idempotency/index.js";
 export { classifyComplexity, pickRouteTier } from "./routing/complexity.js";
+export { createResponseCache, captureStreamResponse, replayResponse, digestBody } from "./wiring/responseCache.js";

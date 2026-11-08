@@ -37,6 +37,9 @@ import { createRequestId, resolveProjectName } from "../services/requestContext.
 import { saveFallbackEvent } from "@/lib/db/repos/fallbackRepo.js";
 import { getApiKeyByKey } from "@/lib/db/repos/apiKeysRepo.js";
 import { getAdapterSync } from "@/lib/db/driver.js";
+import { createResponseCache, captureStreamResponse, replayResponse, digestBody } from "@/custom/wiring/responseCache.js";
+
+const responseCache = createResponseCache();
 
 /**
  * Persist one fallback event without ever touching request latency:
@@ -202,6 +205,51 @@ export async function handleChat(request, clientRawRequest = null) {
   }
   // ── End budget gate ────────────────────────────────────────────────────
 
+  // ── Idempotency Gate (pre-flight) ──────────────────────────────────────
+  const idempotencyKey = request?.headers?.get?.("idempotency-key") || clientRawRequest?.headers?.["idempotency-key"] || null;
+  const bodyDigest = idempotencyKey ? digestBody(body) : null;
+  let idempotencyClaim = null;
+  if (idempotencyKey) {
+    try {
+      idempotencyClaim = responseCache.claimIdempotency(idempotencyKey, bodyDigest);
+      if (idempotencyClaim?.status === "completed" && idempotencyClaim.value) {
+        const cached = idempotencyClaim.value;
+        return replayResponse({
+          bodyText: cached.bodyText,
+          status: cached.status || 200,
+          headers: cached.headers || {},
+          cacheType: "idempotency",
+        });
+      }
+      if (idempotencyClaim?.status === "in-progress" && idempotencyClaim.seq > 1) {
+        return errorResponse(HTTP_STATUS.CONFLICT || 409, "concurrent request in progress with this idempotency key");
+      }
+      if (idempotencyClaim?.status === "conflict") {
+        return errorResponse(422, "idempotency key reused with different request payload");
+      }
+    } catch {
+      // fail-open
+    }
+  }
+
+  // ── Semantic Cache Gate (pre-flight) ───────────────────────────────────
+  if (settings.semanticCacheEnabled) {
+    try {
+      const cached = responseCache.getSemantic(body);
+      if (cached?.value) {
+        log.info("CACHE", "Semantic cache HIT");
+        return replayResponse({
+          bodyText: cached.value,
+          status: cached.status || 200,
+          headers: cached.headers || {},
+          cacheType: "semantic",
+        });
+      }
+    } catch {
+      // fail-open
+    }
+  }
+
   // Per-request observability identity (design decisions 5 & 6): ONE id and
   // ONE project label shared by every fallback event and usage row of this
   // request. apiKeyName comes from the access context for restricted keys,
@@ -226,6 +274,8 @@ export async function handleChat(request, clientRawRequest = null) {
 
   const requiredCapabilities = detectRequiredCapabilities(body);
 
+  let responsePromise;
+
   // Check if model is a combo (has multiple models with fallback)
   const comboModels = await getComboModels(modelStr);
   if (comboModels) {
@@ -238,7 +288,7 @@ export async function handleChat(request, clientRawRequest = null) {
 
     if (comboStrategy === "fusion") {
       log.info("CHAT", `Combo "${modelStr}" with ${comboModels.length} models (strategy: fusion)`);
-      return handleFusionChat({
+      responsePromise = handleFusionChat({
         body,
         models: comboModels,
         handleSingleModel: (b, m, isPanel) => {
@@ -254,67 +304,95 @@ export async function handleChat(request, clientRawRequest = null) {
         judgeModel: comboStrategies[modelStr]?.judgeModel,
         tuning: comboStrategies[modelStr]?.fusionTuning,
       });
+    } else {
+      const comboStickyLimit = settings.comboStickyRoundRobinLimit;
+      const comboCfg = comboStrategies[modelStr] || {};
+      log.info("CHAT", `Combo "${modelStr}" with ${augmentedModels.length} models (strategy: ${comboStrategy}, sticky: ${comboStickyLimit})`);
+      responsePromise = handleComboChat({
+        body,
+        models: augmentedModels,
+        handleSingleModel: withCapacityAdapterStripping(
+          (b, m) => handleSingleModelChat(b, m, clientRawRequest, request, apiKey, null, requestId, projectName),
+          adapterAdded
+        ),
+        log,
+        comboName: modelStr,
+        comboStrategy,
+        comboStickyLimit,
+        sessionId,
+        // Observability (T3): one id/label per inbound request + combo switch log
+        requestId,
+        projectName,
+        apiKey,
+        onFallback: reportComboFallback,
+        smartPolicy: comboCfg.smartPolicy || "smart",
+        sessionSticky: comboCfg.sessionSticky !== false,
+        confidenceThreshold: typeof comboCfg.confidenceThreshold === "number" ? comboCfg.confidenceThreshold : 0.8,
+        resolveSmartChoice: comboStrategy === "smart"
+          ? (b, m) => resolveSmartChoice({
+              body: b,
+              models: m,
+              routerModel: comboCfg.routerModel,
+              log,
+            })
+          : null,
+      });
     }
+  } else {
+    // Single model request — may still switch to a capacity-adapter model if the
+    // target lacks a capability the request needs (e.g. no vision, request has an image).
+    const soloAugmented = await filterAdapterModels(keyAccess, augmentModelsWithCapacityAdapter([modelStr], requiredCapabilities, settings), [modelStr]);
+    if (soloAugmented.length > 1) {
+      const adapterAdded = soloAugmented.filter((m) => m !== modelStr);
+      log.info("CHAT", `Capacity adapter for [${[...requiredCapabilities].join(",")}] on "${modelStr}" → trying ${soloAugmented.join(", ")}`);
+      responsePromise = handleComboChat({
+        body,
+        models: soloAugmented,
+        handleSingleModel: withCapacityAdapterStripping(
+          (b, m) => handleSingleModelChat(b, m, clientRawRequest, request, apiKey, null, requestId, projectName),
+          adapterAdded
+        ),
+        log,
+        comboName: modelStr,
+        comboStrategy: getActiveAdapterStrategy(requiredCapabilities, settings),
+        // Observability (T3): one id/label per inbound request + combo switch log
+        requestId,
+        projectName,
+        apiKey,
+        onFallback: reportComboFallback,
+      });
+    } else {
+      responsePromise = handleSingleModelChat(body, modelStr, clientRawRequest, request, apiKey, contextMarker ? `${modelStr.slice(modelStr.indexOf("/") + 1)}[${contextMarker}]` : null, requestId, projectName);
+    }
+  }
 
-    const comboStickyLimit = settings.comboStickyRoundRobinLimit;
-    const comboCfg = comboStrategies[modelStr] || {};
-    log.info("CHAT", `Combo "${modelStr}" with ${augmentedModels.length} models (strategy: ${comboStrategy}, sticky: ${comboStickyLimit})`);
-    return handleComboChat({
-      body,
-      models: augmentedModels,
-      handleSingleModel: withCapacityAdapterStripping(
-        (b, m) => handleSingleModelChat(b, m, clientRawRequest, request, apiKey, null, requestId, projectName),
-        adapterAdded
-      ),
-      log,
-      comboName: modelStr,
-      comboStrategy,
-      comboStickyLimit,
-      sessionId,
-      // Observability (T3): one id/label per inbound request + combo switch log
-      requestId,
-      projectName,
-      apiKey,
-      onFallback: reportComboFallback,
-      smartPolicy: comboCfg.smartPolicy || "smart",
-      sessionSticky: comboCfg.sessionSticky !== false,
-      confidenceThreshold: typeof comboCfg.confidenceThreshold === "number" ? comboCfg.confidenceThreshold : 0.8,
-      resolveSmartChoice: comboStrategy === "smart"
-        ? (b, m) => resolveSmartChoice({
-            body: b,
-            models: m,
-            routerModel: comboCfg.routerModel,
-            log,
-          })
-        : null,
+  const res = await responsePromise;
+
+  // ── Post-flight response capture for Idempotency & Semantic Cache ──────
+  if (res && res.status >= 200 && res.status < 400) {
+    return captureStreamResponse(res, (capturedText, meta) => {
+      try {
+        if (idempotencyKey && idempotencyClaim?.status === "in-progress" && idempotencyClaim.seq === 1) {
+          responseCache.completeIdempotency(idempotencyKey, bodyDigest, {
+            bodyText: capturedText,
+            headers: meta.headers,
+            status: meta.status,
+          });
+        }
+        if (settings.semanticCacheEnabled && meta.status >= 200 && meta.status < 300) {
+          responseCache.setSemantic(body, capturedText, {
+            headers: meta.headers,
+            status: meta.status,
+            model: modelStr,
+          });
+        }
+      } catch {
+        // fail-open: caching failure never throws
+      }
     });
   }
 
-  // Single model request — may still switch to a capacity-adapter model if the
-  // target lacks a capability the request needs (e.g. no vision, request has an image).
-  const soloAugmented = await filterAdapterModels(keyAccess, augmentModelsWithCapacityAdapter([modelStr], requiredCapabilities, settings), [modelStr]);
-  if (soloAugmented.length > 1) {
-    const adapterAdded = soloAugmented.filter((m) => m !== modelStr);
-    log.info("CHAT", `Capacity adapter for [${[...requiredCapabilities].join(",")}] on "${modelStr}" → trying ${soloAugmented.join(", ")}`);
-    return handleComboChat({
-      body,
-      models: soloAugmented,
-      handleSingleModel: withCapacityAdapterStripping(
-        (b, m) => handleSingleModelChat(b, m, clientRawRequest, request, apiKey, null, requestId, projectName),
-        adapterAdded
-      ),
-      log,
-      comboName: modelStr,
-      comboStrategy: getActiveAdapterStrategy(requiredCapabilities, settings),
-      // Observability (T3): one id/label per inbound request + combo switch log
-      requestId,
-      projectName,
-      apiKey,
-      onFallback: reportComboFallback,
-    });
-  }
-
-  return handleSingleModelChat(body, modelStr, clientRawRequest, request, apiKey, contextMarker ? `${modelStr.slice(modelStr.indexOf("/") + 1)}[${contextMarker}]` : null, requestId, projectName);
+  return res;
 }
 
 /**
