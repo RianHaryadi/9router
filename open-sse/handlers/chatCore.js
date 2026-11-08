@@ -22,9 +22,8 @@ import { handleStreamingResponse, buildOnStreamComplete } from "./chatCore/strea
 import { detectClientTool, isNativePassthrough } from "../utils/clientDetector.js";
 import { dedupeTools } from "../utils/toolDeduper.js";
 import { takeRenamedToolNames } from "../utils/opencodeFingerprint.js";
-import { injectCaveman } from "../rtk/caveman.js";
-import { injectPonytail } from "../rtk/ponytail.js";
 import { injectCustomPrompt } from "../rtk/customPrompt.js";
+import { guardedInjectCaveman, guardedInjectPonytail } from "@/custom/transform/index.js";
 import { compressMessages, formatRtkLog } from "../rtk/index.js";
 import { compressWithHeadroom, formatHeadroomLog, formatHeadroomSizeLog, isHeadroomPhantomSavings } from "../rtk/headroom.js";
 import { compressWithPxpipe } from "../rtk/pxpipe.js";
@@ -299,16 +298,21 @@ export async function handleChatCore({ body, modelInfo, credentials, log, onCred
 
   if (rtkStats?.hits?.length) xf.push(`RTK:${rtkStats.hits.length}`);
 
+  const endUserFacing = clientRawRequest?.headers?.["x-end-user-facing"] === "true" || body?.endUserFacing === true;
+  const transformGuard = { clientTool, endUserFacing };
+
   // Caveman: inject terse-style system prompt
   if (tokenSaverEnabled && cavemanEnabled && cavemanLevel) {
-    injectCaveman(translatedBody, finalFormat, cavemanLevel);
-    xf.push(`CAVEMAN:${cavemanLevel}`);
+    if (guardedInjectCaveman(translatedBody, finalFormat, cavemanLevel, transformGuard)) {
+      xf.push(`CAVEMAN:${cavemanLevel}`);
+    }
   }
 
   // Ponytail: inject lazy-senior-dev system prompt
   if (tokenSaverEnabled && ponytailEnabled && ponytailLevel) {
-    injectPonytail(translatedBody, finalFormat, ponytailLevel);
-    xf.push(`PONYTAIL:${ponytailLevel}`);
+    if (guardedInjectPonytail(translatedBody, finalFormat, ponytailLevel, transformGuard)) {
+      xf.push(`PONYTAIL:${ponytailLevel}`);
+    }
   }
 
   // Custom prompt: user-authored instruction, independent of the savers above
