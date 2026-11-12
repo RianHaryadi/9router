@@ -173,11 +173,30 @@ export function createIdempotencyStore({
     map.delete(key);
   }
 
+  /**
+   * Release a claimed key without storing a result.
+   *
+   * The claim is dropped entirely: the request failed, so there is no result
+   * to replay, and keeping the entry would make every later retry with the
+   * same key see "in-progress" and be rejected with a conflict. The digest
+   * must match, so a release cannot cancel a claim made for a different body.
+   *
+   * @returns {boolean} true when a matching in-progress claim was released
+   */
+  function release(key, requestDigest) {
+    const entry = map.get(key);
+    if (!entry) return false;
+    if (entry.status !== "in-progress") return false;
+    if (requestDigest !== undefined && entry.digest !== requestDigest) return false;
+    map.delete(key);
+    return true;
+  }
+
   function clear() {
     map.clear();
     evictions = 0;
     conflicts = 0;
   }
 
-  return { claim, complete, get, seq, invalidate, clear, stats };
+  return { claim, complete, get, seq, invalidate, release, clear, stats };
 }

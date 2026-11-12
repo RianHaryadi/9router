@@ -59,10 +59,28 @@ export function lookupSemantic({ body, model }) {
   return { type: "replay", value: hit };
 }
 
-/** Store a completed response under the idempotency key. No key → no-op. */
+/**
+ * Store a completed response under the idempotency key. No key → no-op.
+ *
+ * An error response is never stored. Replaying a stored 500 would make a
+ * transient upstream failure permanent for the whole TTL of the key, and the
+ * client would keep receiving the same error even after the provider
+ * recovered. The semantic cache already skips >= 400 for the same reason.
+ *
+ * The claim is *released* rather than left half-finished: an in-progress
+ * entry makes every later retry with the same key look like a concurrent
+ * request and get rejected with 409.
+ */
 export function storeIdempotency({ idempotencyKey, body, bodyText, headers, status }) {
   if (!idempotencyKey) return;
-  getResponseCache().completeIdempotency(idempotencyKey, digestBody(body), {
+  const digest = digestBody(body);
+  const failed = (status !== undefined && status !== null && status >= 400)
+    || bodyText === undefined || bodyText === null || bodyText === "";
+  if (failed) {
+    getResponseCache().releaseIdempotency(idempotencyKey, digest);
+    return;
+  }
+  getResponseCache().completeIdempotency(idempotencyKey, digest, {
     bodyText,
     headers,
     status,

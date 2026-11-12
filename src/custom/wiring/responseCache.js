@@ -159,6 +159,15 @@ export function createResponseCache({ semanticOpts, idempotencyOpts } = {}) {
     getIdempotency(key) {
       return idempotencyStore.get(key);
     },
+    /**
+     * Release a claimed idempotency key without storing a result.
+     * Used when the request failed: the key must not keep a half-finished
+     * claim (a later retry with the same key would see "in-progress" and be
+     * rejected with 409), and it must not keep the error either.
+     */
+    releaseIdempotency(key, digest) {
+      return idempotencyStore.release(key, digest);
+    },
     stats() {
       return {
         semantic: semanticCache.stats(),
