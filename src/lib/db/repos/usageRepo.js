@@ -53,9 +53,16 @@ function getLocalDateKey(timestamp) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
-function addToCounter(target, key, values) {
+/**
+ * Add one request's numbers into a per-key counter.
+ *
+ * `countRequest` is false when the request was already counted and only its
+ * token numbers are being filled in — otherwise every per-provider / per-model
+ * / per-account counter would count the same request twice.
+ */
+function addToCounter(target, key, values, { countRequest = true } = {}) {
   if (!target[key]) target[key] = { requests: 0, promptTokens: 0, completionTokens: 0, cachedTokens: 0, cost: 0 };
-  target[key].requests += values.requests || 1;
+  if (countRequest) target[key].requests += values.requests || 1;
   target[key].promptTokens += values.promptTokens || 0;
   target[key].completionTokens += values.completionTokens || 0;
   target[key].cachedTokens += values.cachedTokens || 0;
@@ -92,22 +99,24 @@ function aggregateEntryToDay(day, entry, { adjustTokensOnly = false } = {}) {
   day.byApiKey ||= {};
   day.byEndpoint ||= {};
 
-  if (entry.provider) addToCounter(day.byProvider, entry.provider, vals);
+  const counterOpts = { countRequest: !adjustTokensOnly };
+
+  if (entry.provider) addToCounter(day.byProvider, entry.provider, vals, counterOpts);
 
   const modelKey = entry.provider ? `${entry.model}|${entry.provider}` : entry.model;
-  addToCounter(day.byModel, modelKey, { ...vals, meta: { rawModel: entry.model, provider: entry.provider } });
+  addToCounter(day.byModel, modelKey, { ...vals, meta: { rawModel: entry.model, provider: entry.provider } }, counterOpts);
 
   if (entry.connectionId) {
-    addToCounter(day.byAccount, entry.connectionId, { ...vals, meta: { rawModel: entry.model, provider: entry.provider } });
+    addToCounter(day.byAccount, entry.connectionId, { ...vals, meta: { rawModel: entry.model, provider: entry.provider } }, counterOpts);
   }
 
   const apiKeyVal = entry.apiKey && typeof entry.apiKey === "string" ? entry.apiKey : "local-no-key";
   const akModelKey = `${apiKeyVal}|${entry.model}|${entry.provider || "unknown"}`;
-  addToCounter(day.byApiKey, akModelKey, { ...vals, meta: { rawModel: entry.model, provider: entry.provider, apiKey: entry.apiKey || null } });
+  addToCounter(day.byApiKey, akModelKey, { ...vals, meta: { rawModel: entry.model, provider: entry.provider, apiKey: entry.apiKey || null } }, counterOpts);
 
   const endpoint = entry.endpoint || "Unknown";
   const epKey = `${endpoint}|${entry.model}|${entry.provider || "unknown"}`;
-  addToCounter(day.byEndpoint, epKey, { ...vals, meta: { endpoint, rawModel: entry.model, provider: entry.provider } });
+  addToCounter(day.byEndpoint, epKey, { ...vals, meta: { endpoint, rawModel: entry.model, provider: entry.provider } }, counterOpts);
 }
 
 function pushToRing(entry) {

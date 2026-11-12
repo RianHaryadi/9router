@@ -163,6 +163,10 @@ describe("T8 — a request recorded twice is not counted twice", () => {
     // The tokens must catch up with the real numbers.
     expect(day.promptTokens).toBe(220);
     expect(day.completionTokens).toBe(50);
+    // Per-provider counters must not count the request twice either.
+    expect(day.byProvider.p.requests).toBe(5);
+    expect(day.byProvider.p.promptTokens).toBe(220);
+    expect(day.byProvider.p.completionTokens).toBe(50);
   });
 });
 
