@@ -18,6 +18,12 @@ export { createToolResultStore, applyToolResultStore } from "./toolcall/resultSt
 export { detectRole, pickRoleModel, applyRoleRouting } from "./routing/roleAware.js";
 export { createCascadeVerifier, createCascadeRunner, canCascade } from "./routing/cascade.js";
 export { createLoopGuard, hashToolCall } from "./guard/loopGuard.js";
+export {
+  classifyError,
+  shouldCountTowardsBreaker,
+  breakerKeyFor,
+  cooldownFor,
+} from "./guard/errorTaxonomy.js";
 export { createPolicyEngine } from "./policy/engine.js";
 export { createQuotaScheduler, sortAccountsByReset, calculateRemainingPct } from "./budget/quotaScheduler.js";
 export { createCostTracker, parseTaskId, parseProject } from "./budget/costAttribution.js";

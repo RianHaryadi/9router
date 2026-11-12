@@ -32,7 +32,33 @@
  * opening the aggregate would mark every connection as blocked, the healthy
  * set would go empty and auth.js would fall back to the pre-breaker list,
  * i.e. the original bad connection could be picked again.
+ *
+ * T4 — error taxonomy (src/custom/guard/errorTaxonomy.js):
+ *   Every failure is classified BEFORE it is applied (classifyError), so the
+ *   breaker stops burning healthy accounts:
+ *   - scope "model" (qoder 10605 queue, 404 model-not-found) updates ONLY the
+ *     `${provider}|${model}` entry; the per-connection entry gets diagnostics
+ *     (lastError/lastFailureKind/…) but never counts or locks. This is why
+ *     5 healthy qoder accounts no longer rotate-lock for one queued model.
+ *   - action "ignore" / scope "none" (local `model_config` bug) and queue
+ *     rejections that are merely waiting (queue + wait-progressing) never
+ *     increment consecutiveFailures nor open anything — they only record
+ *     diagnostics so the dashboard can still show them.
+ *   - action "exclude" / "needs-human" use the classified cooldown (auth 5m,
+ *     model 10m, billing 30m) instead of the escalating default; billing
+ *     entries also get needsHuman/needsHumanSince for the UI.
+ *   - scope "provider" (transient 502/503/504) locks the provider-wide key
+ *     `${provider}` for the short classified cooldown (5s retry-now).
+ *   Reads (isOpen/isBlockedFor/filterByHealth) are heterozygous: a lock that
+ *   lives at model level applies to every account for that provider+model,
+ *   while account-level locks never leak across models.
  */
+import {
+  breakerKeyFor,
+  classifyError,
+  cooldownFor,
+  shouldCountTowardsBreaker,
+} from "../../custom/guard/errorTaxonomy.js";
 
 export const HEALTH_BREAKER_CONFIG = {
   openAfter: 3,
@@ -47,6 +73,8 @@ export const HEALTH_BREAKER_CONFIG = {
 const connectionBreakers = new Map();
 // `${provider}|${model}` → entry (aggregate; also the only key for noauth)
 const providerBreakers = new Map();
+// `${provider}` → entry (T4: provider-wide lock for transient 502/503/504)
+const providerLevelBreakers = new Map();
 
 const CLOSED_ENTRY = Object.freeze({
   state: "closed",
@@ -56,6 +84,11 @@ const CLOSED_ENTRY = Object.freeze({
   lastError: null,
   lastStatus: null,
   lastFailureAt: null,
+  lastFailureKind: null,
+  lastFailureScope: null,
+  lastFailureAction: null,
+  needsHuman: false,
+  needsHumanSince: null,
   avgLatencyMs: null,
   probesRemaining: 0,
 });
@@ -84,8 +117,19 @@ function createEntry(connectionId, provider, model) {
     lastError: null,
     lastStatus: null,
     lastFailureAt: null,
+    // T4 taxonomy fields (see src/custom/guard/errorTaxonomy.js)
+    lastFailureKind: null,
+    lastFailureScope: null,
+    lastFailureAction: null,
+    needsHuman: false,
+    needsHumanSince: null,
+    // timestamp of the last COUNTED failure — the window check must ignore
+    // diagnostics-only failures or a queue storm would keep a stale streak alive
+    lastCountedAt: null,
     avgLatencyMs: null,
     probesRemaining: 0,
+    // scope of the failure that opened this entry ("model"|"account"|"provider")
+    lockScope: null,
   };
 }
 
@@ -112,17 +156,21 @@ function primaryEntry({ connectionId, provider, model } = {}) {
   return resolveEntry(connectionBreakers.get(connectionKey(connectionId, model)));
 }
 
-function cooldownFor(consecutiveFailures) {
-  const { openAfter, baseCooldownMs, maxCooldownMs, cooldownMultiplier } = HEALTH_BREAKER_CONFIG;
-  const over = Math.max(0, consecutiveFailures - openAfter);
-  return Math.min(baseCooldownMs * Math.pow(cooldownMultiplier, over), maxCooldownMs);
-}
-
-function openBreaker(entry, now) {
+/**
+ * Cooldown for an opening breaker: the taxonomy decides (classified cooldown
+ * for exclude/needs-human/retry-now, escalating for backoff/unclassified) —
+ * see cooldownFor in src/custom/guard/errorTaxonomy.js for the precedence.
+ * The local escalating helper of pre-T4 code was replaced by that function.
+ */
+function openBreaker(entry, now, classified = null) {
   entry.state = "open";
-  entry.cooldownMs = cooldownFor(entry.consecutiveFailures);
+  entry.cooldownMs = cooldownFor(classified, {
+    ...HEALTH_BREAKER_CONFIG,
+    consecutiveFailures: entry.consecutiveFailures,
+  });
   entry.blockedUntil = now + entry.cooldownMs;
   entry.probesRemaining = 0;
+  entry.lockScope = classified ? classified.scope ?? null : null;
 }
 
 function normalizeError(errorText) {
@@ -138,35 +186,59 @@ function normalizeError(errorText) {
   return text.slice(0, 300);
 }
 
-function applyFailure(entry, now, status, errorText) {
+/**
+ * T4: record the error on the entry for the DASHBOARD without ever moving the
+ * state machine (no consecutiveFailures, no open). Used for diagnostics-only
+ * failures (queue/wait-progressing, local bugs) and for the per-connection
+ * entry of a model-scoped fault — the account is healthy, only the model is.
+ */
+function applyDiagnostic(entry, now, status, errorText, classified) {
+  entry.lastStatus = status ?? null;
+  entry.lastError = normalizeError(errorText);
+  entry.lastFailureAt = now;
+  if (classified) {
+    entry.lastFailureKind = classified.kind ?? null;
+    entry.lastFailureScope = classified.scope ?? null;
+    entry.lastFailureAction = classified.action ?? null;
+    if (classified.needsHuman === true || classified.action === "needs-human") {
+      entry.needsHuman = true;
+      if (entry.needsHumanSince === null || entry.needsHumanSince === undefined) {
+        entry.needsHumanSince = now;
+      }
+    }
+  }
+}
+
+function applyFailure(entry, now, status, errorText, classified = null) {
   // Make the state machine independent of prior reads: an open breaker whose
   // cooldown already expired counts the failure as a half-open probe.
   resolveEntry(entry, now);
 
   // Only closed-state streaks age out; open/half-open must keep escalating.
+  // Uses lastCountedAt (not lastFailureAt) so diagnostics-only records —
+  // which must not count — cannot keep a stale streak alive either.
   if (
     entry.state === "closed" &&
-    entry.lastFailureAt !== null &&
-    now - entry.lastFailureAt > HEALTH_BREAKER_CONFIG.windowMs
+    entry.lastCountedAt !== null &&
+    now - entry.lastCountedAt > HEALTH_BREAKER_CONFIG.windowMs
   ) {
     entry.consecutiveFailures = 0;
   }
 
   entry.consecutiveFailures += 1;
-  entry.lastStatus = status ?? null;
-  entry.lastError = normalizeError(errorText);
-  entry.lastFailureAt = now;
+  entry.lastCountedAt = now;
+  applyDiagnostic(entry, now, status, errorText, classified);
 
   if (entry.state === "half-open") {
     // A probe was allowed through and it failed: consume it.
     entry.probesRemaining = Math.max(0, entry.probesRemaining - 1);
     if (entry.probesRemaining > 0) return; // more probes allowed, keep probing
-    openBreaker(entry, now); // probe failed → re-open with escalated cooldown
+    openBreaker(entry, now, classified); // probe failed → re-open with escalated cooldown
     return;
   }
 
   if (entry.consecutiveFailures >= HEALTH_BREAKER_CONFIG.openAfter) {
-    openBreaker(entry, now);
+    openBreaker(entry, now, classified);
   }
 }
 
@@ -176,6 +248,10 @@ function applySuccess(entry, latencyMs) {
   entry.cooldownMs = 0;
   entry.consecutiveFailures = 0;
   entry.probesRemaining = 0;
+  entry.lockScope = null;
+  // T4: a success proves the entry works again — drop the human flag.
+  entry.needsHuman = false;
+  entry.needsHumanSince = null;
   if (typeof latencyMs === "number" && Number.isFinite(latencyMs)) {
     entry.avgLatencyMs =
       entry.avgLatencyMs === null ? latencyMs : Math.round((entry.avgLatencyMs + latencyMs) / 2);
@@ -192,6 +268,12 @@ function publicEntry(entry) {
     consecutiveFailures: entry.consecutiveFailures,
     lastError: entry.lastError,
     lastStatus: entry.lastStatus,
+    // T4 taxonomy fields (additive — safe for existing dashboard clients)
+    lastFailureKind: entry.lastFailureKind ?? null,
+    lastFailureScope: entry.lastFailureScope ?? null,
+    lastFailureAction: entry.lastFailureAction ?? null,
+    needsHuman: entry.needsHuman === true,
+    needsHumanSince: entry.needsHumanSince ?? null,
   };
 }
 
@@ -205,6 +287,11 @@ function stateOf(entry) {
     lastError: entry.lastError,
     lastStatus: entry.lastStatus,
     lastFailureAt: entry.lastFailureAt,
+    lastFailureKind: entry.lastFailureKind ?? null,
+    lastFailureScope: entry.lastFailureScope ?? null,
+    lastFailureAction: entry.lastFailureAction ?? null,
+    needsHuman: entry.needsHuman === true,
+    needsHumanSince: entry.needsHumanSince ?? null,
     avgLatencyMs: entry.avgLatencyMs,
     probesRemaining: entry.probesRemaining,
   };
@@ -239,6 +326,11 @@ export function recordSuccess({ connectionId, provider, model, latencyMs } = {})
   }
   if (agg) targets.push(agg);
 
+  // T4: a success also closes a provider-wide lock (transient 5xx recovered).
+  // Only cleared when it already exists — successes never create that entry.
+  const providerLevel = provider ? providerLevelBreakers.get(provider) : null;
+  if (providerLevel) targets.push(providerLevel);
+
   for (const entry of targets) applySuccess(entry, latencyMs);
 
   return getState({ connectionId, provider, model });
@@ -247,33 +339,97 @@ export function recordSuccess({ connectionId, provider, model, latencyMs } = {})
 /**
  * Record a failed request. `requestScoped: true` errors are caused by the
  * request itself (400 context overflow etc) and are NOT counted.
- * The connection-level failure also increments the provider+model aggregate.
+ *
+ * T4 (error taxonomy): the failure is first classified (classifyError) so
+ * only faults that are really the account's/provider's problem move the
+ * breaker — see the header comment for the full matrix. The per-connection
+ * failure still increments the provider+model aggregate for account-scoped
+ * errors, exactly as before (backward compatible: same arguments, same
+ * return shape).
  * @returns {{ state: string, blockedUntil: number|null, consecutiveFailures: number }}
  */
-export function recordFailure({ connectionId, provider, model, status, errorText, requestScoped } = {}) {
+export function recordFailure({
+  connectionId,
+  provider,
+  model,
+  status,
+  errorText,
+  requestScoped,
+  code,
+} = {}) {
   if (requestScoped) {
     return getStateFields({ connectionId, provider, model });
   }
 
   const now = Date.now();
+  const classified = classifyError({ provider, model, status, errorText, code });
+  const counts = shouldCountTowardsBreaker(classified);
+  const hasConnection = !isNoAuthConnection(connectionId);
+  const aggKey = providerKey(provider, model);
 
-  if (!isNoAuthConnection(connectionId)) {
-    const key = connectionKey(connectionId, model);
-    let conn = connectionBreakers.get(key);
+  const getConnection = () => {
+    if (!hasConnection) return null;
+    let conn = connectionBreakers.get(connectionKey(connectionId, model));
     if (!conn) {
       conn = createEntry(connectionId, provider, model);
-      connectionBreakers.set(key, conn);
+      connectionBreakers.set(connectionKey(connectionId, model), conn);
     }
-    applyFailure(conn, now, status, errorText);
+    return conn;
+  };
+
+  const getAggregate = () => {
+    let agg = providerBreakers.get(aggKey);
+    if (!agg) {
+      agg = createEntry(null, provider, model);
+      providerBreakers.set(aggKey, agg);
+    }
+    return agg;
+  };
+
+  // --- Diagnostics only: local bugs and queue rejections that are merely
+  // waiting must never burn a healthy account (no counting, no lock).
+  if (!counts) {
+    const conn = getConnection();
+    if (conn) applyDiagnostic(conn, now, status, errorText, classified);
+    applyDiagnostic(getAggregate(), now, status, errorText, classified);
+    return getStateFields({ connectionId, provider, model });
   }
 
-  const aggKey = providerKey(provider, model);
-  let agg = providerBreakers.get(aggKey);
-  if (!agg) {
-    agg = createEntry(null, provider, model);
-    providerBreakers.set(aggKey, agg);
+  // --- scope "model": the fault belongs to the model, not to any account
+  // (qoder 10605 CALL_COUNT_LIMIT, 404 model-not-found). Only the
+  // `${provider}|${model}` entry counts/locks; the per-connection entry only
+  // records diagnostics so 5 healthy accounts are not all locked for it.
+  if (classified.scope === "model") {
+    applyFailure(getAggregate(), now, status, errorText, classified);
+    const conn = getConnection();
+    if (conn) applyDiagnostic(conn, now, status, errorText, classified);
+    return getStateFields({ connectionId, provider, model });
   }
-  applyFailure(agg, now, status, errorText);
+
+  // --- scope "provider": transient upstream 5xx. Lock the provider-wide key
+  // `${provider}` (breakerKeyFor) for the short classified cooldown; accounts
+  // only get diagnostics. Read side (isOpen/isBlockedFor) honours that lock.
+  if (classified.scope === "provider") {
+    const providerKeyOnly = breakerKeyFor(classified, { connectionId, provider, model });
+    let providerLevel = providerLevelBreakers.get(providerKeyOnly);
+    if (!providerLevel) {
+      providerLevel = createEntry(null, provider, null);
+      providerLevelBreakers.set(providerKeyOnly, providerLevel);
+    }
+    applyFailure(providerLevel, now, status, errorText, classified);
+    const conn = getConnection();
+    if (conn) applyDiagnostic(conn, now, status, errorText, classified);
+    applyDiagnostic(getAggregate(), now, status, errorText, classified);
+    return getStateFields({ connectionId, provider, model });
+  }
+
+  // --- scope "account" (default): unchanged legacy behaviour — the
+  // connection+model entry AND the aggregate both count (breakerKeyFor's
+  // account key is connectionId-only; healthBreaker keeps the model-qualified
+  // key so account locks stay per-model, an existing contract).
+  const conn = getConnection();
+  if (conn) applyFailure(conn, now, status, errorText, classified);
+  applyFailure(getAggregate(), now, status, errorText, classified);
 
   return getStateFields({ connectionId, provider, model });
 }
@@ -286,10 +442,14 @@ function getStateFields(params) {
 
 /**
  * State snapshot for a key. Non-existent keys read as a closed breaker.
+ * T4: includes lastFailureKind/lastFailureScope/lastFailureAction/needsHuman
+ * (additive fields — existing consumers only read the old keys).
  * @returns {{ state: "closed"|"open"|"half-open", consecutiveFailures: number,
  *   blockedUntil: number|null, cooldownMs: number, lastError: string|null,
  *   lastStatus: number|null, lastFailureAt: number|null, avgLatencyMs: number|null,
- *   probesRemaining: number }}
+ *   probesRemaining: number, lastFailureKind: string|null,
+ *   lastFailureScope: string|null, lastFailureAction: string|null,
+ *   needsHuman: boolean, needsHumanSince: number|null }}
  */
 export function getState({ connectionId, provider, model } = {}) {
   return stateOf(primaryEntry({ connectionId, provider, model }));
@@ -298,8 +458,10 @@ export function getState({ connectionId, provider, model } = {}) {
 /** True while the breaker for this key is open with a future blockedUntil. */
 export function isOpen({ connectionId, provider, model } = {}) {
   const entry = primaryEntry({ connectionId, provider, model });
-  if (!entry || entry.state !== "open") return false;
-  return entry.blockedUntil !== null && entry.blockedUntil > Date.now();
+  if (entry && entry.state === "open" && entry.blockedUntil !== null && entry.blockedUntil > Date.now()) {
+    return true;
+  }
+  return crossScopeBlocked(provider, model, openWithFutureLock);
 }
 
 /**
@@ -309,13 +471,44 @@ export function isOpen({ connectionId, provider, model } = {}) {
  */
 export function isBlockedFor({ connectionId, provider, model } = {}) {
   const entry = primaryEntry({ connectionId, provider, model });
+  if (blockedEntry(entry)) return true;
+  return crossScopeBlocked(provider, model, blockedEntry);
+}
+
+/** Open with a future blockedUntil (isOpen semantics). */
+function openWithFutureLock(entry) {
+  return (
+    !!entry &&
+    entry.state === "open" &&
+    entry.blockedUntil !== null &&
+    entry.blockedUntil > Date.now()
+  );
+}
+
+/** isOpen semantics + half-open with no probes left (isBlockedFor semantics). */
+function blockedEntry(entry) {
   if (!entry) return false;
   if (entry.state === "open") {
     return entry.blockedUntil !== null && entry.blockedUntil > Date.now();
   }
-  if (entry.state === "half-open") {
-    return entry.probesRemaining <= 0;
-  }
+  if (entry.state === "half-open") return entry.probesRemaining <= 0;
+  return false;
+}
+
+/**
+ * T4 heterozygous read: a lock recorded at MODEL scope (`${provider}|${model}`
+ * opened by a model-classified failure) or at PROVIDER scope (`${provider}`)
+ * applies to every account for that provider+model — that is the whole point
+ * of scoping the fault. Account-scope locks live on the connection entry and
+ * never leak here (aggregate entries opened by account failures carry
+ * lockScope "account" and are skipped), so sibling accounts stay selectable.
+ */
+function crossScopeBlocked(provider, model, predicate) {
+  if (!provider) return false;
+  const aggregate = resolveEntry(providerBreakers.get(providerKey(provider, model)));
+  if (aggregate && aggregate.lockScope === "model" && predicate(aggregate)) return true;
+  const providerLevel = resolveEntry(providerLevelBreakers.get(provider));
+  if (providerLevel && predicate(providerLevel)) return true;
   return false;
 }
 
@@ -327,6 +520,10 @@ export function listBlocked() {
     if (entry.state !== "closed") out.push(publicEntry(entry));
   }
   for (const entry of providerBreakers.values()) {
+    resolveEntry(entry);
+    if (entry.state !== "closed") out.push(publicEntry(entry));
+  }
+  for (const entry of providerLevelBreakers.values()) {
     resolveEntry(entry);
     if (entry.state !== "closed") out.push(publicEntry(entry));
   }
@@ -346,27 +543,34 @@ export function getSnapshot() {
   };
   for (const entry of connectionBreakers.values()) visit(entry);
   for (const entry of providerBreakers.values()) visit(entry);
+  for (const entry of providerLevelBreakers.values()) visit(entry);
   return { tracked: entries.length, open, halfOpen, entries };
 }
 
 /**
  * Clear one breaker (manual unblock / tests). Removes the connection entry
  * AND the provider+model aggregate, so the pair starts fully clean — the
- * aggregate is derived from these same failure records.
+ * aggregate is derived from these same failure records. Also clears the
+ * provider-wide T4 lock for that provider (manual unblock means "try again").
  */
 export function resetBreaker({ connectionId, provider, model } = {}) {
   if (isNoAuthConnection(connectionId)) {
     providerBreakers.delete(providerKey(provider, model));
+    if (provider) providerLevelBreakers.delete(provider);
     return;
   }
   connectionBreakers.delete(connectionKey(connectionId, model));
-  if (provider) providerBreakers.delete(providerKey(provider, model));
+  if (provider) {
+    providerBreakers.delete(providerKey(provider, model));
+    providerLevelBreakers.delete(provider);
+  }
 }
 
 /** Clear every breaker (tests). */
 export function resetAll() {
   connectionBreakers.clear();
   providerBreakers.clear();
+  providerLevelBreakers.clear();
 }
 
 /**
