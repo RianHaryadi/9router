@@ -274,6 +274,11 @@ function publicEntry(entry) {
     lastFailureAction: entry.lastFailureAction ?? null,
     needsHuman: entry.needsHuman === true,
     needsHumanSince: entry.needsHumanSince ?? null,
+    // T5 health-matrix fields (additive — the matrix needs latency, the
+    // remaining cooldown and the half-open probe budget to rank accounts).
+    cooldownMs: entry.cooldownMs ?? 0,
+    avgLatencyMs: entry.avgLatencyMs ?? null,
+    probesRemaining: entry.probesRemaining ?? 0,
   };
 }
 
