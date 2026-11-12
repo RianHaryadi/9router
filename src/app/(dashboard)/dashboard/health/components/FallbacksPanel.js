@@ -1,7 +1,7 @@
 "use client";
 import { useCallback, useEffect, useState } from "react";
 import Card from "@/shared/components/Card";
-import { date } from "./helpers";
+import { date, ms, num, rowClass, tableClass, tdClass, thClass } from "./helpers";
 import { DataState } from "./DataState";
 
 export default function FallbacksPanel() {
@@ -41,7 +41,7 @@ export default function FallbacksPanel() {
           title="Fallback chain"
           action={
             <button
-              className="rounded-md bg-primary px-3 py-1 text-sm text-white"
+              className="rounded-md border border-primary bg-primary px-2.5 py-1 text-[11px] font-medium uppercase tracking-wide text-white hover:bg-primary-hover transition-colors"
               onClick={load}
             >
               Refresh
@@ -49,27 +49,27 @@ export default function FallbacksPanel() {
           }
         >
           {/* Filters */}
-          <div className="mb-4 grid gap-2 sm:grid-cols-4">
+          <div className="mb-3 grid gap-2 sm:grid-cols-4">
             <input
               aria-label="Filter by provider"
               value={filter.provider}
               onChange={(e) => updateFilter("provider", e.target.value)}
               placeholder="provider"
-              className="rounded-md border border-border bg-bg px-3 py-2 text-sm"
+              className="rounded-md border border-border bg-surface-2 px-2.5 py-1.5 text-[12px] text-text-main placeholder:text-text-subtle focus:outline-none focus:border-primary"
             />
             <input
               aria-label="Filter by model"
               value={filter.model}
               onChange={(e) => updateFilter("model", e.target.value)}
               placeholder="model"
-              className="rounded-md border border-border bg-bg px-3 py-2 text-sm"
+              className="rounded-md border border-border bg-surface-2 px-2.5 py-1.5 text-[12px] text-text-main placeholder:text-text-subtle focus:outline-none focus:border-primary"
             />
             <input
               aria-label="Filter by request ID"
               value={filter.requestId}
               onChange={(e) => updateFilter("requestId", e.target.value)}
               placeholder="request ID"
-              className="rounded-md border border-border bg-bg px-3 py-2 text-sm"
+              className="rounded-md border border-border bg-surface-2 px-2.5 py-1.5 text-[12px] text-text-main placeholder:text-text-subtle focus:outline-none focus:border-primary"
             />
             <input
               aria-label="Filter by since (ISO date)"
@@ -77,36 +77,36 @@ export default function FallbacksPanel() {
               value={filter.since}
               onChange={(e) => updateFilter("since", e.target.value)}
               placeholder="since"
-              className="rounded-md border border-border bg-bg px-3 py-2 text-sm"
+              className="rounded-md border border-border bg-surface-2 px-2.5 py-1.5 text-[12px] text-text-main placeholder:text-text-subtle focus:outline-none focus:border-primary"
             />
           </div>
 
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm">
-              <thead>
-                <tr className="border-b border-border text-text-muted">
-                  <th className="p-2" scope="col">Time / request</th>
-                  <th className="p-2" scope="col">Provider / model</th>
-                  <th className="p-2" scope="col">From</th>
-                  <th className="p-2" scope="col">Status</th>
-                  <th className="p-2" scope="col">Reason</th>
-                  <th className="p-2" scope="col">Cooldown</th>
-                  <th className="p-2" scope="col">Latency</th>
+            <table className={tableClass}>
+              <thead className="bg-bg-alt">
+                <tr>
+                  <th className={thClass} scope="col">Time / request</th>
+                  <th className={thClass} scope="col">Provider / model</th>
+                  <th className={thClass} scope="col">From</th>
+                  <th className={thClass} scope="col">Status</th>
+                  <th className={thClass} scope="col">Reason</th>
+                  <th className={`${thClass} text-right`} scope="col">Cooldown</th>
+                  <th className={`${thClass} text-right`} scope="col">Latency</th>
                 </tr>
               </thead>
               <tbody>
                 {events.map((row, i) => (
-                  <tr key={`${row.requestId}-${i}`} className="border-b border-border/60">
-                    <td className="p-2">
-                      <div>{date(row.timestamp)}</div>
-                      <div className="text-xs text-text-muted">{row.requestId}</div>
+                  <tr key={`${row.requestId}-${i}`} className={rowClass}>
+                    <td className={tdClass}>
+                      <div className="whitespace-nowrap text-text-main">{date(row.timestamp)}</div>
+                      <div className="font-mono text-[10px] text-text-subtle">{row.requestId}</div>
                     </td>
-                    <td>{row.provider}/{row.model}</td>
-                    <td>{row.fromProvider}/{row.fromModel}</td>
-                    <td>{row.status ?? "—"}</td>
-                    <td>{row.reason ?? "—"}</td>
-                    <td>{row.cooldownMs ?? 0} ms</td>
-                    <td>{row.latencyMs != null ? `${row.latencyMs} ms` : "—"}</td>
+                    <td className={`${tdClass} font-medium text-text-main`}>{row.provider}/{row.model}</td>
+                    <td className={`${tdClass} text-text-muted`}>{row.fromProvider}/{row.fromModel}</td>
+                    <td className={`${tdClass} font-mono text-[11px]`}>{row.status ?? "—"}</td>
+                    <td className={`${tdClass} text-[11px] text-text-muted`}>{row.reason ?? "—"}</td>
+                    <td className={`${tdClass} text-right font-mono tabular-nums`}>{ms(row.cooldownMs)}</td>
+                    <td className={`${tdClass} text-right font-mono tabular-nums`}>{ms(row.latencyMs)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -122,11 +122,11 @@ export default function FallbacksPanel() {
           <Card title="Summary">
             <div className="grid gap-4 sm:grid-cols-2">
               <div>
-                <h4 className="mb-2 font-semibold">By provider</h4>
+                <h4 className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-text-subtle">By provider</h4>
                 {Object.entries(data.summary.byProvider || {}).map(([key, value]) => (
-                  <div key={key} className="flex justify-between border-b border-border/60 py-2 text-sm">
-                    <span>{key}</span>
-                    <span className="text-text-muted">{value}</span>
+                  <div key={key} className="flex justify-between border-b border-border-subtle py-1.5 text-[12px]">
+                    <span className="text-text-main">{key}</span>
+                    <span className="font-mono tabular-nums text-text-muted">{num(value)}</span>
                   </div>
                 ))}
                 {!Object.keys(data.summary.byProvider || {}).length && (
@@ -134,11 +134,11 @@ export default function FallbacksPanel() {
                 )}
               </div>
               <div>
-                <h4 className="mb-2 font-semibold">By reason</h4>
+                <h4 className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-text-subtle">By reason</h4>
                 {Object.entries(data.summary.byReason || {}).map(([key, value]) => (
-                  <div key={key} className="flex justify-between border-b border-border/60 py-2 text-sm">
-                    <span>{key}</span>
-                    <span className="text-text-muted">{value}</span>
+                  <div key={key} className="flex justify-between border-b border-border-subtle py-1.5 text-[12px]">
+                    <span className="text-text-main">{key}</span>
+                    <span className="font-mono tabular-nums text-text-muted">{num(value)}</span>
                   </div>
                 ))}
                 {!Object.keys(data.summary.byReason || {}).length && (

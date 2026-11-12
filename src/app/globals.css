@@ -12,108 +12,126 @@
    Brand orange (dark) / soft coral (light), neutral warm bases
    ============================================================ */
 :root {
-  /* Brand scale (light) - centered on #E56A4A */
-  --color-brand-50: #fdf1ed;
-  --color-brand-100: #fadccf;
-  --color-brand-200: #f4b59c;
-  --color-brand-300: #ee8d6a;
-  --color-brand-400: #ea7855;
-  --color-brand-500: #E56A4A;
-  --color-brand-600: #cc5236;
-  --color-brand-700: #a64027;
-  --color-brand-800: #7a2f1d;
-  --color-brand-900: #4d1e12;
+  /* Brand scale (light) - teal "signal" */
+  --color-brand-50: #e6f6f3;
+  --color-brand-100: #c6ebe5;
+  --color-brand-200: #8fd9cf;
+  --color-brand-300: #55c2b5;
+  --color-brand-400: #2aa396;
+  --color-brand-500: #12998b;
+  --color-brand-600: #0c6f65;
+  --color-brand-700: #0a5a52;
+  --color-brand-800: #07443e;
+  --color-brand-900: #042f2b;
 
   /* Primary (legacy alias for backward compat with existing components) */
-  --color-primary: var(--color-brand-500);
-  --color-primary-hover: var(--color-brand-600);
+  --color-primary: var(--color-brand-600);
+  --color-primary-hover: var(--color-brand-700);
 
-  /* Surfaces & backgrounds (light) */
-  --color-bg: #FDFAF6;
-  --color-bg-alt: #F7F3EE;
+  /* Surfaces & backgrounds (light) - cold paper, not warm cream */
+  --color-bg: #f4f6f8;
+  --color-bg-alt: #eaEEF2;
   --color-surface: #ffffff;
-  --color-surface-2: #f4f4f5;
-  --color-surface-3: #e7e7e9;
-  --color-sidebar: rgba(244, 241, 236, 0.85);
+  --color-surface-2: #f1f4f7;
+  --color-surface-3: #e3e8ed;
+  /* The sidebar stays dark in light mode - the product's signature. */
+  --color-sidebar: #0e1218;
 
   /* Borders */
-  --color-border: #e5e7eb;
-  --color-border-subtle: #f1f1f3;
+  --color-border: #d5dbe2;
+  --color-border-subtle: #e7ebf0;
 
   /* Text */
-  --color-text: #0a0a0a;
-  --color-text-main: #0a0a0a;
-  --color-text-muted: #6B7280;
-  --color-text-subtle: #9CA3AF;
+  --color-text: #0d1117;
+  --color-text-main: #0d1117;
+  --color-text-muted: #576170;
+  --color-text-subtle: #7c8798;
+  --color-text-on-accent: #ffffff;
 
   /* Status */
-  --color-danger: #cf222e;
-  --color-success: #10B981;
-  --color-warning: #F59E0B;
-  --color-info: #3B82F6;
+  --color-danger: #c8362f;
+  --color-success: #1f8a55;
+  --color-warning: #b07407;
+  --color-info: #2c6fb5;
+
+  /* Chart series - one teal signal, then a quiet supporting set */
+  --chart-1: #12998b;
+  --chart-2: #4c6fd6;
+  --chart-3: #c98a1e;
+  --chart-4: #a8539a;
+  --chart-5: #2c87a8;
+  --chart-6: #6e8c1f;
 
   /* Radius */
-  --radius-brand: 10px;
-  --radius-brand-lg: 14px;
+  --radius-brand: 8px;
+  --radius-brand-lg: 12px;
 
-  /* Shadows */
-  --shadow-soft: 0 1px 2px 0 rgba(0,0,0,0.04);
-  --shadow-warm: 0 2px 12px -2px rgba(229, 106, 74, 0.18);
-  --shadow-elevated: 0 12px 28px -4px rgba(60, 50, 45, 0.06);
+  /* Shadows - depth comes from borders and surface steps, not blur */
+  --shadow-soft: 0 1px 2px 0 rgba(13, 17, 23, 0.04);
+  --shadow-warm: 0 2px 12px -2px rgba(18, 153, 139, 0.12);
+  --shadow-elevated: 0 12px 28px -4px rgba(13, 17, 23, 0.08);
   --shadow-elev:
     inset 0 1px 0 0 rgba(255,255,255,0.8),
     0 1px 2px rgba(15,23,42,0.04),
     0 12px 36px -8px rgba(15,23,42,0.10);
-  --shadow-focus: 0 0 0 3px rgba(229,106,74,0.18);
+  --shadow-focus: 0 0 0 3px rgba(12, 111, 101, 0.18);
 
   color-scheme: light;
 }
 
 .dark {
-  /* Brand scale (dark) - centered on #E56A4A, same as light for consistency */
-  --color-brand-50: #fdf1ed;
-  --color-brand-100: #fadccf;
-  --color-brand-200: #f4b59c;
-  --color-brand-300: #ee8d6a;
-  --color-brand-400: #ea7855;
-  --color-brand-500: #E56A4A;
-  --color-brand-600: #cc5236;
-  --color-brand-700: #a64027;
-  --color-brand-800: #7a2f1d;
-  --color-brand-900: #4d1e12;
+  /* Brand scale (dark) - teal, lifted so it reads on a dark panel */
+  --color-brand-50: #04211d;
+  --color-brand-100: #063029;
+  --color-brand-200: #0a4239;
+  --color-brand-300: #0f5b4f;
+  --color-brand-400: #1c7a6c;
+  --color-brand-500: #2aa396;
+  --color-brand-600: #3fb3a6;
+  --color-brand-700: #2e9184;
+  --color-brand-800: #237264;
+  --color-brand-900: #1a564b;
 
-  --color-primary: #E56A4A;
-  --color-primary-hover: #cc5236;
+  --color-primary: #3fb3a6;
+  --color-primary-hover: #2aa396;
 
-  /* Surfaces (dark - Claude-like neutral warm) */
-  --color-bg: #1a1a1a;
-  --color-bg-alt: #1F1F1E;
-  --color-surface: #262626;
-  --color-surface-2: #303030;
-  --color-surface-3: #3a3a3a;
-  --color-sidebar: rgba(30, 30, 30, 0.85);
+  /* Surfaces (dark) - instrument panel */
+  --color-bg: #0a0d12;
+  --color-bg-alt: #0e131a;
+  --color-surface: #131a23;
+  --color-surface-2: #1b232e;
+  --color-surface-3: #26303c;
+  --color-sidebar: #0e131a;
 
-  --color-border: #333333;
-  --color-border-subtle: #2a2a2a;
+  --color-border: #232c38;
+  --color-border-subtle: #1a222c;
 
-  --color-text: #ededed;
-  --color-text-main: #ededed;
-  --color-text-muted: #9ca3af;
-  --color-text-subtle: #6b7280;
+  --color-text: #e4e9f0;
+  --color-text-main: #e4e9f0;
+  --color-text-muted: #97a1b0;
+  --color-text-subtle: #6b7686;
+  --color-text-on-accent: #04120f;
 
-  --color-danger: #ef4444;
-  --color-success: #22c55e;
-  --color-warning: #fbbf24;
-  --color-info: #60a5fa;
+  --color-danger: #f2585a;
+  --color-success: #3fbf7f;
+  --color-warning: #e3a23a;
+  --color-info: #5aa5f0;
+
+  --chart-1: #3fb3a6;
+  --chart-2: #7b93e8;
+  --chart-3: #e0ac52;
+  --chart-4: #c87bb8;
+  --chart-5: #5fb0ce;
+  --chart-6: #9cb84e;
 
   --shadow-soft: 0 1px 2px 0 rgba(0,0,0,0.3);
-  --shadow-warm: 0 2px 12px -2px rgba(229, 106, 74, 0.25);
+  --shadow-warm: 0 2px 12px -2px rgba(63, 179, 166, 0.16);
   --shadow-elevated: 0 12px 28px -4px rgba(0, 0, 0, 0.45);
   --shadow-elev:
     inset 0 1px 0 0 rgba(255,255,255,0.06),
     0 1px 2px rgba(0,0,0,0.4),
     0 16px 48px -8px rgba(0,0,0,0.55);
-  --shadow-focus: 0 0 0 3px rgba(229, 106, 74, 0.18);
+  --shadow-focus: 0 0 0 3px rgba(63, 179, 166, 0.22);
 
   color-scheme: dark;
 }
@@ -164,25 +182,34 @@ select {
   --color-text-main: var(--color-text-main);
   --color-text-muted: var(--color-text-muted);
   --color-text-subtle: var(--color-text-subtle);
+  --color-text-on-accent: var(--color-text-on-accent);
   --color-accent: var(--color-brand-500);
   --color-danger: var(--color-danger);
   --color-success: var(--color-success);
   --color-warning: var(--color-warning);
   --color-info: var(--color-info);
 
+  /* Chart series - one teal signal, then a quiet supporting set */
+  --chart-1: var(--chart-1);
+  --chart-2: var(--chart-2);
+  --chart-3: var(--chart-3);
+  --chart-4: var(--chart-4);
+  --chart-5: var(--chart-5);
+  --chart-6: var(--chart-6);
+
   /* Static fallbacks (explicit per-mode usage if needed) */
-  --color-bg-light: #FCFBF9;
-  --color-bg-dark: #1a1a1a;
+  --color-bg-light: #f4f6f8;
+  --color-bg-dark: #0a0d12;
   --color-surface-light: #ffffff;
-  --color-surface-dark: #262626;
-  --color-sidebar-light: #F4F1EC;
-  --color-sidebar-dark: #1F1F1E;
-  --color-border-light: #e5e7eb;
-  --color-border-dark: #333333;
-  --color-text-main-light: #0a0a0a;
-  --color-text-main-dark: #ededed;
-  --color-text-muted-light: #6B7280;
-  --color-text-muted-dark: #9ca3af;
+  --color-surface-dark: #131a23;
+  --color-sidebar-light: #0e1218;
+  --color-sidebar-dark: #0e131a;
+  --color-border-light: #d5dbe2;
+  --color-border-dark: #232c38;
+  --color-text-main-light: #0d1117;
+  --color-text-main-dark: #e4e9f0;
+  --color-text-muted-light: #576170;
+  --color-text-muted-dark: #97a1b0;
 
   /* Radius */
   --radius-brand: var(--radius-brand);

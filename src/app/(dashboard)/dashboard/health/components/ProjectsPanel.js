@@ -2,7 +2,7 @@
 import { useEffect, useState } from "react";
 import dynamic from "next/dynamic";
 import Card from "@/shared/components/Card";
-import { money } from "./helpers";
+import { money, num, rowClass, tableClass, tdClass, thClass } from "./helpers";
 import { DataState } from "./DataState";
 
 const ProjectsChart = dynamic(() => import("./ProjectsChart"), { ssr: false });
@@ -26,26 +26,26 @@ export default function ProjectsPanel() {
         <Card title="Spend by project">
           <ProjectsChart data={rows} money={money} />
         </Card>
-        <Card title="Project ledger">
+        <Card title="Project ledger" padding="none">
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm">
-              <thead>
-                <tr className="border-b border-border text-text-muted">
-                  <th className="p-2" scope="col">Project</th>
-                  <th className="p-2" scope="col">Cost</th>
-                  <th className="p-2" scope="col">Requests</th>
-                  <th className="p-2" scope="col">Prompt tokens</th>
-                  <th className="p-2" scope="col">Completion tokens</th>
+            <table className={tableClass}>
+              <thead className="bg-bg-alt">
+                <tr>
+                  <th className={thClass} scope="col">Project</th>
+                  <th className={`${thClass} text-right`} scope="col">Cost</th>
+                  <th className={`${thClass} text-right`} scope="col">Requests</th>
+                  <th className={`${thClass} text-right`} scope="col">Prompt tokens</th>
+                  <th className={`${thClass} text-right`} scope="col">Completion tokens</th>
                 </tr>
               </thead>
               <tbody>
                 {rows.map((row) => (
-                  <tr key={row.project} className="border-b border-border/60">
-                    <td className="p-2">{row.project}</td>
-                    <td>{money(row.cost)}</td>
-                    <td>{row.requests ?? 0}</td>
-                    <td>{row.promptTokens ?? 0}</td>
-                    <td>{row.completionTokens ?? 0}</td>
+                  <tr key={row.project} className={rowClass}>
+                    <td className={`${tdClass} font-medium text-text-main`}>{row.project}</td>
+                    <td className={`${tdClass} text-right font-mono tabular-nums`}>{money(row.cost)}</td>
+                    <td className={`${tdClass} text-right font-mono tabular-nums`}>{num(row.requests)}</td>
+                    <td className={`${tdClass} text-right font-mono tabular-nums`}>{num(row.promptTokens)}</td>
+                    <td className={`${tdClass} text-right font-mono tabular-nums`}>{num(row.completionTokens)}</td>
                   </tr>
                 ))}
               </tbody>

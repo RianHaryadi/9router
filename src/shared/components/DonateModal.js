@@ -66,7 +66,7 @@ export default function DonateModal({ isOpen, onClose }) {
             </div>
           )}
           {error && (
-            <div className="text-red-500 py-4">Failed to load donate info: {error}</div>
+            <div className="text-danger py-4">Failed to load donate info: {error}</div>
           )}
           {!loading && !error && data && (
             <>

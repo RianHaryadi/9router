@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import dynamic from "next/dynamic";
 import Card from "@/shared/components/Card";
-import { formatPercentile, money } from "./helpers";
+import { formatPercentile, money, num, rowClass, tableClass, tdClass, thClass } from "./helpers";
 import { DataState } from "./DataState";
 
 const LatencyChart = dynamic(() => import("./LatencyChart"), { ssr: false });
@@ -14,8 +14,8 @@ function Stats({ label, values }) {
       <div className="grid grid-cols-3 gap-3 text-sm sm:grid-cols-6">
         {["p50", "p90", "p95", "p99", "min", "max", "avg"].map((key) => (
           <div key={key}>
-            <div className="text-xs text-text-muted">{key}</div>
-            <div className="font-semibold">{formatPercentile(values?.[key])}</div>
+            <div className="text-[10px] font-semibold uppercase tracking-wider text-text-subtle">{key}</div>
+            <div className="font-mono tabular-nums text-text-main">{formatPercentile(values?.[key])}</div>
           </div>
         ))}
       </div>
@@ -53,28 +53,28 @@ export default function LatencyPanel() {
         <Card title="Percentiles">
           <LatencyChart data={chart} />
         </Card>
-        <Card title="Provider health">
+        <Card title="Provider health" padding="none">
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm">
-              <thead>
-                <tr className="border-b border-border text-text-muted">
-                  <th className="p-2" scope="col">Provider</th>
-                  <th className="p-2" scope="col">Requests</th>
-                  <th className="p-2" scope="col">Cost</th>
-                  <th className="p-2" scope="col">Avg latency</th>
-                  <th className="p-2" scope="col">Avg TTFT</th>
-                  <th className="p-2" scope="col">Errors</th>
+            <table className={tableClass}>
+              <thead className="bg-bg-alt">
+                <tr>
+                  <th className={thClass} scope="col">Provider</th>
+                  <th className={`${thClass} text-right`} scope="col">Requests</th>
+                  <th className={`${thClass} text-right`} scope="col">Cost</th>
+                  <th className={`${thClass} text-right`} scope="col">Avg latency</th>
+                  <th className={`${thClass} text-right`} scope="col">Avg TTFT</th>
+                  <th className={`${thClass} text-right`} scope="col">Errors</th>
                 </tr>
               </thead>
               <tbody>
                 {(data?.providers || []).map((row) => (
-                  <tr key={row.provider} className="border-b border-border/60">
-                    <td className="p-2">{row.provider}</td>
-                    <td>{row.requests ?? 0}</td>
-                    <td>{money(row.cost)}</td>
-                    <td>{formatPercentile(row.avgLatency ?? row.avgLatencyMs)}</td>
-                    <td>{formatPercentile(row.avgTtft ?? row.avgTtftMs)}</td>
-                    <td>{row.errors ?? 0}</td>
+                  <tr key={row.provider} className={rowClass}>
+                    <td className={`${tdClass} font-medium text-text-main`}>{row.provider}</td>
+                    <td className={`${tdClass} text-right font-mono tabular-nums`}>{num(row.requests)}</td>
+                    <td className={`${tdClass} text-right font-mono tabular-nums`}>{money(row.cost)}</td>
+                    <td className={`${tdClass} text-right font-mono tabular-nums`}>{formatPercentile(row.avgLatency ?? row.avgLatencyMs)}</td>
+                    <td className={`${tdClass} text-right font-mono tabular-nums`}>{formatPercentile(row.avgTtft ?? row.avgTtftMs)}</td>
+                    <td className={`${tdClass} text-right font-mono tabular-nums`}>{num(row.errors)}</td>
                   </tr>
                 ))}
               </tbody>

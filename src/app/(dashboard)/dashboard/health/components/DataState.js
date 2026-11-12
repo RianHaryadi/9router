@@ -13,14 +13,14 @@ export function DataState({ loading, error, empty, children }) {
   }
   if (error) {
     return (
-      <div role="alert" className="rounded-[14px] border border-red-500/30 bg-red-500/10 p-6 text-center text-sm text-red-500">
+      <div role="alert" className="rounded-lg border border-danger/30 bg-danger/10 p-6 text-center text-sm text-danger">
         Failed to load data. Please try again.
       </div>
     );
   }
   if (empty) {
     return (
-      <div role="status" aria-live="polite" className="rounded-[14px] border border-border-subtle bg-surface p-6 text-center text-sm text-text-muted">
+      <div role="status" aria-live="polite" className="rounded-lg border border-border-subtle bg-surface p-6 text-center text-sm text-text-muted">
         No data available.
       </div>
     );
