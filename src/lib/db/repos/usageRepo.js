@@ -63,14 +63,24 @@ function addToCounter(target, key, values) {
   if (values.meta) Object.assign(target[key], values.meta);
 }
 
-function aggregateEntryToDay(day, entry) {
+/**
+ * Fold one request into the daily aggregate.
+ *
+ * `adjustTokensOnly` is used when the row was already counted (the request
+ * was recorded before its usage was known) and only the token numbers are
+ * being filled in now. The request counter and the lifetime counter must not
+ * move again in that case, or one request would be counted twice.
+ */
+function aggregateEntryToDay(day, entry, { adjustTokensOnly = false } = {}) {
   const promptTokens = entry.tokens?.prompt_tokens || entry.tokens?.input_tokens || 0;
   const completionTokens = entry.tokens?.completion_tokens || entry.tokens?.output_tokens || 0;
   const cachedTokens = entry.tokens?.cached_tokens || entry.tokens?.cache_read_input_tokens || 0;
   const cost = entry.cost || 0;
   const vals = { promptTokens, completionTokens, cachedTokens, cost };
 
-  day.requests = (day.requests || 0) + 1;
+  if (!adjustTokensOnly) {
+    day.requests = (day.requests || 0) + 1;
+  }
   day.promptTokens = (day.promptTokens || 0) + promptTokens;
   day.completionTokens = (day.completionTokens || 0) + completionTokens;
   day.cachedTokens = (day.cachedTokens || 0) + cachedTokens;
@@ -260,6 +270,9 @@ export async function saveRequestUsage(entry) {
     const completionTokens = tokens.completion_tokens || tokens.output_tokens || 0;
 
     let inserted = false;
+    // True when an already-counted row got its real token numbers after the
+    // fact (the provider sent no usage frame at first).
+    let filledIn = false;
 
     // All 3 writes (history insert, daily upsert, lifetime counter) in ONE transaction.
     // better-sqlite3 is sync → no JS yield mid-transaction → no race in same process.
@@ -299,11 +312,17 @@ export async function saveRequestUsage(entry) {
         if (!existing.endpoint && entry.endpoint) {
           db.run(`UPDATE usageHistory SET endpoint = ? WHERE id = ?`, [entry.endpoint, existing.id]);
         }
-        // The row was written before the usage was known (streaming starts with
-        // no tokens). Fill in the real numbers now instead of leaving a
-        // zero-token row behind.
-        if (existing.promptTokens === 0 && existing.completionTokens === 0
-          && (promptTokens !== 0 || completionTokens !== 0)) {
+        // The row was written before the usage was known (a request whose
+        // provider sent no usage frame). Fill in the real numbers now instead
+        // of leaving a zero-token row behind.
+        //
+        // The daily aggregate and the lifetime counter were already bumped
+        // when the row was first inserted, so they must NOT be bumped again
+        // here — but the day row has to absorb the tokens that only became
+        // known now, otherwise the daily totals stay lower than the history.
+        filledIn = existing.promptTokens === 0 && existing.completionTokens === 0
+          && (promptTokens !== 0 || completionTokens !== 0);
+        if (filledIn) {
           db.run(
             `UPDATE usageHistory SET promptTokens = ?, completionTokens = ?, cost = ?, tokens = ?, latencyMs = ?, ttftMs = ? WHERE id = ?`,
             [
@@ -311,6 +330,25 @@ export async function saveRequestUsage(entry) {
               toIntOrZero(entry.latencyMs), toIntOrZero(entry.ttftMs), existing.id,
             ]
           );
+          // Move the day aggregate up to the real numbers.
+          const dateKey = getLocalDateKey(entry.timestamp);
+          const dayRow = db.get(`SELECT data FROM usageDaily WHERE dateKey = ?`, [dateKey]);
+          if (dayRow) {
+            const day = parseJson(dayRow.data, {});
+            const delta = {
+              provider: entry.provider || "unknown",
+              model: entry.model || "unknown",
+              tokens: { prompt_tokens: promptTokens, completion_tokens: completionTokens },
+              cost: entry.cost || 0,
+              connectionId: entry.connectionId || undefined,
+              apiKey: entry.apiKey || undefined,
+              endpoint: entry.endpoint || null,
+            };
+            // Add the difference rather than re-aggregating: the row already
+            // contributed its (zero) tokens when it was first inserted.
+            aggregateEntryToDay(day, delta, { adjustTokensOnly: true });
+            db.run(`INSERT INTO usageDaily(dateKey, data) VALUES(?, ?) ON CONFLICT(dateKey) DO UPDATE SET data = excluded.data`, [dateKey, stringifyJson(day)]);
+          }
         }
         return;
       }
@@ -347,11 +385,18 @@ export async function saveRequestUsage(entry) {
     if (inserted) {
       pushToRing(entry);
       scheduleStatsEvent("update", 250);
+    }
 
-      // Per-key budget attribution (Fase 2): atomically add this request's cost
-      // (USD -> cents) to the key's monthly spend. Fail-open: any error here
-      // never breaks usage recording. Rollover reset is handled in the chat
-      // gate on the next gated request, so the counter may briefly lag.
+    // Per-key budget attribution (Fase 2): atomically add this request's cost
+    // (USD -> cents) to the key's monthly spend. Fail-open: any error here
+    // never breaks usage recording. Rollover reset is handled in the chat
+    // gate on the next gated request, so the counter may briefly lag.
+    //
+    // Runs for a filled-in row too: the request was counted when its row was
+    // first written (with no cost known), so the spend only lands once the
+    // real cost is available. Attributing it here keeps the monthly budget in
+    // step with usageHistory.
+    if (inserted || filledIn) {
       const ak = entry.apiKey && typeof entry.apiKey === "string" ? entry.apiKey.trim() : null;
       const costCents = Math.round((entry.cost || 0) * 100);
       if (ak && costCents > 0) {
