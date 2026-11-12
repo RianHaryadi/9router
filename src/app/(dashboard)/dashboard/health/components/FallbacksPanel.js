@@ -41,7 +41,7 @@ export default function FallbacksPanel() {
           title="Fallback chain"
           action={
             <button
-              className="rounded-md border border-primary bg-primary px-2.5 py-1 text-[11px] font-medium uppercase tracking-wide text-white hover:bg-primary-hover transition-colors"
+              className="rounded-md border border-brand-600 dark:border-brand-300/60 bg-surface-2 px-2.5 py-1 text-[11px] font-medium uppercase tracking-wide text-text-main border-2 border-ink hover:bg-brand-400 transition-colors"
               onClick={load}
             >
               Refresh
@@ -55,21 +55,21 @@ export default function FallbacksPanel() {
               value={filter.provider}
               onChange={(e) => updateFilter("provider", e.target.value)}
               placeholder="provider"
-              className="rounded-md border border-border bg-surface-2 px-2.5 py-1.5 text-[12px] text-text-main placeholder:text-text-subtle focus:outline-none focus:border-primary"
+              className="rounded-md border-2 border-ink bg-surface-2 px-2.5 py-1.5 text-[12px] text-text-main placeholder:text-text-subtle focus:outline-none focus:border-brand-600 dark:border-brand-300/60"
             />
             <input
               aria-label="Filter by model"
               value={filter.model}
               onChange={(e) => updateFilter("model", e.target.value)}
               placeholder="model"
-              className="rounded-md border border-border bg-surface-2 px-2.5 py-1.5 text-[12px] text-text-main placeholder:text-text-subtle focus:outline-none focus:border-primary"
+              className="rounded-md border-2 border-ink bg-surface-2 px-2.5 py-1.5 text-[12px] text-text-main placeholder:text-text-subtle focus:outline-none focus:border-brand-600 dark:border-brand-300/60"
             />
             <input
               aria-label="Filter by request ID"
               value={filter.requestId}
               onChange={(e) => updateFilter("requestId", e.target.value)}
               placeholder="request ID"
-              className="rounded-md border border-border bg-surface-2 px-2.5 py-1.5 text-[12px] text-text-main placeholder:text-text-subtle focus:outline-none focus:border-primary"
+              className="rounded-md border-2 border-ink bg-surface-2 px-2.5 py-1.5 text-[12px] text-text-main placeholder:text-text-subtle focus:outline-none focus:border-brand-600 dark:border-brand-300/60"
             />
             <input
               aria-label="Filter by since (ISO date)"
@@ -77,7 +77,7 @@ export default function FallbacksPanel() {
               value={filter.since}
               onChange={(e) => updateFilter("since", e.target.value)}
               placeholder="since"
-              className="rounded-md border border-border bg-surface-2 px-2.5 py-1.5 text-[12px] text-text-main placeholder:text-text-subtle focus:outline-none focus:border-primary"
+              className="rounded-md border-2 border-ink bg-surface-2 px-2.5 py-1.5 text-[12px] text-text-main placeholder:text-text-subtle focus:outline-none focus:border-brand-600 dark:border-brand-300/60"
             />
           </div>
 
@@ -124,7 +124,7 @@ export default function FallbacksPanel() {
               <div>
                 <h4 className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-text-subtle">By provider</h4>
                 {Object.entries(data.summary.byProvider || {}).map(([key, value]) => (
-                  <div key={key} className="flex justify-between border-b border-border-subtle py-1.5 text-[12px]">
+                  <div key={key} className="flex justify-between border-b-2 border-ink/15 py-1.5 text-[12px]">
                     <span className="text-text-main">{key}</span>
                     <span className="font-mono tabular-nums text-text-muted">{num(value)}</span>
                   </div>
@@ -136,7 +136,7 @@ export default function FallbacksPanel() {
               <div>
                 <h4 className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-text-subtle">By reason</h4>
                 {Object.entries(data.summary.byReason || {}).map(([key, value]) => (
-                  <div key={key} className="flex justify-between border-b border-border-subtle py-1.5 text-[12px]">
+                  <div key={key} className="flex justify-between border-b-2 border-ink/15 py-1.5 text-[12px]">
                     <span className="text-text-main">{key}</span>
                     <span className="font-mono tabular-nums text-text-muted">{num(value)}</span>
                   </div>

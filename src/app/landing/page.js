@@ -22,8 +22,8 @@ export default function LandingPage() {
         
         {/* Animated gradient orbs */}
         <div className="absolute top-0 left-1/4 w-[700px] h-[700px] bg-[#f97815]/12 rounded-full blur-[130px] animate-blob"></div>
-        <div className="absolute top-1/3 right-1/4 w-[600px] h-[600px] bg-purple-500/10 rounded-full blur-[130px] animate-blob" style={{ animationDelay: '2s', animationDuration: '22s' }}></div>
-        <div className="absolute bottom-0 left-1/2 w-[650px] h-[650px] bg-blue-500/8 rounded-full blur-[130px] animate-blob" style={{ animationDelay: '4s', animationDuration: '25s' }}></div>
+        <div className="absolute top-1/3 right-1/4 w-[600px] h-[600px] bg-brand/10 rounded-full blur-[130px] animate-blob" style={{ animationDelay: '2s', animationDuration: '22s' }}></div>
+        <div className="absolute bottom-0 left-1/2 w-[650px] h-[650px] bg-info/8 rounded-full blur-[130px] animate-blob" style={{ animationDelay: '4s', animationDuration: '25s' }}></div>
         
         {/* Vignette effect */}
         <div className="absolute inset-0" style={{
@@ -52,8 +52,8 @@ export default function LandingPage() {
           <div className="absolute inset-0 bg-linear-to-t from-[#f97815]/5 to-transparent pointer-events-none"></div>
           <div className="max-w-4xl mx-auto text-center relative z-10">
             <h2 className="text-4xl md:text-5xl font-black mb-6">Ready to Simplify Your AI Infrastructure?</h2>
-            <p className="text-xl text-gray-400 mb-10 max-w-2xl mx-auto">
-              Join developers who are streamlining their AI integrations with 9Router. Open source and free to start.
+            <p className="text-xl text-neutral mb-10 max-w-2xl mx-auto">
+              Join developers who are streamlining their AI integrations with Ryo. Open source and free to start.
             </p>
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
               <button 

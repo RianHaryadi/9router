@@ -112,12 +112,12 @@ export default function McpMarketplaceModal({ isOpen, onClose, onAdd, addedNames
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search by name or description..."
-            className="flex-1 px-2 py-1.5 bg-surface rounded text-xs border border-border focus:outline-none focus:ring-1 focus:ring-primary/50"
+            className="flex-1 px-2 py-1.5 bg-surface rounded text-xs border-2 border-ink focus:outline-none focus:ring-1 focus:ring-brand-600 dark:ring-brand-300/50"
           />
           <select
             value={filter}
             onChange={(e) => setFilter(e.target.value)}
-            className="px-2 py-1.5 bg-surface rounded text-xs border border-border focus:outline-none focus:ring-1 focus:ring-primary/50"
+            className="px-2 py-1.5 bg-surface rounded text-xs border-2 border-ink focus:outline-none focus:ring-1 focus:ring-brand-600 dark:ring-brand-300/50"
           >
             <option value="all">All</option>
             <option value="authless">Authless</option>
@@ -126,7 +126,7 @@ export default function McpMarketplaceModal({ isOpen, onClose, onAdd, addedNames
         </div>
 
         {error && (
-          <div className="px-2 py-1.5 rounded text-xs bg-danger/10 text-red-600">{error}</div>
+          <div className="px-2 py-1.5 rounded text-xs bg-danger/10 text-danger">{error}</div>
         )}
 
         {loading && (
@@ -181,15 +181,15 @@ export default function McpMarketplaceModal({ isOpen, onClose, onAdd, addedNames
                         added
                           ? "bg-success/10 text-success cursor-default"
                           : expanded
-                          ? "bg-surface border border-border text-text-muted hover:bg-black/5"
-                          : "bg-primary/10 border border-primary/40 text-primary hover:bg-primary/20"
+                          ? "bg-surface border-2 border-ink text-text-muted hover:bg-black/5"
+                          : "bg-brand-300/25 border border-brand-600/40 dark:border-brand-300/50 text-brand-700 dark:text-brand-300 hover:bg-brand-300/35"
                       }`}
                     >
                       {added ? "Added" : expanded ? "Cancel" : "+ Add"}
                     </button>
                   </div>
                   {expanded && (
-                    <div className="px-3 py-2 bg-surface/40 border-t border-border flex flex-col gap-2">
+                    <div className="px-3 py-2 bg-surface/40 border-t-2 border-ink flex flex-col gap-2">
                       {isLoadingTools && (
                         <div className="flex items-center gap-2 text-text-muted text-[10px] py-1">
                           <span className="material-symbols-outlined animate-spin text-[14px]">progress_activity</span>
@@ -202,7 +202,7 @@ export default function McpMarketplaceModal({ isOpen, onClose, onAdd, addedNames
                         </p>
                       )}
                       {!isLoadingTools && cache?.error && !cache?.requiresAuth && (
-                        <p className="text-[10px] text-red-600 bg-danger/10 px-2 py-1 rounded">Probe failed: {cache.error}</p>
+                        <p className="text-[10px] text-danger bg-danger/10 px-2 py-1 rounded">Probe failed: {cache.error}</p>
                       )}
                       {!isLoadingTools && toolKeys.length === 0 && !cache?.requiresAuth && !cache?.error && (
                         <p className="text-[10px] text-text-muted">No tools advertised by server.</p>
@@ -212,9 +212,9 @@ export default function McpMarketplaceModal({ isOpen, onClose, onAdd, addedNames
                           <div className="flex items-center justify-between">
                             <span className="text-[10px] text-text-muted">{selectedCount}/{toolKeys.length} tools enabled</span>
                             <div className="flex gap-1">
-                              <button onClick={() => setAllTools(s.url, true)} className="text-[10px] text-primary hover:underline">All</button>
+                              <button onClick={() => setAllTools(s.url, true)} className="text-[10px] text-brand-700 dark:text-brand-300 hover:underline">All</button>
                               <span className="text-[10px] text-text-muted">·</span>
-                              <button onClick={() => setAllTools(s.url, false)} className="text-[10px] text-primary hover:underline">None</button>
+                              <button onClick={() => setAllTools(s.url, false)} className="text-[10px] text-brand-700 dark:text-brand-300 hover:underline">None</button>
                             </div>
                           </div>
                           <div className="grid grid-cols-2 gap-1 max-h-40 overflow-y-auto">
@@ -234,7 +234,7 @@ export default function McpMarketplaceModal({ isOpen, onClose, onAdd, addedNames
                       )}
                       <button
                         onClick={() => confirmAdd(s)}
-                        className="self-end px-2 py-1 rounded text-[10px] font-medium bg-primary text-white hover:bg-primary/90"
+                        className="self-end px-2 py-1 rounded text-[10px] font-medium bg-ink text-[#FAF7F0] hover:bg-brand-300/90"
                       >
                         ✓ Confirm Add
                       </button>

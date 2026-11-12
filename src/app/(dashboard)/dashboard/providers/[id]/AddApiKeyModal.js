@@ -268,13 +268,13 @@ export default function AddApiKeyModal({ isOpen, provider, providerName, isCompa
               }
             </p>
             <textarea
-              className="w-full rounded border border-accent/30 bg-sidebar p-2 text-sm font-mono resize-y min-h-[140px] focus:outline-none focus:ring-1 focus:ring-primary"
+              className="w-full rounded border border-accent/30 bg-sidebar p-2 text-sm font-mono resize-y min-h-[140px] focus:outline-none focus:ring-1 focus:ring-brand-600 dark:ring-brand-300"
               placeholder={bulkPlaceholder}
               value={bulkText}
               onChange={(e) => setBulkText(e.target.value)}
             />
             {bulkResult && (
-              <div className={`text-sm font-medium ${bulkResult.failed > 0 ? "text-yellow-400" : "text-green-400"}`}>
+              <div className={`text-sm font-medium ${bulkResult.failed > 0 ? "text-warning" : "text-success"}`}>
                 ✓ {bulkResult.success} added{bulkResult.failed > 0 ? `, ✗ ${bulkResult.failed} failed` : ""}
               </div>
             )}
@@ -315,7 +315,7 @@ export default function AddApiKeyModal({ isOpen, provider, providerName, isCompa
             <div>
               <div className="text-xs font-medium text-text">Command Code CLI detected?</div>
               <div className="text-xs text-text-muted">Import API key directly from ~/.commandcode/auth.json</div>
-              {cliDetectError && <div className="text-xs text-red-400 mt-1">{cliDetectError}</div>}
+              {cliDetectError && <div className="text-xs text-danger mt-1">{cliDetectError}</div>}
             </div>
             <Button
               size="sm"
@@ -355,7 +355,7 @@ export default function AddApiKeyModal({ isOpen, provider, providerName, isCompa
             {website && (
               <>
                 {" "}
-                <a href={website} target="_blank" rel="noopener noreferrer" className="text-primary underline">
+                <a href={website} target="_blank" rel="noopener noreferrer" className="text-brand-700 dark:text-brand-300 underline">
                   Open {website.replace(/^https?:\/\//, "")}
                 </a>
               </>
@@ -389,7 +389,7 @@ export default function AddApiKeyModal({ isOpen, provider, providerName, isCompa
           </Badge>
         )}
         {error && (
-          <p className="text-xs text-red-500 break-words">{error}</p>
+          <p className="text-xs text-danger break-words">{error}</p>
         )}
         {isCompatible && (
           <p className="text-xs text-text-muted">
@@ -406,7 +406,7 @@ export default function AddApiKeyModal({ isOpen, provider, providerName, isCompa
               placeholder="abc123def456..."
             />
             <p className="text-xs text-text-muted mt-2">
-              Find your Account ID in the right sidebar of <a href="https://dash.cloudflare.com" target="_blank" rel="noopener noreferrer" className="text-primary underline">dash.cloudflare.com</a>
+              Find your Account ID in the right sidebar of <a href="https://dash.cloudflare.com" target="_blank" rel="noopener noreferrer" className="text-brand-700 dark:text-brand-300 underline">dash.cloudflare.com</a>
             </p>
           </div>
         )}

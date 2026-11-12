@@ -44,14 +44,14 @@ export default function KeyAccessControls({ apiKey, onChange, onRequestRestrict 
       {access.restricted && (
         <div className="mt-2 flex flex-wrap items-center gap-1.5">
           {access.allow.length === 0 && (
-            <span className="text-xs text-orange-500">No combos or models allowed — this key can call nothing.</span>
+            <span className="text-xs text-warning">No combos or models allowed — this key can call nothing.</span>
           )}
           {access.allow.map((entry) => (
-            <span key={entry} className="flex items-center gap-1 rounded-xl border border-primary/30 bg-primary/10 px-2 py-0.5 font-mono text-xs text-text-main">
+            <span key={entry} className="flex items-center gap-1 rounded-xl border border-brand-600/40 dark:border-brand-300/50 bg-brand-300/25 px-2 py-0.5 font-mono text-xs text-text-main">
               {entry}
               <button
                 onClick={() => remove(entry)}
-                className="rounded text-text-muted hover:text-red-500"
+                className="rounded text-text-muted hover:text-danger"
                 title={`Remove ${entry}`}
                 aria-label={`Remove ${entry}`}
               >
@@ -61,7 +61,7 @@ export default function KeyAccessControls({ apiKey, onChange, onRequestRestrict 
           ))}
           <button
             onClick={openPicker}
-            className="flex items-center gap-0.5 rounded-xl border border-dashed border-black/10 px-2 py-0.5 text-xs font-medium text-primary hover:border-primary/50 dark:border-white/10"
+            className="flex items-center gap-0.5 rounded-xl border border-dashed border-ink/10 px-2 py-0.5 text-xs font-medium text-brand-700 dark:text-brand-300 hover:border-brand-600/50 dark:border-brand-300/60 dark:border-white/10"
           >
             <span className="material-symbols-outlined leading-none" style={{ fontSize: "14px" }}>add</span>
             Add combo or model

@@ -111,7 +111,7 @@ export default function Sidebar({ onClose }) {
 
   return (
     <>
-      <aside className="flex w-64 flex-col border-r border-sidebar bg-sidebar transition-colors duration-300 min-h-full">
+      <aside className="flex w-64 flex-col border-r-[3px] border-ink bg-sidebar transition-colors duration-300 min-h-full">
         {/* Traffic lights */}
         <div className="flex items-center gap-2 px-5 pt-4 pb-1">
           <div className="w-2.5 h-2.5 rounded-full bg-[#FF5F56]" />
@@ -122,25 +122,25 @@ export default function Sidebar({ onClose }) {
         {/* Logo */}
         <div className="px-5 py-4 flex flex-col gap-2">
           <Link href="/dashboard" className="flex items-center gap-2.5">
-            <div className="flex items-center justify-center size-8 rounded-lg bg-brand-500 text-white">
-              <span className="material-symbols-outlined text-[18px]">hub</span>
+            <div className="flex items-center justify-center size-9 rounded-[12px] bg-ink text-[#FAF7F0] border-2 border-ink shadow-[2px_2px_0_0_#FFE600]">
+              <span className="material-symbols-outlined text-[19px]">hub</span>
             </div>
             <div className="flex flex-col">
-              <h1 className="text-[14px] font-semibold tracking-tight text-white">
+              <h1 className="text-[15px] font-bold tracking-normal text-white uppercase">
                 {APP_CONFIG.name}
               </h1>
-              <span className="text-[10px] font-mono text-white/50">v{APP_CONFIG.version}</span>
+              <span className="text-[10px] font-mono text-brand-300">v{APP_CONFIG.version}</span>
             </div>
           </Link>
           {updateInfo && (
             <div className="flex flex-col gap-1.5 rounded p-1 -m-1">
-              <span className="text-xs font-semibold text-green-600 dark:text-amber-500">
+              <span className="text-xs font-semibold text-success dark:text-warning">
                 ↑ New version available: v{updateInfo.latestVersion}
               </span>
               <div className="flex items-center gap-2">
                 <button
                   onClick={() => setShowUpdateModal(true)}
-                  className="px-2 py-1 rounded bg-green-600 hover:bg-green-700 dark:bg-amber-500 dark:hover:bg-amber-600 text-white text-[11px] font-semibold transition-colors cursor-pointer"
+                  className="px-2 py-1 rounded bg-success hover:bg-success dark:hover:bg-warning text-white text-[11px] font-semibold transition-colors cursor-pointer"
                 >
                   Update now
                 </button>
@@ -149,7 +149,7 @@ export default function Sidebar({ onClose }) {
                   title="Copy install command"
                   className="flex-1 text-left hover:opacity-80 transition-opacity cursor-pointer min-w-0"
                 >
-                  <code className="block text-[10px] text-green-600/80 dark:text-amber-400/70 font-mono truncate">
+                  <code className="block text-[10px] text-success/80 font-mono truncate">
                     {copied ? "✓ copied!" : INSTALL_CMD}
                   </code>
                 </button>
@@ -166,10 +166,10 @@ export default function Sidebar({ onClose }) {
               href={item.href}
               onClick={onClose}
               className={cn(
-                "flex items-center gap-2.5 px-2.5 py-1.5 rounded-md transition-colors group",
+                "flex items-center gap-2.5 px-2.5 py-1.5 rounded-[12px] transition-all group",
                 isActive(item.href)
-                  ? "bg-brand-500/15 text-brand-300"
-                  : "text-white/60 hover:bg-white/5 hover:text-white"
+                  ? "bg-ink text-[#FAF7F0] border-2 border-ink font-bold shadow-[3px_3px_0_0_var(--color-shadow)]"
+                  : "text-white/70 hover:bg-white/10 hover:text-white border-2 border-transparent"
               )}
             >
               <span
@@ -180,13 +180,13 @@ export default function Sidebar({ onClose }) {
               >
                 {item.icon}
               </span>
-              <span className="text-[12.5px] font-medium">{item.label}</span>
+              <span className="text-[12.5px] font-bold uppercase tracking-normal">{item.label}</span>
             </Link>
           ))}
 
           {/* System section */}
           <div className="pt-3 mt-2 space-y-0.5">
-            <p className="px-2.5 text-[10px] font-semibold text-white/35 uppercase tracking-wider mb-1.5">
+            <p className="px-2.5 text-[10px] font-bold text-white/40 uppercase tracking-[0.08em] mb-1.5">
               System
             </p>
 
@@ -194,10 +194,10 @@ export default function Sidebar({ onClose }) {
             <button
               onClick={() => setMediaOpen((v) => !v)}
               className={cn(
-                "w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-md transition-colors group",
+                "w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-[12px] transition-all group",
                 pathname.startsWith("/dashboard/media-providers")
-                  ? "bg-brand-500/15 text-brand-300"
-                  : "text-white/60 hover:bg-white/5 hover:text-white"
+                  ? "bg-ink text-[#FAF7F0] border-2 border-ink font-bold shadow-[3px_3px_0_0_var(--color-shadow)]"
+                  : "text-white/70 hover:bg-white/10 hover:text-white border-2 border-transparent"
               )}
             >
               <span className="material-symbols-outlined text-[17px]">perm_media</span>
@@ -214,10 +214,10 @@ export default function Sidebar({ onClose }) {
                     href={`/dashboard/media-providers/${kind.id}`}
                     onClick={onClose}
                     className={cn(
-                      "flex items-center gap-2.5 px-2.5 py-1.5 rounded-md transition-colors group",
+                      "flex items-center gap-2.5 px-2.5 py-1.5 rounded-[12px] transition-all group",
                       pathname.startsWith(`/dashboard/media-providers/${kind.id}`)
-                        ? "bg-brand-500/15 text-brand-300"
-                        : "text-white/50 hover:bg-white/5 hover:text-white"
+                        ? "bg-ink text-[#FAF7F0] border-2 border-ink font-bold shadow-[3px_3px_0_0_var(--color-shadow)]"
+                        : "text-white/60 hover:bg-white/10 hover:text-white border-2 border-transparent"
                     )}
                   >
                     <span className="material-symbols-outlined text-[15px]">{kind.icon}</span>
@@ -229,10 +229,10 @@ export default function Sidebar({ onClose }) {
                   href={COMBINED_WEB_ITEM.href}
                   onClick={onClose}
                   className={cn(
-                    "flex items-center gap-2.5 px-2.5 py-1.5 rounded-md transition-colors group",
+                    "flex items-center gap-2.5 px-2.5 py-1.5 rounded-[12px] transition-all group",
                     pathname.startsWith(COMBINED_WEB_ITEM.href)
-                      ? "bg-brand-500/15 text-brand-300"
-                      : "text-white/50 hover:bg-white/5 hover:text-white"
+                      ? "bg-ink text-[#FAF7F0] border-2 border-ink font-bold shadow-[3px_3px_0_0_var(--color-shadow)]"
+                      : "text-white/60 hover:bg-white/10 hover:text-white border-2 border-transparent"
                   )}
                 >
                   <span className="material-symbols-outlined text-[15px]">{COMBINED_WEB_ITEM.icon}</span>
@@ -247,10 +247,10 @@ export default function Sidebar({ onClose }) {
                 href={item.href}
                 onClick={onClose}
                 className={cn(
-                  "flex items-center gap-2.5 px-2.5 py-1.5 rounded-md transition-colors group",
+                  "flex items-center gap-2.5 px-2.5 py-1.5 rounded-[12px] transition-all group",
                   isActive(item.href)
-                    ? "bg-brand-500/15 text-brand-300"
-                    : "text-white/60 hover:bg-white/5 hover:text-white"
+                    ? "bg-ink text-[#FAF7F0] border-2 border-ink font-bold shadow-[3px_3px_0_0_var(--color-shadow)]"
+                    : "text-white/70 hover:bg-white/10 hover:text-white border-2 border-transparent"
                 )}
               >
                 <span
@@ -274,10 +274,10 @@ export default function Sidebar({ onClose }) {
                   href={item.href}
                   onClick={onClose}
                   className={cn(
-                    "flex items-center gap-2.5 px-2.5 py-1.5 rounded-md transition-colors group",
+                    "flex items-center gap-2.5 px-2.5 py-1.5 rounded-[12px] transition-all group",
                     isActive(item.href)
-                      ? "bg-brand-500/15 text-brand-300"
-                      : "text-white/60 hover:bg-white/5 hover:text-white"
+                      ? "bg-ink text-[#FAF7F0] border-2 border-ink font-bold shadow-[3px_3px_0_0_var(--color-shadow)]"
+                      : "text-white/70 hover:bg-white/10 hover:text-white border-2 border-transparent"
                   )}
                 >
                   <span
@@ -300,7 +300,7 @@ export default function Sidebar({ onClose }) {
               rel="noreferrer"
               onClick={onClose}
               className={cn(
-                "flex items-center gap-2.5 px-2.5 py-1.5 rounded-md transition-colors group w-full",
+                "flex items-center gap-2.5 px-2.5 py-1.5 rounded-[12px] transition-all group w-full",
                 "text-white/60 hover:bg-white/5 hover:text-white"
               )}
             >
@@ -320,7 +320,7 @@ export default function Sidebar({ onClose }) {
               rel="noreferrer"
               onClick={onClose}
               className={cn(
-                "flex items-center gap-2.5 px-2.5 py-1.5 rounded-md transition-colors group w-full",
+                "flex items-center gap-2.5 px-2.5 py-1.5 rounded-[12px] transition-all group w-full",
                 "text-white/60 hover:bg-white/5 hover:text-white"
               )}
             >
@@ -335,10 +335,10 @@ export default function Sidebar({ onClose }) {
               href="/dashboard/profile"
               onClick={onClose}
               className={cn(
-                "flex items-center gap-2.5 px-2.5 py-1.5 rounded-md transition-colors group",
+                "flex items-center gap-2.5 px-2.5 py-1.5 rounded-[12px] transition-all group",
                 isActive("/dashboard/profile")
-                  ? "bg-brand-500/15 text-brand-300"
-                  : "text-white/60 hover:bg-white/5 hover:text-white"
+                  ? "bg-ink text-[#FAF7F0] border-2 border-ink font-bold shadow-[3px_3px_0_0_var(--color-shadow)]"
+                  : "text-white/70 hover:bg-white/10 hover:text-white border-2 border-transparent"
               )}
             >
               <span
@@ -362,7 +362,7 @@ export default function Sidebar({ onClose }) {
         isOpen={showUpdateModal}
         onClose={() => setShowUpdateModal(false)}
         onConfirm={handleUpdate}
-        title="Update 9Router"
+        title="Update Ryo"
         message={`Show install command for v${updateInfo?.latestVersion || ""}? You can copy it and shutdown to install manually.`}
         confirmText="Show Command"
         cancelText="Cancel"
@@ -384,7 +384,7 @@ export default function Sidebar({ onClose }) {
             />
           ) : (
             <div className="text-center p-8">
-              <div className="flex items-center justify-center size-16 rounded-full bg-red-500/20 text-red-500 mx-auto mb-4">
+              <div className="flex items-center justify-center size-16 rounded-full bg-danger/20 text-danger mx-auto mb-4">
                 <span className="material-symbols-outlined text-[32px]">power_off</span>
               </div>
               <h2 className="text-xl font-semibold text-white mb-2">Server Disconnected</h2>
@@ -409,11 +409,11 @@ function ManualUpdatePanel({ latestVersion, installCmd, copied, onCopyAndShutdow
   return (
     <div className="w-full max-w-lg rounded-xl bg-neutral-900/95 border border-white/10 p-6 text-white">
       <div className="flex items-center gap-3 mb-4">
-        <div className="flex items-center justify-center size-11 rounded-full bg-amber-500/20 text-amber-400">
+        <div className="flex items-center justify-center size-11 rounded-full bg-warning/20 text-warning">
           <span className="material-symbols-outlined text-[24px]">content_copy</span>
         </div>
         <div>
-          <h2 className="text-lg font-semibold">Update 9Router{latestVersion ? ` to v${latestVersion}` : ""}</h2>
+          <h2 className="text-lg font-semibold">Update Ryo{latestVersion ? ` to v${latestVersion}` : ""}</h2>
           <p className="text-xs text-white/60">
             {isDisconnected
               ? "Server stopped. Paste the command into a terminal to install."
@@ -426,13 +426,13 @@ function ManualUpdatePanel({ latestVersion, installCmd, copied, onCopyAndShutdow
 
       <p className="text-sm text-white/80 mb-2">Install command:</p>
       <div className="w-full px-3 py-2 rounded bg-white/5 mb-4">
-        <code className="text-xs font-mono text-amber-400 break-all">{installCmd}</code>
+        <code className="text-xs font-mono text-warning break-all">{installCmd}</code>
       </div>
 
       <ol className="text-xs text-white/70 space-y-1 list-decimal list-inside mb-4">
         <li>Click <strong>Copy & Shutdown</strong> below.</li>
         <li>Paste the command into your terminal and press Enter.</li>
-        <li>Run <code className="px-1 rounded bg-white/10 text-green-400">9router</code> again after install.</li>
+        <li>Run <code className="px-1 rounded bg-white/10 text-success">Ryo</code> again after install.</li>
       </ol>
 
       {isDisconnected ? (

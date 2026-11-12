@@ -4,15 +4,15 @@ import { CapacityBadges } from "@/shared/components";
 export default function ModelRow({ model, fullModel, alias, copied, onCopy, testStatus, isCustom, isFree, onDeleteAlias, onTest, isTesting, onDisable, caps, thinkingSuffix }) {
   const displayModel = thinkingSuffix ? `${fullModel}(${thinkingSuffix})` : fullModel;
   const borderColor = testStatus === "ok"
-    ? "border-green-500/40"
+    ? "border-success/40"
     : testStatus === "error"
-    ? "border-red-500/40"
+    ? "border-danger/40"
     : "border-border";
 
   const iconColor = testStatus === "ok"
-    ? "#22c55e"
+    ? "var(--chart-3)"
     : testStatus === "error"
-    ? "#ef4444"
+    ? "var(--chart-2)"
     : undefined;
 
   return (
@@ -37,7 +37,7 @@ export default function ModelRow({ model, fullModel, alias, copied, onCopy, test
               <button
                 onClick={onTest}
                 disabled={isTesting}
-                className={`rounded p-0.5 text-text-muted transition-opacity hover:bg-sidebar hover:text-primary ${isTesting ? "opacity-100" : "opacity-100 sm:opacity-0 sm:group-hover:opacity-100"}`}
+                className={`rounded p-0.5 text-text-muted transition-opacity hover:bg-sidebar hover:text-brand-700 dark:text-brand-300 ${isTesting ? "opacity-100" : "opacity-100 sm:opacity-0 sm:group-hover:opacity-100"}`}
               >
                 <span className="material-symbols-outlined text-sm" style={isTesting ? { animation: "spin 1s linear infinite" } : undefined}>
                   {isTesting ? "progress_activity" : "science"}
@@ -51,7 +51,7 @@ export default function ModelRow({ model, fullModel, alias, copied, onCopy, test
           <div className="relative shrink-0 group/btn">
             <button
               onClick={() => onCopy(displayModel, `model-${model.id}`)}
-              className="rounded p-0.5 text-text-muted hover:bg-sidebar hover:text-primary"
+              className="rounded p-0.5 text-text-muted hover:bg-sidebar hover:text-brand-700 dark:text-brand-300"
             >
               <span className="material-symbols-outlined text-sm">
                 {copied === `model-${model.id}` ? "check" : "content_copy"}
@@ -64,7 +64,7 @@ export default function ModelRow({ model, fullModel, alias, copied, onCopy, test
           {isCustom ? (
             <button
               onClick={onDeleteAlias}
-              className="rounded p-0.5 text-text-muted opacity-100 transition-opacity hover:bg-red-500/10 hover:text-red-500 sm:opacity-0 sm:group-hover:opacity-100"
+              className="rounded p-0.5 text-text-muted opacity-100 transition-opacity hover:bg-danger/10 hover:text-danger sm:opacity-0 sm:group-hover:opacity-100"
               title="Remove custom model"
             >
               <span className="material-symbols-outlined text-sm">close</span>
@@ -72,7 +72,7 @@ export default function ModelRow({ model, fullModel, alias, copied, onCopy, test
           ) : onDisable ? (
             <button
               onClick={onDisable}
-              className="rounded p-0.5 text-text-muted opacity-100 transition-opacity hover:bg-red-500/10 hover:text-red-500 sm:opacity-0 sm:group-hover:opacity-100"
+              className="rounded p-0.5 text-text-muted opacity-100 transition-opacity hover:bg-danger/10 hover:text-danger sm:opacity-0 sm:group-hover:opacity-100"
               title="Disable this model"
             >
               <span className="material-symbols-outlined text-sm">close</span>

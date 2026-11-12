@@ -6,21 +6,21 @@
 export function DataState({ loading, error, empty, children }) {
   if (loading) {
     return (
-      <div role="status" aria-live="polite" className="flex items-center justify-center py-12 text-text-muted">
+      <div role="status" aria-live="polite" className="flex items-center justify-center py-12 text-text-main">
         <span className="material-symbols-outlined text-[32px] animate-spin">progress_activity</span>
       </div>
     );
   }
   if (error) {
     return (
-      <div role="alert" className="rounded-lg border border-danger/30 bg-danger/10 p-6 text-center text-sm text-danger">
+      <div role="alert" className="rounded-[12px] border-2 border-ink bg-danger p-6 text-center text-sm font-bold text-white shadow-[3px_3px_0_0_var(--color-shadow)]">
         Failed to load data. Please try again.
       </div>
     );
   }
   if (empty) {
     return (
-      <div role="status" aria-live="polite" className="rounded-lg border border-border-subtle bg-surface p-6 text-center text-sm text-text-muted">
+      <div role="status" aria-live="polite" className="rounded-[12px] border-2 border-ink bg-surface p-6 text-center text-sm font-bold text-text-muted shadow-[3px_3px_0_0_var(--color-shadow)]">
         No data available.
       </div>
     );

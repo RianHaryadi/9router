@@ -20,7 +20,7 @@ export default function Input({
   return (
     <div className={cn("flex flex-col gap-1.5", className)}>
       {label && (
-        <label htmlFor={props.id} className="text-sm font-medium text-text-main">
+        <label htmlFor={props.id} className="text-[12px] font-bold uppercase tracking-wide text-text-main">
           {label}
           {required && <span className="text-danger ml-1">*</span>}
         </label>
@@ -38,14 +38,14 @@ export default function Input({
           onChange={onChange}
           disabled={disabled}
           className={cn(
-            "w-full py-2.5 px-3 text-sm text-text-main bg-surface-2 rounded-[10px]",
-            "border border-transparent placeholder-text-muted/70",
-            "focus:outline-none focus:ring-2 focus:ring-brand-500/30 focus:border-brand-500/40",
+            "w-full py-2.5 px-3 text-sm text-text-main bg-surface rounded-[12px]",
+            "border-2 border-ink placeholder:text-text-subtle",
+            "focus:outline-none focus:shadow-[3px_3px_0_0_var(--color-shadow)]",
             "transition-all duration-150 ease-out disabled:opacity-50 disabled:cursor-not-allowed",
             // iOS zoom fix
             "text-[16px] sm:text-sm",
             icon && "pl-10",
-            error && "ring-1 ring-danger focus:ring-2 focus:ring-danger/40 border-danger/40",
+            error && "border-2 border-danger",
             inputClassName
           )}
           {...props}

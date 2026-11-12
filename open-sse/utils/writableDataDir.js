@@ -1,4 +1,4 @@
-// Resolve a writable data directory: DATA_DIR first, then ~/.9router, then
+// Resolve a writable data directory: DATA_DIR first, then ~/.Ryo, then
 // tmpdir. Some installs point DATA_DIR at root-owned paths (e.g. /var/lib) that
 // the server process cannot write browser profiles or runtime installs into.
 

@@ -89,7 +89,7 @@ function resolveStandaloneBuild(appDir, buildDistDir) {
     : legacyStandaloneRoot;
 
   // Next.js 16 nests standalone output under the project name when
-  // NEXT_TRACING_ROOT_MODE=workspace, e.g. standalone/9router/server.js.
+  // NEXT_TRACING_ROOT_MODE=workspace, e.g. standalone/Ryo/server.js.
   const pkgName = path.basename(appDir);
   const nestedRoot = path.join(standaloneRoot, pkgName);
   if (fs.existsSync(path.join(nestedRoot, "server.js")) && !fs.existsSync(path.join(standaloneRoot, "server.js"))) {
@@ -153,7 +153,7 @@ const DEEPSEEK_POW_FILES = ["deepseek-pow-worker.mjs", "deepseek-pow-hash.js"];
 // The PoW worker runs in a worker_threads Worker and resolves its relative
 // import from the filesystem, so neither Next bundling nor standalone file
 // tracing follows it: tracing ships the worker but drops deepseek-pow-hash.js
-// (9router issue 5460). Copy both explicitly instead of relying on tracing.
+// (Ryo issue 5460). Copy both explicitly instead of relying on tracing.
 function copyDeepSeekPowFiles(appDir, cliAppDir) {
   const srcDir = path.join(appDir, "open-sse/lib");
   const destDir = path.join(cliAppDir, "open-sse/lib");
@@ -180,7 +180,7 @@ function assertDeepSeekPowFiles(cliAppDir) {
 }
 
 function buildCliPackage() {
-  console.log("📦 Building 9Router CLI package with Next.js...\n");
+  console.log("📦 Building Ryo CLI package with Next.js...\n");
 
   fs.mkdirSync(buildHomeDir, { recursive: true });
   fs.mkdirSync(path.join(buildHomeDir, "AppData", "Roaming"), { recursive: true });

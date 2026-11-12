@@ -78,12 +78,12 @@ export default function NewProviderPage() {
       <div className="mb-8">
         <Link
           href="/dashboard/providers"
-          className="inline-flex items-center gap-1 text-sm text-text-muted hover:text-primary transition-colors mb-4"
+          className="inline-flex items-center gap-1 text-sm text-text-muted hover:text-brand-700 dark:text-brand-300 transition-colors mb-4"
         >
           <span className="material-symbols-outlined text-lg">arrow_back</span>
           Back to Providers
         </Link>
-        <h1 className="text-3xl font-semibold tracking-tight">Add New Provider</h1>
+        <h1 className="text-3xl font-semibold tracking-normal">Add New Provider</h1>
         <p className="text-text-muted mt-2">
           Configure a new AI provider to use with your applications.
         </p>
@@ -107,7 +107,7 @@ export default function NewProviderPage() {
           {selectedProvider && (
             <Card.Section className="flex items-center gap-3">
               <div
-                className="size-10 rounded-lg flex items-center justify-center bg-bg border border-border"
+                className="size-10 rounded-lg flex items-center justify-center bg-bg border-2 border-ink"
               >
                 <span
                   className="material-symbols-outlined text-xl"
@@ -128,7 +128,7 @@ export default function NewProviderPage() {
           {/* Auth Method */}
           <div className="flex flex-col gap-3">
             <label className="text-sm font-medium">
-              Authentication Method <span className="text-red-500">*</span>
+              Authentication Method <span className="text-danger">*</span>
             </label>
             <div className="flex gap-3">
               {authMethodOptions.map((method) => (
@@ -138,8 +138,8 @@ export default function NewProviderPage() {
                   onClick={() => handleChange("authMethod", method.value)}
                   className={`flex-1 flex items-center justify-center gap-2 p-4 rounded-lg border transition-all ${
                     formData.authMethod === method.value
-                      ? "border-primary bg-primary/5 text-primary"
-                      : "border-border hover:border-primary/50"
+                      ? "border-brand-600 dark:border-brand-300/60 bg-brand-300/15 text-brand-700 dark:text-brand-300"
+                      : "border-border hover:border-brand-600/50 dark:border-brand-300/60"
                   }`}
                 >
                   <span className="material-symbols-outlined">
@@ -196,13 +196,13 @@ export default function NewProviderPage() {
 
           {/* Error Message */}
           {errors.submit && (
-            <div className="p-4 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 text-sm">
+            <div className="p-4 rounded-lg bg-danger border border-danger text-danger text-sm">
               {errors.submit}
             </div>
           )}
 
           {/* Actions */}
-          <div className="flex gap-3 pt-4 border-t border-border">
+          <div className="flex gap-3 pt-4 border-t-2 border-ink">
             <Link href="/dashboard/providers" className="flex-1">
               <Button type="button" variant="ghost" fullWidth>
                 Cancel

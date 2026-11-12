@@ -10,8 +10,8 @@ export default function LatencyChart({ data }) {
         <XAxis dataKey="name" />
         <YAxis />
         <Tooltip />
-        <Bar dataKey="latency" fill="#6366f1" name="Latency" />
-        <Bar dataKey="ttft" fill="#14b8a6" name="TTFT" />
+        <Bar dataKey="latency" fill="var(--chart-1)" name="Latency" />
+        <Bar dataKey="ttft" fill="var(--chart-2)" name="TTFT" />
       </BarChart>
     </ResponsiveContainer>
   );

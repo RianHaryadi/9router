@@ -49,7 +49,7 @@ import { replayResponse } from "@/custom/wiring/responseCache.js";
  * fire-and-forget, errors swallowed — observability must not break chat.
  * The adapter check keeps a log line from being the thing that OPENS the
  * database (a test process with no DATA_DIR would otherwise create/touch the
- * real ~/.9router DB); in the app getSettings() has it up long before a
+ * real ~/.Ryo DB); in the app getSettings() has it up long before a
  * request can fail over, so no event is ever dropped there.
  */
 function logFallbackEvent(payload) {

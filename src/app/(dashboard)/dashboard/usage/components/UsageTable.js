@@ -156,7 +156,7 @@ export default function UsageTable({
 
   return (
     <Card className="overflow-hidden">
-      <div className="p-4 border-b border-border bg-bg-subtle/50">
+      <div className="p-4 border-b-2 border-ink bg-bg-subtle/50">
         <h3 className="font-semibold">{title}</h3>
       </div>
       <div className="overflow-x-auto">
@@ -198,7 +198,7 @@ export default function UsageTable({
                       <span className={`material-symbols-outlined text-[18px] text-text-muted transition-transform ${expanded.has(group.groupKey) ? "rotate-90" : ""}`}>
                         chevron_right
                       </span>
-                      <span className={`font-medium transition-colors ${group.summary.pending > 0 ? "text-primary" : ""}`}>
+                      <span className={`font-medium transition-colors ${group.summary.pending > 0 ? "text-brand-700 dark:text-brand-300" : ""}`}>
                         {group.groupKey}
                       </span>
                     </div>

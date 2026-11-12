@@ -1,5 +1,5 @@
 /**
- * Per-tool config writers for `9router connect`. File layout and keys mirror
+ * Per-tool config writers for `Ryo connect`. File layout and keys mirror
  * the dashboard routes in src/app/api/cli-tools/<tool>-settings/route.js so a
  * tool configured here looks identical to one applied from the dashboard.
  *
@@ -39,7 +39,7 @@ function rewriteFile(file, content) {
   fs.writeFileSync(file, content, { mode: SECRET_MODE });
 }
 
-// One-time backup of the user's pre-9router file, then write.
+// One-time backup of the user's pre-Ryo file, then write.
 function writeFile(file, content) {
   fs.mkdirSync(path.dirname(file), { recursive: true });
   const backup = `${file}.bak-9router`;
@@ -114,7 +114,7 @@ const codex = {
   name: "OpenAI Codex CLI",
   paths: () => [codexPath()],
   route: "codex-settings",
-  // GET returns raw TOML text; only trust `model` when the provider is 9router.
+  // GET returns raw TOML text; only trust `model` when the provider is Ryo.
   async serverModel(data) {
     if (!isStr(data?.config)) return null;
     const { parseTOML } = await toml();
@@ -131,7 +131,7 @@ const codex = {
     cfg.model_providers = cfg.model_providers || {};
     // Custom providers ignore auth.json — key must travel as a static header.
     cfg.model_providers["9router"] = {
-      name: "9Router",
+      name: "9router",
       base_url: v1(baseUrl),
       wire_api: "responses",
       http_headers: { Authorization: `Bearer ${apiKey}` },
@@ -160,7 +160,7 @@ const codex = {
         ...(isStr(cfg.model) ? { main: cfg.model } : {}),
         ...(isStr(cfg.agents?.default_subagent_model) ? { subagent: cfg.agents.default_subagent_model } : {}),
       },
-      // Codex only routes through 9router when this provider is the active one.
+      // Codex only routes through Ryo when this provider is the active one.
       active: cfg.model_provider === "9router",
     };
   },

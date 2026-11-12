@@ -91,7 +91,7 @@ export default function AutoPingScheduleModal({ isOpen, onClose, onSave, connect
           Configure automated quota pings{connection?.name ? ` for ${connection.name}` : ""} — pick one mode.
         </p>
 
-        <div className="grid grid-cols-3 gap-1 rounded-[10px] bg-surface-2 p-1">
+        <div className="grid grid-cols-3 gap-1 rounded-[12px] bg-surface-2 p-1">
           {MODE_OPTIONS.map((option) => {
             const isSelected = form.mode === option.value;
             return (
@@ -100,7 +100,7 @@ export default function AutoPingScheduleModal({ isOpen, onClose, onSave, connect
                 type="button"
                 onClick={() => update({ mode: option.value })}
                 className={cn(
-                  "flex h-9 items-center justify-center gap-1.5 rounded-[8px] px-3 text-sm font-medium transition-all",
+                  "flex h-9 items-center justify-center gap-1.5 rounded-[12px] px-3 text-sm font-medium transition-all",
                   isSelected
                     ? "bg-surface text-text-main shadow-sm"
                     : "text-text-muted hover:text-text-main"
@@ -162,7 +162,7 @@ export default function AutoPingScheduleModal({ isOpen, onClose, onSave, connect
             </div>
 
             {previewSlots.length > 0 && (
-              <div className="rounded-[10px] bg-surface-2 px-3 py-2.5">
+              <div className="rounded-[12px] bg-surface-2 px-3 py-2.5">
                 <p className="text-xs font-medium uppercase tracking-wide text-text-muted">
                   Daily slots ({form.timezone})
                 </p>

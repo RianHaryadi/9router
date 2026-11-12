@@ -9,7 +9,7 @@ export default function ProjectsChart({ data, money }) {
         <XAxis dataKey="project" />
         <YAxis />
         <Tooltip formatter={(v) => money(v)} />
-        <Bar dataKey="cost" fill="#f59e0b" />
+        <Bar dataKey="cost" fill="var(--chart-4)" />
       </BarChart>
     </ResponsiveContainer>
   );

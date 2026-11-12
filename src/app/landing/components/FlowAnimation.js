@@ -13,25 +13,25 @@ const PROVIDERS = [
   {
     id: "openai",
     name: "OpenAI",
-    color: "bg-emerald-500",
+    color: "bg-success",
     textColor: "text-white",
   },
   {
     id: "anthropic",
     name: "Anthropic",
-    color: "bg-orange-400",
+    color: "bg-warning",
     textColor: "text-white",
   },
   {
     id: "gemini",
     name: "Gemini",
-    color: "bg-blue-500",
+    color: "bg-info",
     textColor: "text-white",
   },
   {
     id: "github",
     name: "GitHub Copilot",
-    color: "bg-gray-700",
+    color: "bg-neutral",
     textColor: "text-white",
   },
 ];
@@ -48,13 +48,13 @@ export default function FlowAnimation() {
 
   return (
     <div className="mt-16 w-full max-w-4xl relative h-[360px] hidden md:flex items-center justify-center animate-[float_6s_ease-in-out_infinite]">
-      {/* 9Router Hub - Center */}
+      {/* Ryo Hub - Center */}
       <div className="relative z-20 w-32 h-32 rounded-full bg-[#23180f] border-2 border-[#f97815] shadow-[0_0_40px_rgba(249,120,21,0.3)] flex flex-col items-center justify-center gap-1 group cursor-pointer hover:scale-105 transition-transform duration-500">
         <span className="material-symbols-outlined text-4xl text-[#f97815]">
           hub
         </span>
         <span className="text-xs font-bold text-white tracking-widest uppercase">
-          9Router
+          Ryo
         </span>
         <div className="absolute inset-0 rounded-full border border-[#f97815]/30 animate-ping opacity-20"></div>
       </div>
@@ -79,9 +79,9 @@ export default function FlowAnimation() {
         ))}
       </div>
 
-      {/* SVG Lines from CLI to 9Router */}
+      {/* SVG Lines from CLI to Ryo */}
       <svg
-        className="absolute inset-0 w-full h-full z-10 pointer-events-none stroke-yellow-700"
+        className="absolute inset-0 w-full h-full z-10 pointer-events-none stroke-warning"
         xmlns="http://www.w3.org/2000/svg"
       >
         <path
@@ -114,7 +114,7 @@ export default function FlowAnimation() {
         ></path>
       </svg>
 
-      {/* SVG Lines from 9Router to Providers */}
+      {/* SVG Lines from Ryo to Providers */}
       <svg
         className="absolute inset-0 w-full h-full z-10 pointer-events-none"
         xmlns="http://www.w3.org/2000/svg"
@@ -166,7 +166,7 @@ export default function FlowAnimation() {
 
       {/* Mobile fallback */}
       <div className="md:hidden mt-8 w-full p-4 rounded-lg bg-[#23180f] border border-[#3a2f27]">
-        <p className="text-sm text-center text-gray-400">
+        <p className="text-sm text-center text-neutral">
           Interactive diagram visible on desktop
         </p>
       </div>

@@ -1,5 +1,5 @@
 /**
- * src/custom — modular custom layers for the 9router fork.
+ * src/custom — modular custom layers for the Ryo fork.
  *
  * Roadmap keeps custom features HERE (not in upstream files) and touches the
  * core with a single hook. `pipeline.js` is that hook. This barrel re-exports

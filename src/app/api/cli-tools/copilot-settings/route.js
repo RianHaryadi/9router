@@ -36,7 +36,7 @@ const has9RouterConfig = (config) => {
   return config.some((entry) => entry.name === "9Router");
 };
 
-const get9RouterEntry = (config) => {
+const getRyoEntry = (config) => {
   if (!Array.isArray(config)) return null;
   return config.find((entry) => entry.name === "9Router") || null;
 };
@@ -45,7 +45,7 @@ const get9RouterEntry = (config) => {
 export async function GET() {
   try {
     const config = await readConfig();
-    const entry = get9RouterEntry(config);
+    const entry = getRyoEntry(config);
 
     return NextResponse.json({
       installed: true,
@@ -61,7 +61,7 @@ export async function GET() {
   }
 }
 
-// POST - Apply 9Router config to chatLanguageModels.json
+// POST - Apply Ryo config to chatLanguageModels.json
 export async function POST(request) {
   try {
     const { baseUrl, apiKey, models } = await request.json();
@@ -85,7 +85,7 @@ export async function POST(request) {
     const keyToUse = await resolveCliApiKey(apiKey);
 
     const newEntry = {
-      name: "9Router",
+      name: "9router",
       vendor: "azure",
       apiKey: keyToUse,
       models: models.map((id) => ({
@@ -99,7 +99,7 @@ export async function POST(request) {
       })),
     };
 
-    // Replace existing 9Router entry or append
+    // Replace existing Ryo entry or append
     const idx = config.findIndex((e) => e.name === "9Router");
     if (idx >= 0) {
       config[idx] = newEntry;
@@ -120,7 +120,7 @@ export async function POST(request) {
   }
 }
 
-// DELETE - Remove 9Router entry from chatLanguageModels.json
+// DELETE - Remove Ryo entry from chatLanguageModels.json
 export async function DELETE() {
   try {
     const configPath = getConfigPath();
@@ -142,7 +142,7 @@ export async function DELETE() {
 
     return NextResponse.json({
       success: true,
-      message: "9Router removed from Copilot config",
+      message: "Ryo removed from Copilot config",
     });
   } catch (error) {
     console.log("Error resetting copilot settings:", error);

@@ -772,14 +772,14 @@ export default function OAuthModal({ isOpen, provider, providerInfo, onSuccess, 
                 <button
                   type="button"
                   onClick={() => { setAuthMode("browser"); setError(null); setStep("waiting"); startOAuthFlow(); }}
-                  className={`flex-1 rounded-lg border px-3 py-2 text-sm transition-colors ${authMode === "browser" ? "border-primary bg-primary/10 text-primary" : "border-border text-text-muted hover:text-primary"}`}
+                  className={`flex-1 rounded-lg border px-3 py-2 text-sm transition-colors ${authMode === "browser" ? "border-brand-600 dark:border-brand-300/60 bg-brand-300/25 text-brand-700 dark:text-brand-300" : "border-border text-text-muted hover:text-brand-700 dark:text-brand-300"}`}
                 >
                   🌐 Sign in with browser
                 </button>
                 <button
                   type="button"
                   onClick={() => { setAuthMode("paste-token"); setError(null); setStep("input"); }}
-                  className={`flex-1 rounded-lg border px-3 py-2 text-sm transition-colors ${authMode === "paste-token" ? "border-primary bg-primary/10 text-primary" : "border-border text-text-muted hover:text-primary"}`}
+                  className={`flex-1 rounded-lg border px-3 py-2 text-sm transition-colors ${authMode === "paste-token" ? "border-brand-600 dark:border-brand-300/60 bg-brand-300/25 text-brand-700 dark:text-brand-300" : "border-border text-text-muted hover:text-brand-700 dark:text-brand-300"}`}
                 >
                   🔑 Paste token
                 </button>
@@ -789,8 +789,8 @@ export default function OAuthModal({ isOpen, provider, providerInfo, onSuccess, 
             {authMode === "browser" && (
               <>
                 {step === "waiting" && (
-                  <div className="flex items-center gap-2 px-3 py-2 border border-border rounded-lg bg-sidebar/50">
-                    <span className="material-symbols-outlined text-base text-primary animate-spin">progress_activity</span>
+                  <div className="flex items-center gap-2 px-3 py-2 border-2 border-ink rounded-lg bg-sidebar/50">
+                    <span className="material-symbols-outlined text-base text-brand-700 dark:text-brand-300 animate-spin">progress_activity</span>
                     <span className="text-sm">Waiting for browser authorization…</span>
                   </div>
                 )}
@@ -817,7 +817,7 @@ export default function OAuthModal({ isOpen, provider, providerInfo, onSuccess, 
             {authMode === "paste-token" && PASTE_TOKEN_PROVIDERS[provider] && (
               <div className="space-y-3">
                 {ideStatus && !ideStatus.installed && (
-                  <div className={`px-3 py-2 rounded-lg text-sm ${PASTE_TOKEN_PROVIDERS[provider].ideOptional ? "bg-blue-500/10 text-blue-700 dark:text-blue-300" : "bg-yellow-500/10 text-yellow-700 dark:text-yellow-300"}`}>
+                  <div className={`px-3 py-2 rounded-lg text-sm ${PASTE_TOKEN_PROVIDERS[provider].ideOptional ? "bg-info/10 text-info dark:text-info" : "bg-warning/10 text-warning dark:text-warning"}`}>
                     {PASTE_TOKEN_PROVIDERS[provider].ideName} IDE not detected.
                     {PASTE_TOKEN_PROVIDERS[provider].ideOptional
                       ? " You can still grab the token from DevTools."
@@ -844,8 +844,8 @@ export default function OAuthModal({ isOpen, provider, providerInfo, onSuccess, 
         {(step === "waiting" || step === "input") && !isDeviceCode && !PROXY_OAUTH_PROVIDERS.has(provider) && (
           <>
             {/* Option A: Auto via popup */}
-            <div className="flex items-center gap-2 px-3 py-2 border border-border rounded-lg bg-sidebar/50">
-              <span className="material-symbols-outlined text-base text-primary animate-spin">
+            <div className="flex items-center gap-2 px-3 py-2 border-2 border-ink rounded-lg bg-sidebar/50">
+              <span className="material-symbols-outlined text-base text-brand-700 dark:text-brand-300 animate-spin">
                 progress_activity
               </span>
               <span className="text-sm">
@@ -935,10 +935,10 @@ export default function OAuthModal({ isOpen, provider, providerInfo, onSuccess, 
                 </div>
               </div>
               {deviceData.user_code && (
-                <div className="bg-primary/10 p-4 rounded-lg">
+                <div className="bg-brand-300/25 p-4 rounded-lg">
                   <p className="text-xs text-text-muted mb-1">Your Code</p>
                   <div className="flex items-center justify-center gap-2">
-                    <p className="text-2xl font-mono font-bold text-primary">{deviceData.user_code}</p>
+                    <p className="text-2xl font-mono font-bold text-brand-700 dark:text-brand-300">{deviceData.user_code}</p>
                     <Button
                       size="sm"
                       variant="ghost"
@@ -961,8 +961,8 @@ export default function OAuthModal({ isOpen, provider, providerInfo, onSuccess, 
         {/* Success Step */}
         {step === "success" && (
           <div className="text-center py-6">
-            <div className="size-16 mx-auto mb-4 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center">
-              <span className="material-symbols-outlined text-3xl text-green-600">check_circle</span>
+            <div className="size-16 mx-auto mb-4 rounded-full bg-success flex items-center justify-center">
+              <span className="material-symbols-outlined text-3xl text-success">check_circle</span>
             </div>
             <h3 className="text-lg font-semibold mb-2">Connected Successfully!</h3>
             <p className="text-sm text-text-muted mb-4">
@@ -977,11 +977,11 @@ export default function OAuthModal({ isOpen, provider, providerInfo, onSuccess, 
         {/* Error Step */}
         {step === "error" && (
           <div className="text-center py-6">
-            <div className="size-16 mx-auto mb-4 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center">
-              <span className="material-symbols-outlined text-3xl text-red-600">error</span>
+            <div className="size-16 mx-auto mb-4 rounded-full bg-danger flex items-center justify-center">
+              <span className="material-symbols-outlined text-3xl text-danger">error</span>
             </div>
             <h3 className="text-lg font-semibold mb-2">Connection Failed</h3>
-            <p className="text-sm text-red-600 mb-4">{error}</p>
+            <p className="text-sm text-danger mb-4">{error}</p>
             <div className="flex gap-2">
               <Button onClick={startOAuthFlow} variant="secondary" fullWidth>
                 Try Again
