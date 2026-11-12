@@ -264,32 +264,59 @@ export async function saveRequestUsage(entry) {
     // All 3 writes (history insert, daily upsert, lifetime counter) in ONE transaction.
     // better-sqlite3 is sync → no JS yield mid-transaction → no race in same process.
     db.transaction(() => {
-      const existing = db.get(
-        `SELECT id, endpoint FROM usageHistory
-         WHERE timestamp = ?
-           AND COALESCE(provider, '') = COALESCE(?, '')
-           AND COALESCE(model, '') = COALESCE(?, '')
-           AND COALESCE(connectionId, '') = COALESCE(?, '')
-           AND COALESCE(apiKey, '') = COALESCE(?, '')
-           AND promptTokens = ?
-           AND completionTokens = ?
-         ORDER BY id DESC LIMIT 1`,
-        [
-          entry.timestamp, entry.provider || null, entry.model || null,
-          entry.connectionId || null, entry.apiKey || null,
-          promptTokens, completionTokens,
-        ]
-      );
+      // Fork (T8): prefer the request id for identity. A request that reports
+      // no tokens shares provider/model/timestamp shape with other tokenless
+      // requests, so the old key could not tell "same request recorded twice"
+      // from "two different requests" and both cases collapsed into one row.
+      const requestId = entry.requestId || null;
+      const existing = requestId
+        ? db.get(
+            `SELECT id, endpoint, promptTokens, completionTokens FROM usageHistory
+             WHERE requestId = ?
+               AND COALESCE(provider, '') = COALESCE(?, '')
+               AND COALESCE(model, '') = COALESCE(?, '')
+             ORDER BY id DESC LIMIT 1`,
+            [requestId, entry.provider || null, entry.model || null]
+          )
+        : db.get(
+            `SELECT id, endpoint, promptTokens, completionTokens FROM usageHistory
+             WHERE timestamp = ?
+               AND COALESCE(provider, '') = COALESCE(?, '')
+               AND COALESCE(model, '') = COALESCE(?, '')
+               AND COALESCE(connectionId, '') = COALESCE(?, '')
+               AND COALESCE(apiKey, '') = COALESCE(?, '')
+               AND promptTokens = ?
+               AND completionTokens = ?
+             ORDER BY id DESC LIMIT 1`,
+            [
+              entry.timestamp, entry.provider || null, entry.model || null,
+              entry.connectionId || null, entry.apiKey || null,
+              promptTokens, completionTokens,
+            ]
+          );
 
       if (existing) {
         if (!existing.endpoint && entry.endpoint) {
           db.run(`UPDATE usageHistory SET endpoint = ? WHERE id = ?`, [entry.endpoint, existing.id]);
         }
+        // The row was written before the usage was known (streaming starts with
+        // no tokens). Fill in the real numbers now instead of leaving a
+        // zero-token row behind.
+        if (existing.promptTokens === 0 && existing.completionTokens === 0
+          && (promptTokens !== 0 || completionTokens !== 0)) {
+          db.run(
+            `UPDATE usageHistory SET promptTokens = ?, completionTokens = ?, cost = ?, tokens = ?, latencyMs = ?, ttftMs = ? WHERE id = ?`,
+            [
+              promptTokens, completionTokens, entry.cost || 0, stringifyJson(tokens),
+              toIntOrZero(entry.latencyMs), toIntOrZero(entry.ttftMs), existing.id,
+            ]
+          );
+        }
         return;
       }
 
       db.run(
-        `INSERT INTO usageHistory(timestamp, provider, model, connectionId, apiKey, endpoint, promptTokens, completionTokens, cost, status, tokens, meta, latencyMs, ttftMs, projectName, fallbackCount) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO usageHistory(timestamp, provider, model, connectionId, apiKey, endpoint, promptTokens, completionTokens, cost, status, tokens, meta, latencyMs, ttftMs, projectName, fallbackCount, requestId) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           entry.timestamp, entry.provider || null, entry.model || null,
           entry.connectionId || null, entry.apiKey || null, entry.endpoint || null,
@@ -297,6 +324,7 @@ export async function saveRequestUsage(entry) {
           stringifyJson(tokens), stringifyJson({}),
           toIntOrZero(entry.latencyMs), toIntOrZero(entry.ttftMs),
           entry.projectName || null, toIntOrZero(entry.fallbackCount),
+          entry.requestId || null,
         ]
       );
 

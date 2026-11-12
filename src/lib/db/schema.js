@@ -3,7 +3,7 @@
 // pre-change safety backup in migrate.js: when the stored version is lower,
 // one lightweight DB backup is taken before applying schema changes. Forgetting
 // to bump only skips that backup — it does NOT break the additive auto-sync.
-export const SCHEMA_VERSION = 4;
+export const SCHEMA_VERSION = 5;
 
 export const PRAGMA_SQL = `
 PRAGMA journal_mode = WAL;
@@ -136,6 +136,11 @@ export const TABLES = {
       ttftMs: "INTEGER DEFAULT 0",
       projectName: "TEXT",
       fallbackCount: "INTEGER DEFAULT 0",
+      // Fork (T8): request identity for usage rows. Without it a request that
+      // reports no tokens could not be told apart from another one with the
+      // same provider/model/timestamp, so the dedup in saveRequestUsage()
+      // could not recognise it as the same request. Additive.
+      requestId: "TEXT",
     },
     indexes: [
       "CREATE INDEX IF NOT EXISTS idx_uh_ts ON usageHistory(timestamp DESC)",
@@ -143,6 +148,7 @@ export const TABLES = {
       "CREATE INDEX IF NOT EXISTS idx_uh_model ON usageHistory(model)",
       "CREATE INDEX IF NOT EXISTS idx_uh_conn ON usageHistory(connectionId)",
       "CREATE INDEX IF NOT EXISTS idx_uh_project ON usageHistory(projectName)",
+      "CREATE INDEX IF NOT EXISTS idx_uh_request ON usageHistory(requestId)",
     ],
   },
   usageDaily: {

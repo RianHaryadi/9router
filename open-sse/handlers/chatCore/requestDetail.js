@@ -134,12 +134,19 @@ export function saveUsageStats({ provider, model, tokens, connectionId, apiKey, 
   const inTokens = tokens.input_tokens ?? tokens.prompt_tokens ?? 0;
   const outTokens = tokens.output_tokens ?? tokens.completion_tokens ?? 0;
 
-  if (inTokens === 0 && outTokens === 0) return;
+  // Fork (T8): a request that produced no token counts still happened. The
+  // old guard dropped the row entirely, so a provider that sends no usage
+  // frame (and whose body cannot be estimated) vanished from usageHistory —
+  // and with it the latency, ttft, project attribution and fallback count
+  // that the Health & Spend dashboard reads. Record it with the tokens we
+  // have (possibly zero) so the request stays visible and countable.
+  const hasTokens = inTokens !== 0 || outTokens !== 0;
 
   if (!silent) {
     const time = new Date().toLocaleTimeString("en-US", { hour12: false, hour: "2-digit", minute: "2-digit", second: "2-digit" });
     const accountSuffix = connectionId ? ` | account=${connectionId.slice(0, 8)}...` : "";
-    console.log(`${COLORS.green}[${time}] 📊 [${label}] ${provider.toUpperCase()} | in=${inTokens} | out=${outTokens}${accountSuffix}${COLORS.reset}`);
+    const tokenNote = hasTokens ? "" : " (no usage reported)";
+    console.log(`${COLORS.green}[${time}] 📊 [${label}] ${provider.toUpperCase()} | in=${inTokens} | out=${outTokens}${accountSuffix}${tokenNote}${COLORS.reset}`);
   }
 
   // Canonicalize to one storage convention (prompt_tokens cache-inclusive) so
@@ -157,8 +164,9 @@ export function saveUsageStats({ provider, model, tokens, connectionId, apiKey, 
     connectionId: connectionId || undefined,
     apiKey: apiKey || undefined,
     endpoint: endpoint || null,
-    // Observability (T3): real per-request latency + attribution. usageHistory
-    // has no requestId column (yet) — it is accepted and ignored there.
+    // Observability (T3): real per-request latency + attribution.
+    // Fork (T8): usageHistory now stores requestId, so a tokenless request
+    // can still be told apart from another one.
     latencyMs: latency?.total ?? 0,
     ttftMs: latency?.ttft ?? 0,
     projectName: projectName ?? null,
