@@ -49,6 +49,8 @@ const DEFAULT_SETTINGS = {
   outboundNoProxy: "",
   mitmRouterBaseUrl: DEFAULT_MITM_ROUTER_BASE,
   dnsToolEnabled: {},
+  // Fork: semantic response cache (serves cached SSE/JSON on identical bodies)
+  semanticCacheEnabled: false,
   rtkEnabled: true,
   headroomEnabled: false,
   headroomUrl: DEFAULT_HEADROOM_URL,

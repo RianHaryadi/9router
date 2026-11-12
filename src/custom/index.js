@@ -13,3 +13,11 @@ export { normalizePolicy, shouldCompressTool, collectCompressibleToolIndices } f
 export { guardedInjectCaveman, guardedInjectPonytail, isEndUserFacing } from "./transform/index.js";
 export { repairToolArguments, shouldRetryToolCall, autoCloseJson } from "./toolcall/repair.js";
 export { rankByCacheWarm, pickCacheWarmModel } from "./cache/awareRouting.js";
+export { createInjectionScanner, scanToolResults } from "./guard/injectionFirewall.js";
+export { createToolResultStore, applyToolResultStore } from "./toolcall/resultStore.js";
+export { detectRole, pickRoleModel, applyRoleRouting } from "./routing/roleAware.js";
+export { createCascadeVerifier, createCascadeRunner, canCascade } from "./routing/cascade.js";
+export { createLoopGuard, hashToolCall } from "./guard/loopGuard.js";
+export { createPolicyEngine } from "./policy/engine.js";
+export { createQuotaScheduler, sortAccountsByReset, calculateRemainingPct } from "./budget/quotaScheduler.js";
+export { createCostTracker, parseTaskId, parseProject } from "./budget/costAttribution.js";

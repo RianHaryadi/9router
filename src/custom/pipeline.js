@@ -18,6 +18,10 @@ import { estimateBodyTokens } from "./rtk/tokenMeter.js";
 import { repairToolArguments, shouldRetryToolCall } from "./toolcall/repair.js";
 import { rankByCacheWarm } from "./cache/awareRouting.js";
 import { classifyComplexity, pickRouteTier } from "./routing/complexity.js";
+import { detectRole } from "./routing/roleAware.js";
+import { canCascade } from "./routing/cascade.js";
+import { createLoopGuard, hashToolCall } from "./guard/loopGuard.js";
+import { createPolicyEngine } from "./policy/engine.js";
 
 /**
  * Run the custom pipeline. Mutates `body` like the other savers do.
@@ -35,7 +39,7 @@ export function runCustomPipeline(opts = {}) {
   try {
     const {
       body, finalFormat, modelInfo = {}, clientTool = null,
-      ctx = {}, config = {},
+      ctx = {}, config = {}, headers = {},
     } = opts;
     if (!body || typeof body !== "object") return diag;
 
@@ -93,6 +97,68 @@ export function runCustomPipeline(opts = {}) {
       const c = classifyComplexity(body);
       diag.complexity = { level: c.level, score: c.score, reasons: c.reasons };
       diag.applied.push(`route-tier:${c.level}`);
+    }
+
+    // 7) Loop guard: detect repeated tool calls or runaway agent loops.
+    //    Non-mutating diagnostic — caller decides whether to throttle/stop.
+    if (config.loopGuard) {
+      const guard = config.loopGuard;
+      const toolCalls = Array.isArray(body.messages)
+        ? body.messages.flatMap(m => Array.isArray(m.tool_calls) ? m.tool_calls : [])
+        : [];
+      const lastHash = toolCalls.length > 0 ? hashToolCall(toolCalls[toolCalls.length - 1]) : null;
+      const checkResult = guard.check?.({
+        sessionId: ctx.sessionId || body.user || 'default',
+        toolCalls,
+        messageCount: Array.isArray(body.messages) ? body.messages.length : 0,
+        tokenCount: diag.tokens?.before || 0,
+        lastHash
+      }) || { allowed: true, reason: 'no-guard', severity: 'ok' };
+      diag.loopGuard = checkResult;
+      if (checkResult.severity !== 'ok') {
+        diag.applied.push(`loop-guard:${checkResult.severity}`);
+      }
+    }
+
+    // 8) Policy engine: evaluate declarative rules against context.
+    //    Non-mutating — caller applies decisions.
+    if (config.policy) {
+      const engine = config.policy;
+      const policyCtx = {
+        keyGroup: ctx.keyGroup,
+        task: ctx.task,
+        complexity: diag.complexity?.level,
+        monthlySpendPct: ctx.monthlySpendPct,
+        provider: modelInfo.provider,
+        model: modelInfo.model,
+        clientTool,
+        endUserFacing: requiresEndUserGuard({ clientTool })
+      };
+      const policyResult = engine.evaluate?.(policyCtx) || { decisions: [] };
+      diag.policy = policyResult;
+      if (policyResult.decisions?.length > 0) {
+        diag.applied.push(`policy:${policyResult.decisions.length} decisions`);
+      }
+    }
+
+    // 9) Role-aware routing: detect if this is a subagent request and record
+    //    the role for diagnostics. Actual model selection happens in the caller.
+    if (config.roleAware) {
+      const roleResult = detectRole(body, headers);
+      diag.role = roleResult;
+      diag.applied.push(`role:${roleResult.role}`);
+    }
+
+    // 10) Cascade advisory: check if this request is suitable for cascade routing
+    //     (cheap model first, verify, escalate if needed). Non-mutating diagnostic.
+    if (config.cascade) {
+      const cascadeable = canCascade(body);
+      diag.cascade = { applicable: cascadeable };
+      if (cascadeable) {
+        diag.applied.push("cascade:eligible");
+      } else {
+        diag.skipped.push("cascade:not-eligible");
+      }
     }
   } catch {
     // fail-open: any custom error never breaks the request
@@ -168,4 +234,5 @@ export { rankByCacheWarm, pickCacheWarmModel } from "./cache/awareRouting.js";
 export { createSemanticCache } from "./cache/semantic.js";
 export { createIdempotencyStore } from "./idempotency/index.js";
 export { classifyComplexity, pickRouteTier } from "./routing/complexity.js";
-export { createResponseCache, captureStreamResponse, replayResponse, digestBody } from "./wiring/responseCache.js";
+export { detectRole, pickRoleModel, applyRoleRouting } from "./routing/roleAware.js";
+export { createCascadeVerifier, createCascadeRunner, canCascade } from "./routing/cascade.js";

@@ -37,9 +37,12 @@ import { createRequestId, resolveProjectName } from "../services/requestContext.
 import { saveFallbackEvent } from "@/lib/db/repos/fallbackRepo.js";
 import { getApiKeyByKey } from "@/lib/db/repos/apiKeysRepo.js";
 import { getAdapterSync } from "@/lib/db/driver.js";
-import { createResponseCache, captureStreamResponse, replayResponse, digestBody } from "@/custom/wiring/responseCache.js";
-
-const responseCache = createResponseCache();
+import {
+  lookupIdempotency,
+  lookupSemantic,
+  captureAndStore,
+} from "@/custom/wiring/serveCache.js";
+import { replayResponse } from "@/custom/wiring/responseCache.js";
 
 /**
  * Persist one fallback event without ever touching request latency:
@@ -207,13 +210,13 @@ export async function handleChat(request, clientRawRequest = null) {
 
   // ── Idempotency Gate (pre-flight) ──────────────────────────────────────
   const idempotencyKey = request?.headers?.get?.("idempotency-key") || clientRawRequest?.headers?.["idempotency-key"] || null;
-  const bodyDigest = idempotencyKey ? digestBody(body) : null;
-  let idempotencyClaim = null;
+  let idempotencyResult = null;
+  let idempotencyFirstClaim = false;
   if (idempotencyKey) {
     try {
-      idempotencyClaim = responseCache.claimIdempotency(idempotencyKey, bodyDigest);
-      if (idempotencyClaim?.status === "completed" && idempotencyClaim.value) {
-        const cached = idempotencyClaim.value;
+      idempotencyResult = lookupIdempotency({ idempotencyKey, body });
+      if (idempotencyResult?.type === "replay") {
+        const cached = idempotencyResult.value;
         return replayResponse({
           bodyText: cached.bodyText,
           status: cached.status || 200,
@@ -221,10 +224,13 @@ export async function handleChat(request, clientRawRequest = null) {
           cacheType: "idempotency",
         });
       }
-      if (idempotencyClaim?.status === "in-progress" && idempotencyClaim.seq > 1) {
-        return errorResponse(HTTP_STATUS.CONFLICT || 409, "concurrent request in progress with this idempotency key");
+      if (idempotencyResult?.type === "in-progress") {
+        idempotencyFirstClaim = idempotencyResult.seq === 1;
+        if (!idempotencyFirstClaim) {
+          return errorResponse(409, "concurrent request in progress with this idempotency key");
+        }
       }
-      if (idempotencyClaim?.status === "conflict") {
+      if (idempotencyResult?.type === "conflict") {
         return errorResponse(422, "idempotency key reused with different request payload");
       }
     } catch {
@@ -235,13 +241,13 @@ export async function handleChat(request, clientRawRequest = null) {
   // ── Semantic Cache Gate (pre-flight) ───────────────────────────────────
   if (settings.semanticCacheEnabled) {
     try {
-      const cached = responseCache.getSemantic(body);
-      if (cached?.value) {
+      const hit = lookupSemantic({ body, model: modelStr });
+      if (hit?.type === "replay") {
         log.info("CACHE", "Semantic cache HIT");
         return replayResponse({
-          bodyText: cached.value,
-          status: cached.status || 200,
-          headers: cached.headers || {},
+          bodyText: hit.value.value,
+          status: hit.value.status || 200,
+          headers: hit.value.headers || {},
           cacheType: "semantic",
         });
       }
@@ -369,30 +375,16 @@ export async function handleChat(request, clientRawRequest = null) {
   const res = await responsePromise;
 
   // ── Post-flight response capture for Idempotency & Semantic Cache ──────
-  if (res && res.status >= 200 && res.status < 400) {
-    return captureStreamResponse(res, (capturedText, meta) => {
-      try {
-        if (idempotencyKey && idempotencyClaim?.status === "in-progress" && idempotencyClaim.seq === 1) {
-          responseCache.completeIdempotency(idempotencyKey, bodyDigest, {
-            bodyText: capturedText,
-            headers: meta.headers,
-            status: meta.status,
-          });
-        }
-        if (settings.semanticCacheEnabled && meta.status >= 200 && meta.status < 300) {
-          responseCache.setSemantic(body, capturedText, {
-            headers: meta.headers,
-            status: meta.status,
-            model: modelStr,
-          });
-        }
-      } catch {
-        // fail-open: caching failure never throws
-      }
+  if (res) {
+    return captureAndStore({
+      response: res,
+      body,
+      // Idempotency completion only for the first claim of this key; semantic
+      // store is gated on status < 400 + non-empty text inside captureAndStore.
+      idempotencyKey: idempotencyFirstClaim ? idempotencyKey : null,
+      model: modelStr,
     });
   }
-
-  return res;
 }
 
 /**
