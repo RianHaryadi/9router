@@ -7,15 +7,15 @@ Copy-paste isi blok "PROMPT" di bawah ke sesi OpenCode baru. Isinya self-contain
 ## PROMPT
 
 ```
-Lanjutkan pengerjaan fork 9Router di repo /home/kennyh/9router.
+Lanjutkan pengerjaan fork 9Router di repo /home/kennyh/Documents/9router.
 
 ## 0. Baca dulu (WAJIB, sebelum eksekusi apa pun)
 
-- /home/kennyh/9router/AGENT.md                 — aturan kerja fork (WAJIB dipatuhi)
-- /home/kennyh/9router/ROADMAP.md               — roadmap 5 fase
-- /home/kennyh/9router/docs/ARCHITECTURE_MAP.md — peta jalur request + titik hook + rencana per file
-- /home/kennyh/9router/.loop/state.md           — state loop, keputusan desain, log iterasi
-- /home/kennyh/9router/CLAUDE.md + open-sse/AGENTS.md — panduan upstream
+- /home/kennyh/Documents/9router/AGENT.md                 — aturan kerja fork (WAJIB dipatuhi)
+- /home/kennyh/Documents/9router/ROADMAP.md               — roadmap 5 fase
+- /home/kennyh/Documents/9router/docs/ARCHITECTURE_MAP.md — peta jalur request + titik hook + rencana per file
+- /home/kennyh/Documents/9router/.loop/state.md           — state loop, keputusan desain, log iterasi
+- /home/kennyh/Documents/9router/CLAUDE.md + open-sse/AGENTS.md — panduan upstream
 
 AGENT.md adalah gabungan CLAUDE.md upstream + open-sse/AGENTS.md + aturan tambahan fork.
 Kalau ada konflik, AGENT.md yang berlaku.
@@ -149,16 +149,16 @@ Buat tests/unit/health-dashboard.test.js:
 
 ## 6. Verifikasi WAJIB (jalankan, ambil output nyata, laporkan)
 
-  cd /home/kennyh/9router && npx eslint "src/app/(dashboard)/dashboard/health" src/shared/components/Sidebar.js
-  cd /home/kennyh/9router/tests && npx vitest run unit/health-dashboard.test.js
-  cd /home/kennyh/9router && npm run build          # WAJIB exit 0
-  cd /home/kennyh/9router/tests && npx vitest run --reporter=json --outputFile=/tmp/full.json
+  cd /home/kennyh/Documents/9router && npx eslint "src/app/(dashboard)/dashboard/health" src/shared/components/Sidebar.js
+  cd /home/kennyh/Documents/9router/tests && npx vitest run unit/health-dashboard.test.js
+  cd /home/kennyh/Documents/9router && npm run build          # WAJIB exit 0
+  cd /home/kennyh/Documents/9router/tests && npx vitest run --reporter=json --outputFile=/tmp/full.json
 
   Lalu bandingkan himpunan failure dgn baseline upstream (target: 0 failure baru).
   Baseline ada di /tmp/opencode/upstream-failed.txt (27 fail). Kalau tidak ada, regenerate:
     git worktree add /tmp/opencode/9router-upstream 1fe586bb
-    ln -s /home/kennyh/9router/tests/node_modules /tmp/opencode/9router-upstream/tests/node_modules
-    ln -s /home/kennyh/9router/node_modules /tmp/opencode/9router-upstream/node_modules
+    ln -s /home/kennyh/Documents/9router/tests/node_modules /tmp/opencode/9router-upstream/tests/node_modules
+    ln -s /home/kennyh/Documents/9router/node_modules /tmp/opencode/9router-upstream/node_modules
     cd /tmp/opencode/9router-upstream/tests && npx vitest run --reporter=json \
       --outputFile=/tmp/opencode/upstream-suite.json
   Worktree itu HANYA untuk baseline. JANGAN commit di sana.
