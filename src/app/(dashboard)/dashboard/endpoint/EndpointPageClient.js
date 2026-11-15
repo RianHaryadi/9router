@@ -679,6 +679,7 @@ export default function APIPageClient({ machineId }) {
   const [budgetDrafts, setBudgetDrafts] = useState({});
   const [savingBudgetId, setSavingBudgetId] = useState(null);
   const [rpmDrafts, setRpmDrafts] = useState({});
+  const [tpmDrafts, setTpmDrafts] = useState({});
 
   const handleSaveRpm = async (key) => {
     const raw = rpmDrafts[key.id] ?? String(key.rpmLimit || 0);
@@ -700,6 +701,31 @@ export default function APIPageClient({ machineId }) {
       }
     } catch (error) {
       console.log("Error saving RPM limit:", error);
+    } finally {
+      setSavingBudgetId(null);
+    }
+  };
+
+  const handleSaveTpm = async (key) => {
+    const raw = tpmDrafts[key.id] ?? String(key.tpmLimit || 0);
+    const tpmLimit = Number(raw);
+    if (!Number.isInteger(tpmLimit) || tpmLimit < 0 || tpmLimit > 1_000_000_000) return;
+    setSavingBudgetId(key.id);
+    try {
+      const res = await fetch(`/api/keys/${key.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tpmLimit }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.key) {
+        setKeys((prev) => prev.map((k) => (k.id === key.id ? { ...k, ...data.key } : k)));
+        setTpmDrafts((prev) => ({ ...prev, [key.id]: String(tpmLimit) }));
+      } else {
+        console.log("Error saving TPM limit:", data.error || res.status);
+      }
+    } catch (error) {
+      console.log("Error saving TPM limit:", error);
     } finally {
       setSavingBudgetId(null);
     }
@@ -1172,6 +1198,25 @@ export default function APIPageClient({ machineId }) {
                     <span>0 = unlimited</span>
                     <button
                       onClick={() => handleSaveRpm(key)}
+                      disabled={savingBudgetId === key.id}
+                      className="rounded-md bg-surface-2 px-2 py-1 text-xs text-text-main border-2 border-ink disabled:opacity-50"
+                    >Save</button>
+                    <label htmlFor={`tpm-${key.id}`}>Tokens/min:</label>
+                    <input
+                      id={`tpm-${key.id}`}
+                      aria-label={`Tokens per minute for ${key.name}`}
+                      type="number"
+                      min="0"
+                      max="1000000000"
+                      step="1"
+                      value={tpmDrafts[key.id] ?? String(key.tpmLimit || 0)}
+                      disabled={savingBudgetId === key.id}
+                      onChange={(e) => setTpmDrafts((prev) => ({ ...prev, [key.id]: e.target.value }))}
+                      className="w-24 rounded-md border-2 border-ink bg-bg px-2 py-1 text-sm"
+                    />
+                    <span>0 = unlimited</span>
+                    <button
+                      onClick={() => handleSaveTpm(key)}
                       disabled={savingBudgetId === key.id}
                       className="rounded-md bg-surface-2 px-2 py-1 text-xs text-text-main border-2 border-ink disabled:opacity-50"
                     >Save</button>

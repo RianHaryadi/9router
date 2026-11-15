@@ -52,6 +52,13 @@ const DEFAULT_SETTINGS = {
   dnsToolEnabled: {},
   // Fork: semantic response cache (serves cached SSE/JSON on identical bodies)
   semanticCacheEnabled: false,
+  // Fork: near-duplicate cache (serves a cached answer for an ~identical body)
+  similarityCacheEnabled: false,
+  similarityThreshold: 0.85,
+  // Fork: shadow / A-B routing (a sampled share also runs on a shadow target)
+  shadowRoutingEnabled: false,
+  shadowRoutingRatio: 0,
+  shadowRoutingTargets: [],
   rtkEnabled: true,
   headroomEnabled: false,
   headroomUrl: DEFAULT_HEADROOM_URL,

@@ -16,8 +16,11 @@ import {
   captureStreamResponse,
   createResponseCache,
 } from "./responseCache.js";
+import { createSimilarityIndex } from "../cache/similarity.js";
 
 let cache = null;
+// Near-duplicate index: serves a body that is ~the same as a cached one.
+let similarityIndex = null;
 
 /** Lazily-created process-wide response cache singleton. */
 export function getResponseCache() {
@@ -25,9 +28,16 @@ export function getResponseCache() {
   return cache;
 }
 
-/** Test-only: drop and recreate the singleton. */
+/** Lazily-created process-wide similarity index singleton. */
+export function getSimilarityIndex() {
+  if (!similarityIndex) similarityIndex = createSimilarityIndex();
+  return similarityIndex;
+}
+
+/** Test-only: drop and recreate the singletons. */
 export function __resetForTests() {
   cache = null;
+  similarityIndex = null;
   return getResponseCache();
 }
 
@@ -46,7 +56,7 @@ export function lookupIdempotency({ idempotencyKey, body }) {
 }
 
 /**
- * Semantic cache lookup for a chat-completions-style body.
+ * Similarity cache lookup for a chat-completions-style body.
  * A stored entry scoped to a different model is treated as a miss.
  * @returns null | { type: 'replay', value: { value, headers, status, model } }
  */
@@ -57,6 +67,50 @@ export function lookupSemantic({ body, model }) {
     return null; // model-scoped entry for a different model — miss
   }
   return { type: "replay", value: hit };
+}
+
+/**
+ * Near-duplicate lookup: serve a cached answer for a body that is *almost*
+ * the same as a stored one (token-overlap >= threshold).
+ *
+ * Opt-in: the caller must pass `enabled`, because a near-duplicate answer is
+ * not identical to what the provider would say today. Model-scoped exactly
+ * like the exact-match cache — a different model never borrows an answer.
+ *
+ * @returns null | { type: 'replay', value: { value, headers, status, model }, score }
+ */
+export function lookupSimilarity({ body, model, enabled = false, threshold = 0.85 }) {
+  if (!enabled) return null;
+  try {
+    const hit = getSimilarityIndex().find(body);
+    if (!hit) return null;
+    const stored = hit.entry;
+    if (!stored) return null;
+    if (stored.model !== undefined && model !== undefined && stored.model !== model) return null;
+    return {
+      type: "replay",
+      value: { value: stored.value, headers: stored.headers, status: stored.status, model: stored.model },
+      score: hit.score,
+    };
+  } catch {
+    return null; // fail-open: a cache problem never breaks a request
+  }
+}
+
+/**
+ * Store a response under BOTH the exact-match and the similarity index.
+ * The similarity entry mirrors the exact one so a near-duplicate request can
+ * be answered with the same cached body.
+ */
+export function storeSimilarity({ body, model, bodyText, headers, status, enabled = false }) {
+  if (!enabled) return;
+  if (status !== undefined && status >= 400) return;
+  if (bodyText === undefined || bodyText === null || bodyText === "") return;
+  try {
+    getSimilarityIndex().add(body, { value: bodyText, headers, status, model });
+  } catch {
+    // fail-open
+  }
 }
 
 /**
@@ -101,9 +155,10 @@ export function storeSemantic({ body, model, bodyText, headers, status }) {
  * Capture a live (streaming or plain) Response, mirror it into the caches,
  * and return the client-facing Response.
  */
-export function captureAndStore({ response, body, idempotencyKey, model }) {
+export function captureAndStore({ response, body, idempotencyKey, model, similarityEnabled = false }) {
   return captureStreamResponse(response, (text, { status, headers }) => {
     storeSemantic({ body, model, bodyText: text, headers, status });
+    storeSimilarity({ body, model, bodyText: text, headers, status, enabled: similarityEnabled });
     storeIdempotency({ idempotencyKey, body, bodyText: text, headers, status });
   });
 }
@@ -120,11 +175,14 @@ export function shouldServeCache({ method, path }) {
 
 const serveCache = {
   getResponseCache,
+  getSimilarityIndex,
   __resetForTests,
   lookupIdempotency,
   lookupSemantic,
+  lookupSimilarity,
   storeIdempotency,
   storeSemantic,
+  storeSimilarity,
   captureAndStore,
   shouldServeCache,
 };

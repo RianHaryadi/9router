@@ -20,6 +20,7 @@ function rowToKey(row) {
     budgetStartedAt: row.budgetStartedAt || null,
     budgetSpentCents: row.budgetSpentCents != null ? row.budgetSpentCents : 0,
     rpmLimit: row.rpmLimit != null ? row.rpmLimit : 0,
+    tpmLimit: row.tpmLimit != null ? row.tpmLimit : 0,
   };
 }
 
@@ -75,6 +76,7 @@ export async function createApiKey(name, machineId) {
     createdAt: new Date().toISOString(),
     access: { restricted: false, allow: [] },
     rpmLimit: 0,
+    tpmLimit: 0,
   };
   const cols = keyAccessToColumns(KEY_ACCESS_UNRESTRICTED);
   db.run(
@@ -102,6 +104,9 @@ export async function updateApiKey(id, data) {
     if (budgetLimitCents == null) budgetLimitCents = null; // null literal stays NULL (unlimited)
     const rpmLimit = data.rpmLimit !== undefined ? data.rpmLimit : (row.rpmLimit ?? 0);
     if (!Number.isInteger(rpmLimit) || rpmLimit < 0 || rpmLimit > 1_000_000) throw new RangeError("rpmLimit must be an integer between 0 and 1000000");
+    // TPM (tokens per minute) policy: admin-configurable; 0 means unlimited.
+    const tpmLimit = data.tpmLimit !== undefined ? data.tpmLimit : (row.tpmLimit ?? 0);
+    if (!Number.isInteger(tpmLimit) || tpmLimit < 0 || tpmLimit > 1_000_000_000) throw new RangeError("tpmLimit must be an integer between 0 and 1000000000");
     let budgetStartedAt = row.budgetStartedAt || null;
     // unlimited -> finite transition seeds the period start if not already set
     if (budgetLimitCents != null && budgetStartedAt == null) {
@@ -110,8 +115,8 @@ export async function updateApiKey(id, data) {
     const budgetSpentCents = row.budgetSpentCents != null ? row.budgetSpentCents : 0;
 
     db.run(
-      `UPDATE apiKeys SET key = ?, name = ?, machineId = ?, isActive = ?, accessRestricted = ?, accessAllow = ?, budgetLimitCents = ?, budgetPeriod = ?, budgetStartedAt = ?, budgetSpentCents = ?, rpmLimit = ? WHERE id = ?`,
-      [merged.key, merged.name, merged.machineId, merged.isActive ? 1 : 0, cols.accessRestricted, cols.accessAllow, budgetLimitCents, budgetPeriod, budgetStartedAt, budgetSpentCents, rpmLimit, id]
+      `UPDATE apiKeys SET key = ?, name = ?, machineId = ?, isActive = ?, accessRestricted = ?, accessAllow = ?, budgetLimitCents = ?, budgetPeriod = ?, budgetStartedAt = ?, budgetSpentCents = ?, rpmLimit = ?, tpmLimit = ? WHERE id = ?`,
+      [merged.key, merged.name, merged.machineId, merged.isActive ? 1 : 0, cols.accessRestricted, cols.accessAllow, budgetLimitCents, budgetPeriod, budgetStartedAt, budgetSpentCents, rpmLimit, tpmLimit, id]
     );
     result = rowToKey(db.get(`SELECT * FROM apiKeys WHERE id = ?`, [id]));
   });
@@ -253,4 +258,62 @@ export async function consumeApiKeyRateLimit(key, { limit, windowMs, now = Date.
   if (!row) return { allowed: false, remaining: 0, resetAt };
   const allowed = row.rpmRequestCount <= limit;
   return { allowed, remaining: Math.max(0, limit - row.rpmRequestCount), resetAt };
+}
+
+/**
+ * Fixed-window token counter on the authenticated API key row. Single atomic
+ * UPDATE: resets the counter when the window rolls over, otherwise adds the
+ * requested tokens, saturating at limit+1 so a burst can never overshoot the
+ * limit by more than one request.
+ */
+export async function consumeApiKeyTokenLimit(key, { limit, windowMs = 60_000, tokens, now = Date.now() }) {
+  if (!key || !Number.isInteger(limit) || limit <= 0) {
+    return { allowed: true, remaining: null, resetAt: null };
+  }
+  if (!Number.isInteger(windowMs) || windowMs <= 0 || !Number.isFinite(now)) {
+    throw new TypeError("Invalid API key token rate limit window");
+  }
+  const amount = Number.isFinite(tokens) && tokens > 0 ? Math.round(tokens) : 0;
+  const windowStart = Math.floor(now / windowMs) * windowMs;
+  const resetAt = windowStart + windowMs;
+  const db = await getAdapter();
+  const row = db.get(
+    `UPDATE apiKeys SET
+       tpmTokenCount = MIN(
+         CASE WHEN COALESCE(tpmWindowStart, 0) != ? THEN 0 ELSE COALESCE(tpmTokenCount, 0) END + ?,
+         ?
+       ),
+       tpmWindowStart = ?
+     WHERE key = ?
+     RETURNING tpmTokenCount`,
+    [windowStart, amount, limit + 1, windowStart, key],
+  );
+  if (!row) return { allowed: false, remaining: 0, resetAt };
+  const allowed = row.tpmTokenCount <= limit;
+  return { allowed, remaining: Math.max(0, limit - row.tpmTokenCount), resetAt };
+}
+
+/**
+ * Enforce the key's own TPM policy. Reads tpmLimit from the row; returns null
+ * when allowed (or when no limit is configured). Fails CLOSED on DB errors by
+ * throwing — the caller decides how to answer.
+ */
+export async function enforceApiKeyTokenLimit(key, tokens, now = Date.now()) {
+  if (!key) return null;
+  const db = await getAdapter();
+  const record = rowToKey(db.get(`SELECT * FROM apiKeys WHERE key = ?`, [key]));
+  if (!record || !record.tpmLimit) return null;
+  const result = await consumeApiKeyTokenLimit(key, { limit: record.tpmLimit, windowMs: 60_000, tokens, now });
+  if (result.allowed) return null;
+  const retryAfter = Math.max(1, Math.ceil((result.resetAt - now) / 1000));
+  return new Response(JSON.stringify({ error: { message: "API key token rate limit exceeded", type: "rate_limit_error" } }), {
+    status: 429,
+    headers: {
+      "Content-Type": "application/json",
+      "Retry-After": String(retryAfter),
+      "X-RateLimit-Limit": String(record.tpmLimit),
+      "X-RateLimit-Remaining": "0",
+      "X-RateLimit-Reset": String(Math.ceil(result.resetAt / 1000)),
+    },
+  });
 }

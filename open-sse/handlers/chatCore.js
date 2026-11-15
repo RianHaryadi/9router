@@ -33,6 +33,7 @@ import { prefetchRemoteImages } from "../translator/concerns/prefetch.js";
 import { defaultClaudeToolType, shouldDefaultClaudeToolType } from "../translator/concerns/toolCall.js";
 import { resolveSessionId } from "../utils/sessionManager.js";
 import { runCustomPipeline } from "@/custom/pipeline.js";
+import { executeWithRetry } from "@/custom/guard/transientRetry.js";
 
 const PII_TEXT_KEYS = new Set(["text", "content", "input_text", "instructions", "output"]);
 const PII_PATTERNS = [
@@ -441,7 +442,11 @@ export async function handleChatCore({ body, modelInfo, credentials, log, onCred
   // exception: it is decoded by the executor into OpenAI-compatible output.
   let providerResponseFormat = targetFormat;
   try {
-    const result = await executor.execute({
+    // Fork: a transport hiccup (socket reset, DNS blip, connect timeout) used
+    // to kill the request with a bare 502 even though the provider was fine.
+    // Retry ONLY while the executor threw before any response byte exists —
+    // once bytes are on the wire the request is no longer replayable.
+    const result = await executeWithRetry(() => executor.execute({
       model,
       body: providerBody,
       stream,
@@ -452,6 +457,11 @@ export async function handleChatCore({ body, modelInfo, credentials, log, onCred
       log,
       proxyOptions,
       providerOverrides,
+    }), {
+      signal: streamController.signal,
+      onRetry: ({ attempt, error, delayMs }) => {
+        log?.warn?.("RETRY", `${provider.toUpperCase()} | ${model} | transport failure, retry ${attempt} in ${delayMs}ms | ${error?.message || error}`);
+      },
     });
     providerResponse = result.response;
     providerUrl = result.url;

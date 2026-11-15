@@ -96,6 +96,9 @@ export default function RequestDetailsTab() {
   const [fallbackEvents, setFallbackEvents] = useState([]);
   const [fallbackLoading, setFallbackLoading] = useState(false);
   const [fallbackError, setFallbackError] = useState(false);
+  const [replayLoading, setReplayLoading] = useState(false);
+  const [replayError, setReplayError] = useState("");
+  const [replayResult, setReplayResult] = useState(null);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [providers, setProviders] = useState([]);
   const [providerNameCache, setProviderNameCache] = useState(null);
@@ -170,8 +173,26 @@ export default function RequestDetailsTab() {
     setSelectedDetail(detail);
     setFallbackEvents([]);
     setFallbackError(false);
+    setReplayResult(null);
     setIsDrawerOpen(true);
     loadFallbackEvents(detail.requestId);
+  };
+
+  const replayDetail = async (detail) => {
+    setReplayLoading(true);
+    setReplayError("");
+    setReplayResult(null);
+    try {
+      const res = await fetch(`/api/usage/request-details/${encodeURIComponent(detail.id)}/replay`, { method: "POST" });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(data?.error || `Replay failed (${res.status})`);
+      const text = data?.choices?.[0]?.message?.content ?? data?.output_text ?? data?.text ?? JSON.stringify(data);
+      setReplayResult(String(text));
+    } catch (error) {
+      setReplayError(error.message || "Replay failed");
+    } finally {
+      setReplayLoading(false);
+    }
   };
 
   const handlePageChange = (newPage) => {
@@ -385,6 +406,20 @@ export default function RequestDetailsTab() {
                   <span className="font-mono text-text-main">{selectedDetail.fallbackCount}</span>
                 </div>
               )}
+              <div className="sm:col-span-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={replayLoading}
+                  onClick={() => replayDetail(selectedDetail)}
+                >
+                  {replayLoading ? "Replaying…" : "Replay request"}
+                </Button>
+                {replayError && <span role="alert" className="ml-3 text-sm text-danger">{replayError}</span>}
+                {replayResult != null && (
+                  <pre className="mt-2 max-h-[220px] w-full overflow-auto whitespace-pre-wrap rounded-lg border border-ink/5 bg-black/5 p-3 font-mono text-xs text-text-main dark:border-white/5 dark:bg-white/5">{replayResult}</pre>
+                )}
+              </div>
               <div>
                  <span className="text-text-muted">Provider:</span>{" "}
                  <span className="text-text-main font-medium">{getProviderName(selectedDetail.provider, providerNameCache)}</span>

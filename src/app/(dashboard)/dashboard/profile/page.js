@@ -649,6 +649,21 @@ export default function ProfilePage() {
     }
   };
 
+  const updatePiiRedactionEnabled = async (enabled) => {
+    try {
+      const res = await fetch("/api/settings", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ piiRedactionEnabled: enabled }),
+      });
+      if (res.ok) {
+        setSettings(prev => ({ ...prev, piiRedactionEnabled: enabled }));
+      }
+    } catch (err) {
+      console.error("Failed to update piiRedactionEnabled:", err);
+    }
+  };
+
   const reloadSettings = async () => {
     try {
       const res = await fetch("/api/settings");
@@ -740,6 +755,7 @@ export default function ProfilePage() {
   };
 
   const observabilityEnabled = settings.enableObservability === true;
+  const piiRedactionEnabled = settings.piiRedactionEnabled === true;
 
   const handleShutdown = async () => {
     setIsShuttingDown(true);
@@ -1616,6 +1632,19 @@ export default function ProfilePage() {
             <Toggle
               checked={observabilityEnabled}
               onChange={updateObservabilityEnabled}
+              disabled={loading}
+            />
+          </div>
+          <div className="mt-4 flex items-start sm:items-center justify-between gap-4 border-t border-ink/10 pt-4 dark:border-white/10">
+            <div className="flex-1 min-w-0">
+              <p className="font-medium text-sm sm:text-base">Redact PII in logs</p>
+              <p className="text-xs sm:text-sm text-text-muted">
+                Masks emails, phone numbers, national IDs and API keys in request details and provider payloads
+              </p>
+            </div>
+            <Toggle
+              checked={piiRedactionEnabled}
+              onChange={updatePiiRedactionEnabled}
               disabled={loading}
             />
           </div>

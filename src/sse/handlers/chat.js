@@ -22,6 +22,7 @@ import { upstreamResponseHeaders } from "open-sse/utils/upstreamHeaders.js";
 import { handleComboChat, handleFusionChat, detectRequiredCapabilities } from "open-sse/services/combo.js";
 import { getApiKeyBudget, resetBudgetSpend } from "@/lib/db/repos/apiKeysRepo.js";
 import { checkBudget, isBudgetPeriodRolledOver } from "@/custom/budget/check.js";
+import { estimateBodyTokens } from "@/custom/rtk/tokenMeter.js";
 import { augmentModelsWithCapacityAdapter, withCapacityAdapterStripping, getActiveAdapterStrategy } from "open-sse/services/capacityAdapter.js";
 import { handleBypassRequest } from "open-sse/utils/bypassHandler.js";
 import { HTTP_STATUS } from "open-sse/config/runtimeConfig.js";
@@ -40,9 +41,11 @@ import { getAdapterSync } from "@/lib/db/driver.js";
 import {
   lookupIdempotency,
   lookupSemantic,
+  lookupSimilarity,
   captureAndStore,
 } from "@/custom/wiring/serveCache.js";
 import { replayResponse } from "@/custom/wiring/responseCache.js";
+import { dispatchShadow } from "@/custom/wiring/shadowDispatch.js";
 
 /**
  * Persist one fallback event without ever touching request latency:
@@ -168,6 +171,32 @@ export async function handleChat(request, clientRawRequest = null) {
   const keyAccessDenied = await enforceKeyAccess(keyAccess, modelStr);
   if (keyAccessDenied) return keyAccessDenied;
 
+  // ── Per-key TPM gate ───────────────────────────────────────────────────
+  // The token budget is charged with the ESTIMATED prompt size of the request
+  // (the only number known before dispatch). ponytail: output tokens are not
+  // charged — replace the estimate with the real usage frame when the
+  // upstream reports it and this gate can be enforced post-flight.
+  if (apiKey) {
+    try {
+      const record = await getApiKeyByKey(apiKey);
+      // No configured limit → nothing to enforce, and no DB counter to touch.
+      if (record?.tpmLimit) {
+        const estimatedTokens = Math.ceil(estimateBodyTokens(body));
+        // Dynamic import: the limiter is optional wiring, so a deployment (or
+        // a test harness) without it must not break the request path.
+        const { enforceApiKeyTokenLimit } = await import("@/lib/db/repos/apiKeysRepo.js");
+        if (typeof enforceApiKeyTokenLimit === "function") {
+          const limited = await enforceApiKeyTokenLimit(apiKey, estimatedTokens);
+          if (limited) return limited;
+        }
+      }
+    } catch {
+      // fail closed on a DB error: a limiter that cannot be read must not
+      // silently let unlimited traffic through.
+      return errorResponse(HTTP_STATUS.SERVICE_UNAVAILABLE, "Token rate limit service unavailable");
+    }
+  }
+
   // ── Per-key monthly budget gate (Fase 2) ──────────────────────────────
   // Only enforce when a key is presented (unauthenticated requests are unlimited).
   // Gate uses cost=0 (pre-flight); actual cost attribution happens in usageRepo
@@ -249,6 +278,27 @@ export async function handleChat(request, clientRawRequest = null) {
           status: hit.value.status || 200,
           headers: hit.value.headers || {},
           cacheType: "semantic",
+        });
+      }
+    } catch {
+      // fail-open
+    }
+  }
+
+  // ── Similarity Cache Gate (pre-flight) ──────────────────────────────────
+  // Serves a near-duplicate request from cache. Separate switch from the
+  // exact-match cache: a ~same-but-not-identical prompt gets a cached answer
+  // that the provider might not have given today, so it must be opt-in.
+  if (settings.similarityCacheEnabled) {
+    try {
+      const hit = lookupSimilarity({ body, model: modelStr, enabled: true, threshold: settings.similarityThreshold });
+      if (hit?.type === "replay") {
+        log.info("CACHE", `Similarity cache HIT (score=${hit.score?.toFixed(3)})`);
+        return replayResponse({
+          bodyText: hit.value.value,
+          status: hit.value.status || 200,
+          headers: hit.value.headers || {},
+          cacheType: "similarity",
         });
       }
     } catch {
@@ -374,6 +424,36 @@ export async function handleChat(request, clientRawRequest = null) {
 
   const res = await responsePromise;
 
+  // ── Shadow dispatch (fire-and-forget) ───────────────────────────────────
+  // A sampled share of requests is ALSO sent to a shadow target so the two
+  // answers can be compared. The user only ever sees the primary answer; the
+  // shadow runs after the primary response exists and never delays it.
+  if (settings.shadowRoutingEnabled && res && requestId) {
+    try {
+      const shadowTarget = settings.shadowRoutingTargets || [];
+      if (shadowTarget.length > 0) {
+        const primaryText = await res.clone().text().catch(() => "");
+        dispatchShadow({
+          requestId,
+          modelInfo: { provider: modelStr?.split("/")[0], model: modelStr },
+          body,
+          config: { enabled: true, ratio: settings.shadowRoutingRatio ?? 0, targets: shadowTarget },
+          dispatch: (shadowBody) => handleChat(
+            new Request(request?.url || "http://localhost/v1/chat/completions", {
+              method: "POST",
+              headers: request?.headers,
+              body: JSON.stringify(shadowBody),
+            }),
+            { endpoint: "/v1/chat/completions", body: shadowBody, headers: request?.headers ? Object.fromEntries(request.headers.entries()) : {} },
+          ),
+          primaryText,
+        }).catch(() => {});
+      }
+    } catch {
+      // fail-open: shadowing never breaks the primary request
+    }
+  }
+
   // ── Post-flight response capture for Idempotency & Semantic Cache ──────
   if (res) {
     return captureAndStore({
@@ -383,6 +463,7 @@ export async function handleChat(request, clientRawRequest = null) {
       // store is gated on status < 400 + non-empty text inside captureAndStore.
       idempotencyKey: idempotencyFirstClaim ? idempotencyKey : null,
       model: modelStr,
+      similarityEnabled: settings.similarityCacheEnabled === true,
     });
   }
 }

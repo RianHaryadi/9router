@@ -22,7 +22,7 @@ export async function PUT(request, { params }) {
   try {
     const { id } = await params;
     const body = await request.json();
-    const { isActive, access, budgetLimitCents, budgetPeriod, rpmLimit } = body;
+    const { isActive, access, budgetLimitCents, budgetPeriod, rpmLimit, tpmLimit } = body;
 
     const existing = await getApiKeyById(id);
     if (!existing) {
@@ -58,6 +58,12 @@ export async function PUT(request, { params }) {
         return NextResponse.json({ error: "rpmLimit must be an integer between 0 and 1000000" }, { status: 400 });
       }
       updateData.rpmLimit = rpmLimit;
+    }
+    if (tpmLimit !== undefined) {
+      if (!Number.isInteger(tpmLimit) || tpmLimit < 0 || tpmLimit > 1_000_000_000) {
+        return NextResponse.json({ error: "tpmLimit must be an integer between 0 and 1000000000" }, { status: 400 });
+      }
+      updateData.tpmLimit = tpmLimit;
     }
 
     const updated = await updateApiKey(id, updateData);
