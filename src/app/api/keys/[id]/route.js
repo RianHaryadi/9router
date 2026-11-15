@@ -22,7 +22,7 @@ export async function PUT(request, { params }) {
   try {
     const { id } = await params;
     const body = await request.json();
-    const { isActive, access, budgetLimitCents, budgetPeriod } = body;
+    const { isActive, access, budgetLimitCents, budgetPeriod, rpmLimit } = body;
 
     const existing = await getApiKeyById(id);
     if (!existing) {
@@ -53,6 +53,12 @@ export async function PUT(request, { params }) {
       return NextResponse.json({ error: "budgetPeriod must be 'monthly'" }, { status: 400 });
     }
     if (budgetPeriod !== undefined) updateData.budgetPeriod = budgetPeriod;
+    if (rpmLimit !== undefined) {
+      if (!Number.isInteger(rpmLimit) || rpmLimit < 0 || rpmLimit > 1_000_000) {
+        return NextResponse.json({ error: "rpmLimit must be an integer between 0 and 1000000" }, { status: 400 });
+      }
+      updateData.rpmLimit = rpmLimit;
+    }
 
     const updated = await updateApiKey(id, updateData);
 

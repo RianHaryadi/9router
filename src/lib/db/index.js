@@ -40,6 +40,12 @@ export {
   createCombo, updateCombo, deleteCombo,
 } from "./repos/combosRepo.js";
 
+// Prompt templates
+export {
+  getPromptTemplates, getPromptTemplateById, getPromptTemplateVersions,
+  createPromptTemplate, updatePromptTemplate, deletePromptTemplate,
+} from "./repos/promptTemplatesRepo.js";
+
 // Aliases (model + custom + mitm)
 export {
   getModelAliases, setModelAlias, deleteModelAlias,

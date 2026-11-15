@@ -13,6 +13,8 @@ export {
   getApiKeys, getApiKeyById, getApiKeyByKey, createApiKey, updateApiKey, deleteApiKey, validateApiKey,
   getCombos, getComboById, getComboByName,
   createCombo, updateCombo, deleteCombo,
+  getPromptTemplates, getPromptTemplateById, getPromptTemplateVersions,
+  createPromptTemplate, updatePromptTemplate, deletePromptTemplate,
   getModelAliases, setModelAlias, deleteModelAlias,
   getCustomModels, addCustomModel, deleteCustomModel,
   getMitmAlias, setMitmAliasAll,

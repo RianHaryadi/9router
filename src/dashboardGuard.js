@@ -58,6 +58,7 @@ const PROTECTED_API_PATHS = [
   "/api/provider-nodes",
   "/api/proxy-pools",
   "/api/combos",
+  "/api/prompt-templates",
   "/api/models",
   "/api/usage",
   "/api/oauth",
@@ -159,9 +160,17 @@ async function hasValidApiKey(request) {
 }
 
 async function canAccessPublicLlmApi(request) {
-  if (isLocalRequest(request)) return true;
+  const apiKey = extractApiKey(request);
+  if (isLocalRequest(request) && !apiKey) return true;
   if (await hasValidCliToken(request)) return true;
-  return await hasValidApiKey(request);
+  if (!apiKey || !(await hasValidApiKey(request))) return false;
+  if (request.method !== "POST") return true;
+  try {
+    const { enforceApiKeyRateLimit } = await import("@/lib/db/repos/apiKeysRepo.js");
+    return (await enforceApiKeyRateLimit(apiKey)) || true;
+  } catch {
+    return NextResponse.json({ error: "Rate limit service unavailable" }, { status: 503, headers: { "Retry-After": "1" } });
+  }
 }
 
 async function canAccessLocalOnlyRoute(request) {
@@ -226,7 +235,9 @@ export async function proxy(request) {
   }
 
   if (isPublicLlmApi(pathname)) {
-    if (await canAccessPublicLlmApi(request)) return NextResponse.next();
+    const access = await canAccessPublicLlmApi(request);
+    if (access === true) return NextResponse.next();
+    if (access) return access;
     return NextResponse.json({ error: "API key required for remote API access" }, { status: 401 });
   }
 

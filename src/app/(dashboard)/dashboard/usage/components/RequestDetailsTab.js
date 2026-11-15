@@ -93,6 +93,9 @@ export default function RequestDetailsTab() {
   });
   const [loading, setLoading] = useState(false);
   const [selectedDetail, setSelectedDetail] = useState(null);
+  const [fallbackEvents, setFallbackEvents] = useState([]);
+  const [fallbackLoading, setFallbackLoading] = useState(false);
+  const [fallbackError, setFallbackError] = useState(false);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [providers, setProviders] = useState([]);
   const [providerNameCache, setProviderNameCache] = useState(null);
@@ -146,9 +149,29 @@ export default function RequestDetailsTab() {
     fetchDetails();
   }, [fetchDetails]);
 
-  const handleViewDetail = (detail) => {
+  const loadFallbackEvents = async (requestId) => {
+    if (!requestId) return;
+    setFallbackLoading(true);
+    setFallbackError(false);
+    try {
+      const params = new URLSearchParams({ requestId, limit: "100" });
+      const res = await fetch(`/api/usage/fallbacks?${params}`);
+      if (!res.ok) throw new Error("Failed to load fallback chain");
+      const data = await res.json();
+      setFallbackEvents(data.events || []);
+    } catch (error) {
+      setFallbackError(true);
+      console.error("Failed to fetch fallback events:", error);
+    } finally {
+      setFallbackLoading(false);
+    }
+  };
+  const openDetail = (detail) => {
     setSelectedDetail(detail);
+    setFallbackEvents([]);
+    setFallbackError(false);
     setIsDrawerOpen(true);
+    loadFallbackEvents(detail.requestId);
   };
 
   const handlePageChange = (newPage) => {
@@ -302,7 +325,7 @@ export default function RequestDetailsTab() {
                       <Button
                         variant="outline"
                         size="sm"
-                        onClick={() => handleViewDetail(detail)}
+                        onClick={() => openDetail(detail)}
                       >
                         Detail
                       </Button>
@@ -344,6 +367,24 @@ export default function RequestDetailsTab() {
                 <span className="text-text-muted">Timestamp:</span>{" "}
                 <span className="text-text-main">{new Date(selectedDetail.timestamp).toLocaleString()}</span>
               </div>
+              {selectedDetail.requestId && (
+                <div className="sm:col-span-2">
+                  <span className="text-text-muted">Request ID:</span>{" "}
+                  <span className="break-all font-mono text-text-main">{selectedDetail.requestId}</span>
+                </div>
+              )}
+              {selectedDetail.projectName && (
+                <div>
+                  <span className="text-text-muted">Project:</span>{" "}
+                  <span className="text-text-main">{selectedDetail.projectName}</span>
+                </div>
+              )}
+              {(selectedDetail.fallbackCount || 0) > 0 && (
+                <div>
+                  <span className="text-text-muted">Fallbacks:</span>{" "}
+                  <span className="font-mono text-text-main">{selectedDetail.fallbackCount}</span>
+                </div>
+              )}
               <div>
                  <span className="text-text-muted">Provider:</span>{" "}
                  <span className="text-text-main font-medium">{getProviderName(selectedDetail.provider, providerNameCache)}</span>
@@ -437,6 +478,36 @@ export default function RequestDetailsTab() {
                   </p>
                 )}
               </div>
+            )}
+
+            {selectedDetail.requestId && (
+              <CollapsibleSection title={`Fallback chain (${fallbackEvents.length})`} icon="alt_route">
+                {fallbackLoading ? (
+                  <p role="status" className="text-sm text-text-muted">Loading fallback history…</p>
+                ) : fallbackError ? (
+                  <p role="alert" className="text-sm text-danger">Could not load fallback history.</p>
+                ) : fallbackEvents.length ? (
+                  <ol className="space-y-3">
+                    {fallbackEvents.map((event) => (
+                      <li key={event.id} className="flex flex-col gap-1 rounded-lg border border-ink/5 p-3 text-sm dark:border-white/5">
+                        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 font-medium text-text-main">
+                          <span>{event.fromProvider || event.provider || "?"}/{event.fromModel || event.model || "?"}</span>
+                          <span aria-hidden="true">→</span>
+                          <span>{event.provider || "?"}/{event.model || "?"}</span>
+                          <span className="font-mono text-text-muted">HTTP {event.status ?? "—"}</span>
+                        </div>
+                        <p className="break-words text-text-muted">{event.reason || "Provider unavailable"}</p>
+                        <div className="flex gap-4 font-mono text-xs text-text-subtle">
+                          <span>{event.latencyMs ?? 0}ms</span>
+                          {event.cooldownMs > 0 && <span>cooldown {event.cooldownMs}ms</span>}
+                        </div>
+                      </li>
+                    ))}
+                  </ol>
+                ) : (
+                  <p className="text-sm text-text-muted">{selectedDetail.fallbackCount ? "Fallback events unavailable for this request." : "No fallback occurred."}</p>
+                )}
+              </CollapsibleSection>
             )}
 
             <div className="space-y-4">

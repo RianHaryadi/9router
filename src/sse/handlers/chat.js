@@ -541,6 +541,7 @@ async function handleSingleModelChat(body, modelStr, clientRawRequest = null, re
       customPromptEnabled: !!chatSettings.customPromptEnabled,
       customPrompt: chatSettings.customPrompt || "",
       pxpipeEnabled: !!chatSettings.pxpipeEnabled,
+      piiRedactionEnabled: chatSettings.piiRedactionEnabled === true,
       pxpipeMinChars: chatSettings.pxpipeMinChars,
       pxpipeTimeoutMs: chatSettings.pxpipeTimeoutMs,
       // Lazily warms the in-process module on first use; null when not installed (fail-open)

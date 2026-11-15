@@ -3,7 +3,7 @@
 // pre-change safety backup in migrate.js: when the stored version is lower,
 // one lightweight DB backup is taken before applying schema changes. Forgetting
 // to bump only skips that backup — it does NOT break the additive auto-sync.
-export const SCHEMA_VERSION = 5;
+export const SCHEMA_VERSION = 7;
 
 export const PRAGMA_SQL = `
 PRAGMA journal_mode = WAL;
@@ -92,6 +92,9 @@ export const TABLES = {
       budgetPeriod: "TEXT DEFAULT 'monthly'",
       budgetStartedAt: "TEXT",
       budgetSpentCents: "INTEGER DEFAULT 0",
+      rpmLimit: "INTEGER DEFAULT 0",
+      rpmWindowStart: "INTEGER DEFAULT 0",
+      rpmRequestCount: "INTEGER DEFAULT 0",
     },
     indexes: ["CREATE INDEX IF NOT EXISTS idx_ak_key ON apiKeys(key)"],
   },
@@ -105,6 +108,29 @@ export const TABLES = {
       updatedAt: "TEXT NOT NULL",
     },
     indexes: ["CREATE INDEX IF NOT EXISTS idx_combo_name ON combos(name)"],
+  },
+  promptTemplates: {
+    columns: {
+      id: "TEXT PRIMARY KEY",
+      name: "TEXT NOT NULL",
+      description: "TEXT NOT NULL DEFAULT ''",
+      content: "TEXT NOT NULL",
+      version: "INTEGER NOT NULL",
+      createdAt: "TEXT NOT NULL",
+      updatedAt: "TEXT NOT NULL",
+    },
+    indexes: ["CREATE INDEX IF NOT EXISTS idx_prompt_templates_updated ON promptTemplates(updatedAt)"],
+  },
+  promptTemplateVersions: {
+    columns: {
+      templateId: "TEXT NOT NULL",
+      version: "INTEGER NOT NULL",
+      name: "TEXT NOT NULL",
+      description: "TEXT NOT NULL",
+      content: "TEXT NOT NULL",
+      createdAt: "TEXT NOT NULL",
+    },
+    primaryKey: "PRIMARY KEY (templateId, version)",
   },
   kv: {
     columns: {

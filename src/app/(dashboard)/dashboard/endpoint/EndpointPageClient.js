@@ -678,6 +678,32 @@ export default function APIPageClient({ machineId }) {
   // Per-key monthly budget (dollars in UI, cents in DB)
   const [budgetDrafts, setBudgetDrafts] = useState({});
   const [savingBudgetId, setSavingBudgetId] = useState(null);
+  const [rpmDrafts, setRpmDrafts] = useState({});
+
+  const handleSaveRpm = async (key) => {
+    const raw = rpmDrafts[key.id] ?? String(key.rpmLimit || 0);
+    const rpmLimit = Number(raw);
+    if (!Number.isInteger(rpmLimit) || rpmLimit < 0 || rpmLimit > 1_000_000) return;
+    setSavingBudgetId(key.id);
+    try {
+      const res = await fetch(`/api/keys/${key.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ rpmLimit }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.key) {
+        setKeys((prev) => prev.map((k) => (k.id === key.id ? { ...k, ...data.key } : k)));
+        setRpmDrafts((prev) => ({ ...prev, [key.id]: String(rpmLimit) }));
+      } else {
+        console.log("Error saving RPM limit:", data.error || res.status);
+      }
+    } catch (error) {
+      console.log("Error saving RPM limit:", error);
+    } finally {
+      setSavingBudgetId(null);
+    }
+  };
 
   const budgetDraftOf = (key) => {
     const d = budgetDrafts[key.id] || {};
@@ -1129,6 +1155,27 @@ export default function APIPageClient({ machineId }) {
                       }
                     })}
                   />
+                  <div className="mt-3 flex items-center gap-2 flex-wrap text-xs text-text-muted">
+                    <label htmlFor={`rpm-${key.id}`}>Requests/min:</label>
+                    <input
+                      id={`rpm-${key.id}`}
+                      aria-label={`Requests per minute for ${key.name}`}
+                      type="number"
+                      min="0"
+                      max="1000000"
+                      step="1"
+                      value={rpmDrafts[key.id] ?? String(key.rpmLimit || 0)}
+                      disabled={savingBudgetId === key.id}
+                      onChange={(e) => setRpmDrafts((prev) => ({ ...prev, [key.id]: e.target.value }))}
+                      className="w-24 rounded-md border-2 border-ink bg-bg px-2 py-1 text-sm"
+                    />
+                    <span>0 = unlimited</span>
+                    <button
+                      onClick={() => handleSaveRpm(key)}
+                      disabled={savingBudgetId === key.id}
+                      className="rounded-md bg-surface-2 px-2 py-1 text-xs text-text-main border-2 border-ink disabled:opacity-50"
+                    >Save</button>
+                  </div>
                   {/* Per-key monthly budget */}
                   <div className="mt-3 pt-3 border-t border-ink/[0.03] dark:border-white/[0.03]">
                     {(() => {
