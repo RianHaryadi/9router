@@ -162,11 +162,17 @@ export async function GET(request) {
         name,
       };
       if (!isMember) return safe;
-      const { email, displayName, id, testStatus, lastError, lastErrorAt, errorCode, lastUsedAt, consecutiveUseCount, rateLimitedUntil, expiresAt, expiresIn, defaultModel, globalPriority, priority, projectId, providerSpecificData, ...rest } = safe;
+      // A member must not learn anything about the owner's accounts: no
+      // account name, no email, no status, no errors. The connection ID stays
+      // because the chat picker fetches that connection's live model catalog
+      // with it — it is an opaque handle, not an account identity.
+      const { email, displayName, testStatus, lastError, lastErrorAt, errorCode, lastUsedAt, consecutiveUseCount, rateLimitedUntil, expiresAt, expiresIn, defaultModel, globalPriority, priority, projectId, providerSpecificData, ...rest } = safe;
       return {
         ...rest,
         provider: safe.provider,
-        name: safe.name || safe.provider,
+        // The provider's display name, never the account's name (for OAuth
+        // connections that IS the email).
+        name: AI_PROVIDERS[safe.provider]?.name || safe.provider,
         authType: safe.authType,
         isActive: safe.isActive,
       };
