@@ -25,6 +25,10 @@ const DEFAULT_SETTINGS = {
   },
   requireLogin: true,
   requireApiKey: true,
+  // Owner opt-in: allow reading stored request/response content (prompts)
+  // in the dashboard. Off by default because the content is every user's
+  // conversation history. Requires an authenticated dashboard session.
+  promptInspectionEnabled: false,
   tunnelDashboardAccess: true,
   authMode: "password",
   ssoType: "oidc",

@@ -107,6 +107,8 @@ export default function RequestDetailsTab() {
     startDate: "",
     endDate: ""
   });
+  // Owner toggle: request the stored prompt/response bodies.
+  const [showContent, setShowContent] = useState(false);
 
   const fetchProviders = useCallback(async () => {
     try {
@@ -131,6 +133,9 @@ export default function RequestDetailsTab() {
       if (filters.provider) params.append("provider", filters.provider);
       if (filters.startDate) params.append("startDate", filters.startDate);
       if (filters.endDate) params.append("endDate", filters.endDate);
+      // Ask for the stored prompt/response bodies; the server only returns
+      // them when the owner enabled prompt inspection.
+      if (showContent) params.append("includeContent", "1");
 
       const res = await fetch(`/api/usage/request-details?${params}`);
       const data = await res.json();
@@ -142,7 +147,7 @@ export default function RequestDetailsTab() {
     } finally {
       setLoading(false);
     }
-  }, [pagination.page, pagination.pageSize, filters]);
+  }, [pagination.page, pagination.pageSize, filters, showContent]);
 
   useEffect(() => {
     fetchProviders();
@@ -263,14 +268,27 @@ export default function RequestDetailsTab() {
           
           <div className="flex min-w-0 flex-col gap-2 sm:col-span-2 lg:col-span-1">
             <span className="hidden text-sm font-medium text-text-main opacity-0 lg:block" aria-hidden="true">Clear</span>
-            <Button 
-              variant="ghost" 
-              onClick={handleClearFilters}
-              disabled={!filters.provider && !filters.startDate && !filters.endDate}
-              className="w-full"
-            >
-              Clear Filters
-            </Button>
+            <div className="flex gap-2">
+              <Button
+                variant="ghost"
+                onClick={handleClearFilters}
+                disabled={!filters.provider && !filters.startDate && !filters.endDate}
+                className="flex-1"
+              >
+                Clear Filters
+              </Button>
+              <Button
+                variant={showContent ? "primary" : "outline"}
+                onClick={() => setShowContent((v) => !v)}
+                title={
+                  showContent
+                    ? "Hiding stored prompts and responses"
+                    : "Show stored prompts and responses (needs owner permission)"
+                }
+              >
+                {showContent ? "Prompts ON" : "Prompts OFF"}
+              </Button>
+            </div>
           </div>
         </div>
       </Card>

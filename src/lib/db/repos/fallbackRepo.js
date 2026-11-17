@@ -1,4 +1,5 @@
 import { getAdapter } from "../driver.js";
+import { apiKeyFingerprint } from "@/shared/utils/apiKeyFingerprint.js";
 
 const DEFAULT_LIMIT = 100;
 const DEFAULT_OFFSET = 0;
@@ -45,7 +46,9 @@ export async function saveFallbackEvent(event = {}) {
       provider: event.provider || null,
       model: event.model || null,
       connectionId: event.connectionId || null,
-      apiKey: event.apiKey || null,
+      // Fingerprint, never the raw key: a DB file or backup must not carry
+      // the team's secret.
+      apiKey: apiKeyFingerprint(event.apiKey),
       projectName: event.projectName || null,
       fromProvider: event.fromProvider || null,
       fromModel: event.fromModel || null,

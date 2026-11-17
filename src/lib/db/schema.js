@@ -3,7 +3,7 @@
 // pre-change safety backup in migrate.js: when the stored version is lower,
 // one lightweight DB backup is taken before applying schema changes. Forgetting
 // to bump only skips that backup — it does NOT break the additive auto-sync.
-export const SCHEMA_VERSION = 8;
+export const SCHEMA_VERSION = 9;
 
 export const PRAGMA_SQL = `
 PRAGMA journal_mode = WAL;
@@ -79,6 +79,10 @@ export const TABLES = {
     columns: {
       id: "TEXT PRIMARY KEY",
       key: "TEXT UNIQUE NOT NULL",
+      // Non-reversible fingerprint of `key` (sha256 prefix). Usage rows store
+      // this instead of the raw key, so a DB file or backup never carries a
+      // team's secret in plain text. Additive.
+      keyRef: "TEXT",
       name: "TEXT",
       machineId: "TEXT",
       isActive: "INTEGER DEFAULT 1",
@@ -100,7 +104,10 @@ export const TABLES = {
       tpmWindowStart: "INTEGER DEFAULT 0",
       tpmTokenCount: "INTEGER DEFAULT 0",
     },
-    indexes: ["CREATE INDEX IF NOT EXISTS idx_ak_key ON apiKeys(key)"],
+    indexes: [
+      "CREATE INDEX IF NOT EXISTS idx_ak_key ON apiKeys(key)",
+      "CREATE INDEX IF NOT EXISTS idx_ak_keyref ON apiKeys(keyRef)",
+    ],
   },
   combos: {
     columns: {

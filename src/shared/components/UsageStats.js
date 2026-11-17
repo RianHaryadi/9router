@@ -88,6 +88,39 @@ function RecentRequests({ requests = [] }) {
   );
 }
 
+// Who is using the router RIGHT NOW, per API key (the "live" attribution).
+function ActiveByKey({ entries = [] }) {
+  if (!entries.length) return null;
+  return (
+    <Card className="flex min-w-0 flex-col overflow-hidden" padding="sm">
+      <div className="px-1 py-2 border-b-2 border-ink shrink-0 flex items-center gap-2">
+        <span className="text-xs font-semibold text-text-muted uppercase tracking-wide">Active Now</span>
+        <span className="text-xs text-text-muted">by API key</span>
+      </div>
+      <div className="overflow-y-auto max-h-[180px]">
+        <table className="w-full min-w-[240px] border-collapse text-xs">
+          <thead className="sticky top-0 bg-bg z-10">
+            <tr className="border-b-2 border-ink">
+              <th className="py-1.5 text-left font-semibold text-text-muted">Key</th>
+              <th className="py-1.5 text-left font-semibold text-text-muted">Model</th>
+              <th className="py-1.5 text-right font-semibold text-text-muted">In flight</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-border/50">
+            {entries.map((e, i) => (
+              <tr key={`${e.keyRef}-${e.model}-${i}`} className="hover:bg-bg-subtle transition-colors">
+                <td className="py-1.5 truncate max-w-[110px]" title={e.keyName}>{e.keyName}</td>
+                <td className="py-1.5 font-mono truncate max-w-[120px]" title={`${e.provider}/${e.model}`}>{e.model}</td>
+                <td className="py-1.5 text-right font-mono text-brand-700 dark:text-brand-300">{e.count}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </Card>
+  );
+}
+
 function sortData(dataMap, pendingMap = {}, sortBy, sortOrder) {
   return Object.entries(dataMap || {})
     .map(([key, data]) => {
@@ -293,6 +326,7 @@ export default function UsageStats({ period: periodProp, setPeriod: setPeriodPro
           return {
             ...prev,
             activeRequests: data.activeRequests,
+            activeByKey: data.activeByKey ?? prev.activeByKey,
             recentRequests: data.recentRequests,
             errorProvider: data.errorProvider,
             pending: data.pending,
@@ -483,6 +517,9 @@ export default function UsageStats({ period: periodProp, setPeriod: setPeriodPro
           <RecentRequests requests={stats.recentRequests || []} />
         </div>
       )}
+
+      {/* Who is using the router right now (per API key) */}
+      {loading ? null : <ActiveByKey entries={stats.activeByKey || []} />}
 
       {/* Token / Cost chart - sync period */}
       {loading ? spinner : <UsageChart period={period} />}

@@ -3,12 +3,16 @@ import { randomBytes } from "node:crypto";
 import { getAdapter } from "../driver.js";
 import { keyAccessFromColumns, keyAccessToColumns } from "@/shared/utils/keyAccess.js";
 import { KEY_ACCESS_UNRESTRICTED } from "@/shared/constants/keyAccess.js";
+import { apiKeyFingerprint } from "@/shared/utils/apiKeyFingerprint.js";
 
 function rowToKey(row) {
   if (!row) return null;
   return {
     id: row.id,
     key: row.key,
+    // Non-reversible id of the key. Usage rows store this instead of the raw
+    // key, so a DB file or backup never carries a team's secret in plain text.
+    keyRef: row.keyRef || apiKeyFingerprint(row.key),
     name: row.name,
     machineId: row.machineId,
     isActive: row.isActive === 1 || row.isActive === true,
@@ -53,8 +57,8 @@ export async function getDashboardChatApiKey() {
     // A fixed primary key makes concurrent first-use creation atomic.
     const key = `sk-${randomBytes(32).toString("hex")}`;
     db.run(
-      `INSERT OR IGNORE INTO apiKeys(id, key, name, machineId, isActive, createdAt) VALUES(?, ?, ?, ?, 1, ?)`,
-      [id, key, "Dashboard Basic Chat", "dashboardchat001", new Date().toISOString()]
+      `INSERT OR IGNORE INTO apiKeys(id, key, keyRef, name, machineId, isActive, createdAt) VALUES(?, ?, ?, ?, ?, 1, ?)`,
+      [id, key, apiKeyFingerprint(key), "Dashboard Basic Chat", "dashboardchat001", new Date().toISOString()]
     );
     row = db.get(`SELECT key, isActive FROM apiKeys WHERE id = ?`, [id]);
   }
@@ -71,6 +75,7 @@ export async function createApiKey(name, machineId) {
     id: uuidv4(),
     name,
     key: result.key,
+    keyRef: apiKeyFingerprint(result.key),
     machineId,
     isActive: true,
     createdAt: new Date().toISOString(),
@@ -80,8 +85,8 @@ export async function createApiKey(name, machineId) {
   };
   const cols = keyAccessToColumns(KEY_ACCESS_UNRESTRICTED);
   db.run(
-    `INSERT INTO apiKeys(id, key, name, machineId, isActive, createdAt, accessRestricted, accessAllow) VALUES(?, ?, ?, ?, ?, ?, ?, ?)`,
-    [apiKey.id, apiKey.key, apiKey.name, apiKey.machineId, 1, apiKey.createdAt, cols.accessRestricted, cols.accessAllow]
+    `INSERT INTO apiKeys(id, key, keyRef, name, machineId, isActive, createdAt, accessRestricted, accessAllow) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [apiKey.id, apiKey.key, apiKey.keyRef, apiKey.name, apiKey.machineId, 1, apiKey.createdAt, cols.accessRestricted, cols.accessAllow]
   );
   return apiKey;
 }
@@ -115,8 +120,8 @@ export async function updateApiKey(id, data) {
     const budgetSpentCents = row.budgetSpentCents != null ? row.budgetSpentCents : 0;
 
     db.run(
-      `UPDATE apiKeys SET key = ?, name = ?, machineId = ?, isActive = ?, accessRestricted = ?, accessAllow = ?, budgetLimitCents = ?, budgetPeriod = ?, budgetStartedAt = ?, budgetSpentCents = ?, rpmLimit = ?, tpmLimit = ? WHERE id = ?`,
-      [merged.key, merged.name, merged.machineId, merged.isActive ? 1 : 0, cols.accessRestricted, cols.accessAllow, budgetLimitCents, budgetPeriod, budgetStartedAt, budgetSpentCents, rpmLimit, tpmLimit, id]
+      `UPDATE apiKeys SET key = ?, keyRef = ?, name = ?, machineId = ?, isActive = ?, accessRestricted = ?, accessAllow = ?, budgetLimitCents = ?, budgetPeriod = ?, budgetStartedAt = ?, budgetSpentCents = ?, rpmLimit = ?, tpmLimit = ? WHERE id = ?`,
+      [merged.key, apiKeyFingerprint(merged.key), merged.name, merged.machineId, merged.isActive ? 1 : 0, cols.accessRestricted, cols.accessAllow, budgetLimitCents, budgetPeriod, budgetStartedAt, budgetSpentCents, rpmLimit, tpmLimit, id]
     );
     result = rowToKey(db.get(`SELECT * FROM apiKeys WHERE id = ?`, [id]));
   });

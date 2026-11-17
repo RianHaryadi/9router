@@ -291,7 +291,9 @@ describe("handleChat writes the fallback chain (real temp DB)", () => {
       provider: "openai",
       model: "model-a",
       connectionId: "conn-1",
-      apiKey: "sk-open",
+      // The stored row carries the key FINGERPRINT, never the raw key: a DB
+      // file or backup must not carry the team's secret.
+      apiKey: "360fe086f853eba4",
       fromProvider: "openai",
       fromModel: "model-a",
       status: 429,
@@ -347,7 +349,7 @@ describe("handleChat writes the fallback chain (real temp DB)", () => {
       fromModel: "model-b",
       status: 500,
       reason: "upstream error",
-      apiKey: "sk-open",
+      apiKey: "360fe086f853eba4",
     });
     expect(evt.requestId).toBe(snapshots[0].requestId);
     expect(snapshots[1].fallbackCount).toBe(1);
