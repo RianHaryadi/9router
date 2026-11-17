@@ -14,6 +14,7 @@ import { useCallback, useEffect, useState } from "react";
 import Card from "@/shared/components/Card";
 import Button from "@/shared/components/Button";
 import Input from "@/shared/components/Input";
+import { MEMBER_AREAS, MEMBER_BASE_AREAS } from "@/shared/constants/memberAreas";
 
 export default function TeamMembersCard() {
   const [members, setMembers] = useState([]);
@@ -165,6 +166,44 @@ export default function TeamMembersCard() {
                   }
                 }}
               />
+            </div>
+            <div className="flex flex-col gap-1">
+              <p className="text-xs font-medium text-text-muted">Can access</p>
+              <div className="flex flex-wrap gap-2">
+                {MEMBER_AREAS.map((area) => {
+                  const locked = MEMBER_BASE_AREAS.includes(area.id);
+                  const checked = locked || (member.areas || []).includes(area.id);
+                  return (
+                    <label
+                      key={area.id}
+                      title={area.hint}
+                      className={`flex items-center gap-1.5 rounded-lg border px-2 py-1 text-xs ${
+                        checked
+                          ? "border-brand-600/40 bg-brand-300/25 text-text-main"
+                          : "border-ink/10 text-text-muted dark:border-white/10"
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        disabled={locked}
+                        onChange={(e) => {
+                          const current = member.areas || [];
+                          const next = e.target.checked
+                            ? [...current, area.id]
+                            : current.filter((id) => id !== area.id);
+                          update(member.id, { areas: next });
+                        }}
+                        className="h-3.5 w-3.5 accent-[var(--color-brand-600)]"
+                      />
+                      {area.label}
+                    </label>
+                  );
+                })}
+              </div>
+              <p className="text-xs text-text-muted">
+                Takes effect immediately — the teammate does not have to sign in again.
+              </p>
             </div>
           </div>
         ))}

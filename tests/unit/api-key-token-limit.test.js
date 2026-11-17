@@ -105,8 +105,8 @@ describe("per-key fixed-window token limits", () => {
     const { adapter } = await boot();
     const { MIGRATIONS, latestVersion } = await import("@/lib/db/migrations/index.js");
     const { SCHEMA_VERSION } = await import("@/lib/db/schema.js");
-    expect(latestVersion()).toBe(10);
-    expect(SCHEMA_VERSION).toBe(10);
+    expect(latestVersion()).toBe(11);
+    expect(SCHEMA_VERSION).toBe(11);
     const cols = adapter.all("PRAGMA table_info(apiKeys)").map((r) => r.name);
     expect(cols).toEqual(expect.arrayContaining(["tpmLimit", "tpmWindowStart", "tpmTokenCount"]));
     const m003 = MIGRATIONS.find((m) => m.version === 8);

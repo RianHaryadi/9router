@@ -133,6 +133,10 @@ export async function POST(request) {
         // The key fingerprint this session is bound to. The chat route bills
         // the member's requests to exactly this key.
         keyRef: member?.keyRef || member?.apiKeyRef || null,
+        // The dashboard areas this member may reach. Read from the row at
+        // sign-in; the owner changes them from the dashboard, and the member
+        // signs in again to pick them up.
+        areas: member?.areas || [],
       });
 
       return NextResponse.json(

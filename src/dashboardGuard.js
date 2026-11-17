@@ -3,6 +3,12 @@ import { getSettings, validateApiKey } from "@/lib/localDb";
 import { getConsistentMachineId } from "@/shared/utils/machineId";
 import { verifyDashboardAuthToken, getDashboardAuthSession, dashboardRoleOf, DASHBOARD_ROLE_OWNER } from "@/lib/auth/dashboardSession";
 import { hasTrustedPeerHeaders } from "@/lib/auth/trustedPeer";
+import {
+  memberAreasOf,
+  OWNER_AREA_FOR_PATH,
+  API_AREA_FOR_PATH,
+  MEMBER_BASE_AREAS,
+} from "@/shared/constants/memberAreas.js";
 
 const CLI_TOKEN_HEADER = "x-9r-cli-token";
 const CLI_TOKEN_SALT = "9r-cli-auth";
@@ -72,31 +78,70 @@ const PROTECTED_API_PATHS = [
   "/api/tunnel",
 ];
 
-// Routes a MEMBER (teammate) may use. A member logs in with their own
-// password and may only chat — nothing else. Everything else is owner-only.
-//
-// The Basic Chat endpoints are the whole point of the member role: a
-// teammate gets a working chat box with the owner's models, without ever
-// seeing a key, a provider credential, the usage data or the settings.
+// Routes EVERY member may use, whatever areas the owner granted.
 const MEMBER_ALLOWED_PATHS = [
   "/api/auth/logout",
   "/api/auth/status",
   "/api/settings/require-login",
   "/api/dashboard/chat/completions",
-  "/api/models",
-  "/api/combos",
-  // The chat model picker needs the connection list and each connection's
-  // model catalog. Both routes answer with metadata only — the member
-  // never receives a credential (see toProviderConnectionResponse and the
-  // member filter in /api/providers).
-  "/api/providers",
 ];
 
-// Dashboard pages a member may open. Only Basic Chat — the rest of the
-// dashboard exposes keys, providers, usage and settings.
-const MEMBER_ALLOWED_PAGE_PREFIXES = [
-  "/dashboard/basic-chat",
-];
+/**
+ * The area an API path belongs to, or null when the path is owner-only.
+ * A path with no entry is owner-only: an unknown endpoint must not become
+ * reachable just because the member holds some area.
+ */
+function apiAreaFor(pathname) {
+  for (const [prefix, area] of Object.entries(API_AREA_FOR_PATH)) {
+    if (pathname === prefix || pathname.startsWith(prefix + "/")) return area;
+  }
+  return null;
+}
+
+/**
+ * The area a dashboard page belongs to, or null when the page is
+ * owner-only.
+ */
+function pageAreaFor(pathname) {
+  // Longest prefix first: /dashboard/media-providers/web must match its own
+  // entry, not /dashboard/media-providers.
+  const entries = Object.entries(OWNER_AREA_FOR_PATH).sort((a, b) => b[0].length - a[0].length);
+  for (const [prefix, area] of entries) {
+    if (pathname === prefix || pathname.startsWith(prefix + "/")) return area;
+  }
+  return null;
+}
+
+/** The areas a member holds in the given session. */
+export function areasOfSession(session) {
+  return memberAreasOf(session);
+}
+
+/**
+ * The areas a member holds RIGHT NOW.
+ *
+ * Read live from the member row rather than from the session claims: the
+ * owner grants or revokes an area in the dashboard, and it must take effect
+ * for the teammate without waiting for them to sign in again. The session
+ * claims are the fallback when the row cannot be read (fail closed: only the
+ * base areas).
+ */
+export async function liveAreasOf(request) {
+  const session = await getSession(request);
+  if (!session) return new Set(MEMBER_BASE_AREAS);
+  const memberId = session.userId || null;
+  if (!memberId) return memberAreasOf(session);
+  try {
+    const { getTeamMemberById } = await import("@/lib/db/repos/teamMembersRepo.js");
+    const member = await getTeamMemberById(memberId);
+    if (!member || member.isActive === false) return new Set(MEMBER_BASE_AREAS);
+    const areas = new Set(MEMBER_BASE_AREAS);
+    for (const id of member.areas || []) areas.add(id);
+    return areas;
+  } catch {
+    return memberAreasOf(session);
+  }
+}
 
 // Routes that spawn child processes or read host secrets — restrict to localhost.
 const LOCAL_ONLY_PATHS = [
@@ -267,7 +312,8 @@ export const __test__ = {
   canAccessPublicLlmApi,
   canAccessLocalOnlyRoute,
   MEMBER_ALLOWED_PATHS,
-  MEMBER_ALLOWED_PAGE_PREFIXES,
+  apiAreaFor,
+  pageAreaFor,
 };
 
 export async function proxy(request) {
@@ -301,11 +347,13 @@ export async function proxy(request) {
       // A teammate member may only use the chat endpoints. Everything else
       // (keys, providers, usage, settings) is owner-only.
       if (await isMemberSession(request)) {
-        const allowed = MEMBER_ALLOWED_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`));
-        // A member may only READ the provider/model metadata; every mutating
-        // verb is owner-only.
+        const alwaysAllowed = MEMBER_ALLOWED_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`));
+        const area = apiAreaFor(pathname);
+        const hasArea = area ? (await liveAreasOf(request)).has(area) : false;
+        // A member may only READ the endpoints of the areas the owner
+        // granted; every mutating verb is owner-only.
         const readOnly = request.method === "GET" || request.method === "HEAD";
-        if (!allowed || (!readOnly && !pathname.startsWith("/api/dashboard/chat/"))) {
+        if (!alwaysAllowed && !(readOnly && hasArea)) {
           return NextResponse.json({ error: "Forbidden" }, { status: 403 });
         }
       }
@@ -346,10 +394,16 @@ export async function proxy(request) {
     const token = request.cookies.get("auth_token")?.value;
     if (token) {
       if (await verifyDashboardAuthToken(token)) {
-        // A teammate member may only open Basic Chat; every other dashboard
-        // page exposes keys, providers, usage or settings.
-        if (await isMemberSession(request) && !MEMBER_ALLOWED_PAGE_PREFIXES.some((p) => pathname.startsWith(p))) {
-          return NextResponse.redirect(new URL("/dashboard/basic-chat", request.url));
+        // A teammate member may only open the pages of the areas the owner
+        // granted; anything else bounces them to the first page they do
+        // have.
+        if (await isMemberSession(request)) {
+          const areas = await liveAreasOf(request);
+          const area = pageAreaFor(pathname);
+          if (!area || !areas.has(area)) {
+            const fallback = MEMBER_BASE_AREAS.map((a) => OWNER_AREA_FOR_PATH[`/dashboard/${a}`]).find(Boolean);
+            return NextResponse.redirect(new URL(fallback || "/dashboard/basic-chat", request.url));
+          }
         }
         return NextResponse.next();
       } else {

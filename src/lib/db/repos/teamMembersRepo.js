@@ -11,6 +11,30 @@
 import { v4 as uuidv4 } from "uuid";
 import bcrypt from "bcryptjs";
 import { getAdapter } from "../driver.js";
+import { MEMBER_AREA_IDS } from "@/shared/constants/memberAreas.js";
+
+/** Keep only known area ids; an empty list means chat-only access. */
+function normalizeAreas(list) {
+  if (!Array.isArray(list)) return [];
+  const seen = new Set();
+  for (const id of list) {
+    if (typeof id !== "string") continue;
+    const area = id.trim();
+    if (!MEMBER_AREA_IDS.includes(area)) continue;
+    seen.add(area);
+  }
+  return [...seen];
+}
+
+function parseAreas(raw) {
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
 
 function rowToMember(row) {
   if (!row) return null;
@@ -23,6 +47,8 @@ function rowToMember(row) {
     apiKeyRef: row.apiKeyRef || null,
     // Alias: the session claim is called keyRef everywhere.
     keyRef: row.apiKeyRef || null,
+    // The dashboard areas this member may reach.
+    areas: normalizeAreas(parseAreas(row.areas)),
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   };
@@ -52,19 +78,21 @@ export async function createTeamMember(data = {}) {
   }
   const db = await getAdapter();
   const now = new Date().toISOString();
+  const areas = normalizeAreas(data.areas);
   const member = {
     id: uuidv4(),
     name,
     passwordHash: await bcrypt.hash(String(data.password), 10),
     apiKeyRef: data.apiKeyRef || null,
+    areas: JSON.stringify(areas),
     isActive: true,
     createdAt: now,
     updatedAt: now,
   };
   db.run(
-    `INSERT INTO teamMembers(id, name, passwordHash, apiKeyRef, isActive, createdAt, updatedAt)
-     VALUES(?, ?, ?, ?, 1, ?, ?)`,
-    [member.id, member.name, member.passwordHash, member.apiKeyRef, member.createdAt, member.updatedAt]
+    `INSERT INTO teamMembers(id, name, passwordHash, apiKeyRef, areas, isActive, createdAt, updatedAt)
+     VALUES(?, ?, ?, ?, ?, 1, ?, ?)`,
+    [member.id, member.name, member.passwordHash, member.apiKeyRef, member.areas, member.createdAt, member.updatedAt]
   );
   return rowToMember(member);
 }
@@ -82,6 +110,7 @@ export async function updateTeamMember(id, data = {}) {
     next.name = name;
   }
   if (data.apiKeyRef !== undefined) next.apiKeyRef = data.apiKeyRef;
+  if (data.areas !== undefined) next.areas = normalizeAreas(data.areas);
   if (data.isActive !== undefined) next.isActive = data.isActive === true;
   next.updatedAt = new Date().toISOString();
 
@@ -90,8 +119,8 @@ export async function updateTeamMember(id, data = {}) {
     : row.passwordHash;
 
   db.run(
-    `UPDATE teamMembers SET name = ?, apiKeyRef = ?, isActive = ?, passwordHash = ?, updatedAt = ? WHERE id = ?`,
-    [next.name, next.apiKeyRef, next.isActive ? 1 : 0, passwordHash, next.updatedAt, id]
+    `UPDATE teamMembers SET name = ?, apiKeyRef = ?, areas = ?, isActive = ?, passwordHash = ?, updatedAt = ? WHERE id = ?`,
+    [next.name, next.apiKeyRef, JSON.stringify(next.areas), next.isActive ? 1 : 0, passwordHash, next.updatedAt, id]
   );
   return rowToMember(db.get(`SELECT * FROM teamMembers WHERE id = ?`, [id]));
 }

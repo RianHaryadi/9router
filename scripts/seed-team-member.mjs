@@ -132,20 +132,21 @@ for (const member of members) {
     await api("/api/team/members", {
       method: "PUT",
       headers: auth,
-      body: JSON.stringify({ id: prior.id, password: member.password, apiKeyRef: key.keyRef, isActive: true }),
+      body: JSON.stringify({ id: prior.id, password: member.password, apiKeyRef: key.keyRef, areas: member.areas || [], isActive: true }),
     });
     console.log(`[${name}] updated member ${prior.id}`);
   } else {
     const created = await api("/api/team/members", {
       method: "POST",
       headers: auth,
-      body: JSON.stringify({ name, password: member.password, apiKeyRef: key.keyRef }),
+      body: JSON.stringify({ name, password: member.password, apiKeyRef: key.keyRef, areas: member.areas || [] }),
     });
     console.log(`[${name}] created member ${created.member.id}`);
   }
 
   const budget = budgetCents === null ? "unlimited" : `$${(budgetCents / 100).toFixed(2)}/month`;
-  console.log(`  allowed: ${allow.join(", ") || "(nothing)"}`);
+  console.log(`  allowed models: ${allow.join(", ") || "(nothing)"}`);
+  console.log(`  dashboard areas: ${(member.areas || []).join(", ") || "(chat only)"}`);
   console.log(`  budget: ${budget} | rpm ${rpm || "unlimited"} | tpm ${tpm || "unlimited"}`);
   console.log(`  login: they type the password only — the key stays server-side\n`);
 }

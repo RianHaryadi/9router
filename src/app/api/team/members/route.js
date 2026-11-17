@@ -35,11 +35,11 @@ export async function POST(request) {
   }
   try {
     const body = await request.json();
-    const { name, password, apiKeyRef } = body;
+    const { name, password, apiKeyRef, areas } = body;
     if (!name || !password) {
       return NextResponse.json({ error: "Name and password are required" }, { status: 400 });
     }
-    const member = await createTeamMember({ name, password, apiKeyRef });
+    const member = await createTeamMember({ name, password, apiKeyRef, areas });
     return NextResponse.json({ member }, { status: 201 });
   } catch (error) {
     return NextResponse.json({ error: error?.message || "Failed to add teammate" }, { status: 400 });
@@ -57,8 +57,8 @@ export async function PUT(request) {
     if (!id) {
       return NextResponse.json({ error: "id is required" }, { status: 400 });
     }
-    const { name, password, apiKeyRef, isActive } = body;
-    const member = await updateTeamMember(id, { name, password, apiKeyRef, isActive });
+    const { name, password, apiKeyRef, areas, isActive } = body;
+    const member = await updateTeamMember(id, { name, password, apiKeyRef, areas, isActive });
     if (!member) {
       return NextResponse.json({ error: "Teammate not found" }, { status: 404 });
     }

@@ -3,7 +3,7 @@
 // pre-change safety backup in migrate.js: when the stored version is lower,
 // one lightweight DB backup is taken before applying schema changes. Forgetting
 // to bump only skips that backup — it does NOT break the additive auto-sync.
-export const SCHEMA_VERSION = 10;
+export const SCHEMA_VERSION = 11;
 
 export const PRAGMA_SQL = `
 PRAGMA journal_mode = WAL;
@@ -223,6 +223,9 @@ export const TABLES = {
       // never sees the key — it stays server-side, so a leaked password
       // grants chat access and nothing else.
       apiKeyRef: "TEXT",
+      // The dashboard areas this member may reach, as a JSON array of area
+      // ids (see shared/constants/memberAreas.js). Empty = chat only.
+      areas: "TEXT",
       isActive: "INTEGER DEFAULT 1",
       createdAt: "TEXT NOT NULL",
       updatedAt: "TEXT NOT NULL",

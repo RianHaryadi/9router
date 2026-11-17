@@ -4,6 +4,28 @@ import { getSettings } from "@/lib/localDb";
 import { isOidcConfigured } from "@/lib/auth/oidc";
 import { isSamlConfigured } from "@/lib/auth/saml.js";
 import { getDashboardAuthSession, dashboardRoleOf } from "@/lib/auth/dashboardSession";
+import { MEMBER_BASE_AREAS } from "@/shared/constants/memberAreas";
+
+/**
+ * The areas the signed-in member may reach.
+ * Read live from the member row: the owner grants an area in the dashboard
+ * and it must show up for the teammate right away.
+ */
+async function memberAreasForStatus(session) {
+  if (dashboardRoleOf(session) === "owner") return [];
+  const areas = new Set(MEMBER_BASE_AREAS);
+  const memberId = session?.userId || null;
+  if (!memberId) return [...areas];
+  try {
+    const { getTeamMemberById } = await import("@/lib/db/repos/teamMembersRepo.js");
+    const member = await getTeamMemberById(memberId);
+    if (!member || member.isActive === false) return [...areas];
+    for (const id of member.areas || []) areas.add(id);
+  } catch {
+    /* fail closed: base areas only */
+  }
+  return [...areas];
+}
 
 export async function GET() {
   try {
@@ -39,6 +61,9 @@ export async function GET() {
       hasPassword: !!settings.password,
       role: session ? dashboardRoleOf(session) : null,
       username: session?.username || null,
+      // The areas the member may reach, read live so a grant takes effect
+      // without waiting for the teammate to sign in again.
+      areas: session ? await memberAreasForStatus(session) : [],
       displayName,
       loginMethod,
       authenticated: !!session,

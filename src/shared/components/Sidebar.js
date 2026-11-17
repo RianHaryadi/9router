@@ -10,6 +10,7 @@ import { MEDIA_PROVIDER_KINDS } from "@/shared/constants/providers";
 import { useCopyToClipboard } from "@/shared/hooks/useCopyToClipboard";
 import useSettingsStore from "@/store/settingsStore";
 import useSessionStore from "@/store/sessionStore";
+import { AREA_FOR_NAV } from "@/shared/constants/memberAreas";
 import Button from "./Button";
 import { ConfirmModal } from "./Modal";
 
@@ -42,12 +43,10 @@ const systemItems = [
   { href: "/dashboard/skills", label: "Skills", icon: "extension" },
 ];
 
-// A teammate member may only use Basic Chat — hide everything else.
-const MEMBER_NAV_ITEMS = [{ href: "/dashboard/basic-chat", label: "Basic Chat", icon: "chat" }];
-
 export default function Sidebar({ onClose }) {
   const pathname = usePathname();
   const role = useSessionStore((s) => s.role);
+  const areas = useSessionStore((s) => s.areas);
   const fetchSession = useSessionStore((s) => s.fetchSession);
 
   useEffect(() => {
@@ -55,7 +54,15 @@ export default function Sidebar({ onClose }) {
   }, [fetchSession]);
 
   const isMember = role === "member";
-  const visibleNavItems = isMember ? MEMBER_NAV_ITEMS : navItems;
+  // A teammate member sees only the nav entries of the areas the owner
+  // granted. The server enforces the same rule — this only hides what is
+  // already refused.
+  const visibleNavItems = isMember
+    ? navItems.filter((item) => {
+        const area = AREA_FOR_NAV[item.href];
+        return area && areas.includes(area);
+      })
+    : navItems;
   const [mediaOpen, setMediaOpen] = useState(false);
   const [isDisconnected, setIsDisconnected] = useState(false);
   const [updateInfo, setUpdateInfo] = useState(null);

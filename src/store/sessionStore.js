@@ -16,6 +16,8 @@ const useSessionStore = create((set, get) => ({
   role: null,
   username: null,
   displayName: "",
+  // The dashboard areas the member may reach (empty for the owner).
+  areas: [],
   loading: false,
   loaded: false,
 
@@ -31,6 +33,7 @@ const useSessionStore = create((set, get) => ({
           role: data.role || null,
           username: data.username || null,
           displayName: data.displayName || "",
+          areas: Array.isArray(data.areas) ? data.areas : [],
           loading: false,
           loaded: true,
         });
@@ -45,7 +48,7 @@ const useSessionStore = create((set, get) => ({
     return inFlight;
   },
 
-  reset: () => set({ role: null, username: null, displayName: "", loaded: false }),
+  reset: () => set({ role: null, username: null, displayName: "", areas: [], loaded: false }),
 }));
 
 export default useSessionStore;
