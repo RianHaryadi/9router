@@ -299,6 +299,12 @@ async function isAuthenticated(request) {
 
 function isPublicApi(pathname) {
   if (isPublicLlmApi(pathname)) return true;
+  // /api/health is public (endpoint ping, tunnel health check, CORS), but its
+  // sub-routes expose provider internals — the matrix lists every provider,
+  // account and model state. A prefix match would publish them, so the
+  // health subtree is matched exactly, not by prefix.
+  if (pathname === "/api/health" || pathname === "/api/health/") return true;
+  if (pathname.startsWith("/api/health/")) return false;
   return PUBLIC_API_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`));
 }
 
@@ -314,6 +320,7 @@ export const __test__ = {
   MEMBER_ALLOWED_PATHS,
   apiAreaFor,
   pageAreaFor,
+  isPublicApi,
 };
 
 export async function proxy(request) {
@@ -343,6 +350,11 @@ export async function proxy(request) {
   // Deny-by-default for /api/* — public allow-list bypasses, everything else requires auth.
   if (pathname.startsWith("/api/")) {
     if (isPublicApi(pathname)) return NextResponse.next();
+    // The owner and the CLI keep unrestricted access to the health subtree
+    // (the matrix is the operator's own view of the router's state).
+    if (pathname.startsWith("/api/health/") && (await hasValidCliToken(request) || (await isAuthenticated(request) && (await isOwnerSession(request))))) {
+      return NextResponse.next();
+    }
     if (await hasValidCliToken(request) || await isAuthenticated(request)) {
       // A teammate member may only use the chat endpoints. Everything else
       // (keys, providers, usage, settings) is owner-only.

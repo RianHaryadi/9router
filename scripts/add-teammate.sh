@@ -6,20 +6,25 @@
 # value never reaches them — the dashboard injects it server-side.
 #
 # Usage:
-#   bash add-teammate.sh <ownerPassword> <name> <memberPassword> <model|combo> [budgetCents]
+#   bash scripts/add-teammate.sh <ownerPassword> <name> <memberPassword> <model|combo> [budgetCents] [areas]
 #
 # Examples:
-#   bash add-teammate.sh 'OWNER' andi 'andi-pass-123' 'Code-Freee' 500
-#   bash add-teammate.sh 'OWNER' siti 'siti-pass-456' 'Code-Freee,Coding-Mantap' 2000
+#   bash scripts/add-teammate.sh 'OWNER' andi 'andi-pass-123' 'Code-Freee' 500
+#   bash scripts/add-teammate.sh 'OWNER' siti 'siti-pass-456' 'Code-Freee,Coding-Mantap' 2000
+#   bash scripts/add-teammate.sh 'OWNER' rudi 'rudi-pass-789' 'Code-Freee' null 'usage,combos'
 #
 # budgetCents: monthly budget in cents (null = unlimited). Default 500 ($5).
+#
+# areas: comma-separated dashboard areas the teammate may reach. Empty (default)
+#        = chat only. Available: usage, combos, prompts, health, quota,
+#        providers, endpoint  (basic-chat is always granted).
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-OWNER="$1"; NAME="$2"; MEMBER_PW="$3"; MODELS="$4"; BUDGET="${5:-500}"
+OWNER="$1"; NAME="$2"; MEMBER_PW="$3"; MODELS="$4"; BUDGET="${5:-500}"; AREAS="${6:-}"
 
 if [ -z "$OWNER" ] || [ -z "$NAME" ] || [ -z "$MEMBER_PW" ] || [ -z "$MODELS" ]; then
-  echo "Usage: bash add-teammate.sh <ownerPassword> <name> <memberPassword> <models> [budgetCents]"
+  echo "Usage: bash scripts/add-teammate.sh <ownerPassword> <name> <memberPassword> <models> [budgetCents] [areas]"
   exit 2
 fi
 
@@ -35,10 +40,15 @@ v=sys.argv[1]
 print('null' if v.lower() in ('null','unlimited','') else str(int(v)))
 " "$BUDGET")
 
+AREAS_JSON=$(python3 -c "
+import json,sys
+print(json.dumps([a.strip() for a in sys.argv[1].split(',') if a.strip()]))
+" "$AREAS")
+
 export NINEROUTER_URL="https://9router.aidonext.com"
 export NINEROUTER_PASSWORD="$OWNER"
 
 node scripts/seed-team-member.mjs \
   --url "$NINEROUTER_URL" \
   --password "$OWNER" \
-  --member "{\"name\":\"$NAME\",\"password\":\"$MEMBER_PW\",\"allow\":$ALLOW_JSON,\"budgetCents\":$BUDGET_JSON,\"rpm\":0,\"tpm\":0}"
+  --member "{\"name\":\"$NAME\",\"password\":\"$MEMBER_PW\",\"allow\":$ALLOW_JSON,\"budgetCents\":$BUDGET_JSON,\"rpm\":0,\"tpm\":0,\"areas\":$AREAS_JSON}"

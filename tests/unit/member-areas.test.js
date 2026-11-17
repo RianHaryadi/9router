@@ -96,6 +96,18 @@ describe("area mapping", () => {
     expect(__test__.pageAreaFor("/dashboard/unknown")).toBeNull();
   });
 
+  it("keeps the health subtree out of the public list", async () => {
+    const { __test__ } = await import("../../src/dashboardGuard.js");
+    // /api/health is public; the matrix and breaker expose provider
+    // internals, so they need the health area.
+    expect(__test__.isPublicApi("/api/health")).toBe(true);
+    expect(__test__.isPublicApi("/api/health/matrix")).toBe(false);
+    expect(__test__.isPublicApi("/api/health/breaker")).toBe(false);
+    // The health area covers the sub-routes.
+    expect(__test__.apiAreaFor("/api/health/matrix")).toBe("health");
+    expect(__test__.apiAreaFor("/api/health/breaker")).toBe("health");
+  });
+
   it("always grants the base areas and only known areas", async () => {
     const { memberAreasOf, MEMBER_AREA_IDS } = await import("../../src/shared/constants/memberAreas.js");
 
