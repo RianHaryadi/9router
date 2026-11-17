@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getSettings, verifyDashboardUserPassword } from "@/lib/localDb";
+import { getSettings, getApiKeyByKey } from "@/lib/localDb";
 import bcrypt from "bcryptjs";
 import { cookies } from "next/headers";
 import { setDashboardAuthCookie, DASHBOARD_ROLE_OWNER, DASHBOARD_ROLE_MEMBER } from "@/lib/auth/dashboardSession";
@@ -29,7 +29,7 @@ export async function POST(request) {
       );
     }
 
-    const { password, username } = await request.json();
+    const { password, username, apiKey } = await request.json();
     const settings = await getSettings();
 
     // Block login via tunnel/tailscale if dashboard access is disabled
@@ -51,27 +51,27 @@ export async function POST(request) {
     let member = null;
     let role = DASHBOARD_ROLE_OWNER;
 
-    if (username) {
-      // ── Teammate login ──────────────────────────────────────────────
-      // A username selects a teammate account (their own password). The
-      // owner keeps using the shared dashboard password WITHOUT a username,
-      // so an existing install logs in exactly as before.
-      member = await verifyDashboardUserPassword(username, password);
-      isValid = !!member;
-      if (!isValid) {
+    if (apiKey) {
+      // ── Key sign-in ────────────────────────────────────────────────
+      // A teammate signs in with their API key. The key IS the identity:
+      // the session is bound to the key's fingerprint, so every request
+      // they make is billed to THAT key and is subject to THAT key's
+      // allow-list, budget and rate limits. No separate user table, no
+      // second password to leak.
+      const record = await getApiKeyByKey(String(apiKey).trim());
+      if (!record || record.isActive === false) {
         const { remainingBeforeLock } = recordFail(ip);
-        const postLock = checkLock(ip);
-        if (postLock.locked) {
-          return NextResponse.json(
-            { error: `Too many failed attempts. Try again in ${postLock.retryAfter}s. ${RESET_HINT}`, retryAfter: postLock.retryAfter, resetHint: RESET_HINT },
-            { status: 429, headers: { "Retry-After": String(postLock.retryAfter) } }
-          );
-        }
         return NextResponse.json(
-          { error: `Invalid credentials. ${remainingBeforeLock} attempt(s) left before lockout.`, remainingBeforeLock },
+          { error: `Invalid API key. ${remainingBeforeLock} attempt(s) left before lockout.`, remainingBeforeLock },
           { status: 401 }
         );
       }
+      member = {
+        id: null,
+        username: record.name || null,
+        keyRef: record.keyRef,
+      };
+      isValid = true;
       role = DASHBOARD_ROLE_MEMBER;
     } else {
       // Default password is '123456' if not set
@@ -118,6 +118,9 @@ export async function POST(request) {
         role,
         userId: member?.id || null,
         username: member?.username || null,
+        // The key fingerprint this session is bound to. The chat route bills
+        // the member's requests to exactly this key.
+        keyRef: member?.keyRef || null,
       });
 
       return NextResponse.json(

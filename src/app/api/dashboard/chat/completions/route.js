@@ -1,7 +1,25 @@
 import { isAuthenticated, getSession } from "@/dashboardGuard";
 import { dashboardRoleOf, DASHBOARD_ROLE_OWNER } from "@/lib/auth/dashboardSession";
-import { getDashboardUserApiKey } from "@/lib/localDb";
+import { getApiKeys } from "@/lib/localDb";
 import { dispatchDashboardChat } from "@/custom/wiring/dashboardChat.js";
+
+/**
+ * The raw key behind a session's key fingerprint.
+ *
+ * Only the server ever sees the raw value: the browser holds a JWT that
+ * carries the fingerprint, and the fingerprint is resolved back to the key
+ * here on every request.
+ */
+async function resolveSessionKey(keyRef) {
+  if (!keyRef) return null;
+  try {
+    const keys = await getApiKeys();
+    const match = keys.find((k) => k.keyRef === keyRef && k.isActive !== false);
+    return match?.key || null;
+  } catch {
+    return null;
+  }
+}
 
 export async function POST(request) {
   // Authenticate here too: never rely only on middleware for key injection.
@@ -14,13 +32,13 @@ export async function POST(request) {
   // keep using the server-managed key.
   const session = await getSession(request);
   if (session && dashboardRoleOf(session) !== DASHBOARD_ROLE_OWNER) {
-    const key = await getDashboardUserApiKey({
-      id: session.userId,
-      apiKeyRef: session.apiKeyRef || null,
-    });
+    // The member signed in with an API key: resolve THAT key from the
+    // session's fingerprint so their requests are billed to it and its
+    // allow-list / budget / rate limits apply.
+    const key = await resolveSessionKey(session.keyRef);
     if (!key) {
       return Response.json(
-        { error: { message: "Your account has no API key assigned. Ask the owner to assign one." } },
+        { error: { message: "Your API key is no longer valid. Ask the owner for a new one." } },
         { status: 403 }
       );
     }

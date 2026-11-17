@@ -41,10 +41,9 @@ export async function createDashboardAuthToken(claims = {}) {
 /**
  * The role of the current dashboard session.
  *
- * "owner" = the machine owner (settings.password). "member" = a teammate with
- * their own account, limited to Basic Chat. Unknown/absent → "member"
- * (fails closed: a session without a role claim must never be treated as
- * the owner).
+ * "owner" = the machine owner (settings.password). "member" = a teammate who
+ * signed in with an API KEY. Unknown/absent → "member" (fails closed: a
+ * session without a role claim must never be treated as the owner).
  */
 export const DASHBOARD_ROLE_OWNER = "owner";
 export const DASHBOARD_ROLE_MEMBER = "member";

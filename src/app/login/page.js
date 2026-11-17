@@ -6,8 +6,8 @@ import { Card, Button, Input } from "@/shared/components";
 export default function LoginPage() {
   const [password, setPassword] = useState("");
   // Empty = the owner (shared dashboard password). Filled = a teammate
-  // account with its own password.
-  const [username, setUsername] = useState("");
+  // signing in with their API key.
+  const [apiKey, setApiKey] = useState("");
   const [error, setError] = useState("");
   const [resetHint, setResetHint] = useState("");
   const [retryAfter, setRetryAfter] = useState(0);
@@ -76,8 +76,9 @@ export default function LoginPage() {
       const res = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(username.trim() ? { password, username: username.trim() } : { password }),
+        body: JSON.stringify(apiKey.trim() ? { apiKey: apiKey.trim() } : { password }),
       });
+
 
       if (res.ok) {
         const data = await res.json();
@@ -221,24 +222,23 @@ export default function LoginPage() {
                 )}
 
                 <div className="flex flex-col gap-2">
-                  <label className="text-sm font-medium">Username <span className="text-text-muted font-normal">(teammate only)</span></label>
+                  <label className="text-sm font-medium">API key <span className="text-text-muted font-normal">(teammate)</span></label>
                   <Input
-                    type="text"
-                    placeholder="Leave empty for the owner account"
-                    value={username}
-                    onChange={(e) => setUsername(e.target.value)}
-                    autoComplete="username"
+                    type="password"
+                    placeholder="Teammate: paste your API key here"
+                    value={apiKey}
+                    onChange={(e) => setApiKey(e.target.value)}
+                    autoComplete="off"
                   />
                 </div>
 
                 <div className="flex flex-col gap-2">
-                  <label className="text-sm font-medium">Password</label>
+                  <label className="text-sm font-medium">Password <span className="text-text-muted font-normal">(owner)</span></label>
                   <Input
                     type="password"
-                    placeholder="Enter password"
+                    placeholder="Owner: enter your dashboard password"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    required
                     autoFocus={!oidcAvailable}
                   />
                   {error && <p className="text-xs text-danger">{error}</p>}
@@ -259,7 +259,7 @@ export default function LoginPage() {
                   variant="primary"
                   className="w-full"
                   loading={loading}
-                  disabled={retryAfter > 0}
+                  disabled={retryAfter > 0 || (!apiKey.trim() && !password)}
                 >
                   {retryAfter > 0 ? `Wait ${retryAfter}s` : "Login"}
                 </Button>

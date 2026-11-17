@@ -10,7 +10,8 @@ import { APIKEY_PROVIDERS } from "@/shared/constants/config";
 import { AI_PROVIDERS, FREE_TIER_PROVIDERS, WEB_COOKIE_PROVIDERS, isOpenAICompatibleProvider, isAnthropicCompatibleProvider, isCustomEmbeddingProvider } from "@/shared/constants/providers";
 import { normalizeProviderId, normalizeProviderSpecificData } from "@/lib/providerNormalization";
 import { toProviderConnectionResponse } from "@/lib/providerConnectionResponse";
-import { isMemberSession } from "@/dashboardGuard";
+import { isMemberSession, getSession } from "@/dashboardGuard";
+import { getApiKeys } from "@/lib/localDb";
 
 export const dynamic = "force-dynamic";
 
@@ -48,6 +49,53 @@ async function normalizeProxyPoolId(proxyPoolId) {
   return { proxyPoolId: normalizedId };
 }
 
+/**
+ * The connections a key may reach.
+ *
+ * The key's allow-list is the same list that gates /v1 calls, so the model
+ * picker and the router agree: a member sees exactly what their key allows.
+ * A combo name expands to the providers of its members.
+ */
+async function filterConnectionsForKey(connections, apiKey) {
+  if (!apiKey) return [];
+  try {
+    const { accessContextForKey } = await import("@/sse/services/keyAccess.js");
+    const { getCombos } = await import("@/lib/localDb.js");
+    const ctx = await accessContextForKey(apiKey);
+    // An unrestricted key sees everything (same rule as the router).
+    if (!ctx) return connections;
+
+    const allow = (ctx.allow || []).map((e) => String(e).toLowerCase());
+    const combos = await getCombos();
+    const providers = new Set();
+
+    for (const entry of ctx.allow) {
+      const lower = String(entry).toLowerCase();
+      // A combo name → its members' providers.
+      const combo = combos.find((c) => String(c.name).toLowerCase() === lower);
+      if (combo) {
+        for (const seat of combo.models || []) {
+          const slash = seat.indexOf("/");
+          if (slash > 0) providers.add(seat.slice(0, slash).toLowerCase());
+        }
+        continue;
+      }
+      // "provider/model" → that provider.
+      const slash = entry.indexOf("/");
+      if (slash > 0) {
+        providers.add(entry.slice(0, slash).toLowerCase());
+        continue;
+      }
+      // A bare provider id.
+      providers.add(lower);
+    }
+
+    return connections.filter((c) => providers.has(String(c.provider || "").toLowerCase()));
+  } catch {
+    return [];
+  }
+}
+
 // GET /api/providers - List all connections
 export async function GET(request) {
   try {
@@ -65,10 +113,33 @@ export async function GET(request) {
     // A teammate member may read the connection list (the chat model picker
     // needs it) but must not learn anything about the owner's accounts:
     // no email, no status, no errors, no ids beyond the provider id.
+    //
+    // They also only see the PROVIDERS their own key may reach — the key's
+    // allow-list decides what the picker offers, exactly like it decides
+    // what the key may call.
     const isMember = await isMemberSession(request);
+    let memberKey = null;
+    if (isMember) {
+      const session = await getSession(request);
+      const ref = session?.keyRef || null;
+      if (ref) {
+        try {
+          const keys = await getApiKeys();
+          memberKey = keys.find((k) => k.keyRef === ref && k.isActive !== false)?.key || null;
+        } catch { memberKey = null; }
+      }
+    }
+
+    // A member only sees the providers their key may reach. The allow-list
+    // holds either "provider/model" entries or combo names; a combo expands to
+    // its members' providers.
+    let visibleConnections = connections;
+    if (isMember) {
+      visibleConnections = await filterConnectionsForKey(connections, memberKey);
+    }
 
     // Hide sensitive fields, enrich name for compatible providers
-    const safeConnections = connections.map(c => {
+    const safeConnections = visibleConnections.map(c => {
       const isCompatible = isOpenAICompatibleProvider(c.provider) || isAnthropicCompatibleProvider(c.provider);
       const name = isCompatible
         ? (c.name || nodeNameMap[c.provider] || c.providerSpecificData?.nodeName || c.provider)
