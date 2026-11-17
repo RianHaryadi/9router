@@ -216,7 +216,7 @@ async function hasValidToken(request) {
  * @returns {Promise<object|null>}
  */
 export async function getSession(request) {
-  const token = request.cookies.get("auth_token")?.value;
+  const token = request?.cookies?.get?.("auth_token")?.value;
   return await getDashboardAuthSession(token);
 }
 
@@ -229,6 +229,8 @@ export async function isOwnerSession(request) {
 
 /** True when the request carries a teammate member session. */
 export async function isMemberSession(request) {
+  // A caller without a cookie jar (a direct route invocation) is not a member.
+  if (!request?.cookies?.get) return false;
   const session = await getSession(request);
   if (!session) return false;
   return dashboardRoleOf(session) !== DASHBOARD_ROLE_OWNER;

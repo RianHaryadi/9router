@@ -61,13 +61,23 @@ async function filterConnectionsForKey(connections, apiKey) {
   try {
     const { accessContextForKey } = await import("@/sse/services/keyAccess.js");
     const { getCombos } = await import("@/lib/localDb.js");
+    const { resolveProviderId } = await import("@/shared/constants/providers.js");
     const ctx = await accessContextForKey(apiKey);
     // An unrestricted key sees everything (same rule as the router).
     if (!ctx) return connections;
 
-    const allow = (ctx.allow || []).map((e) => String(e).toLowerCase());
     const combos = await getCombos();
+    // Provider IDs the key may reach. An allow-list entry names a combo, a
+    // "provider/model" pair or a bare provider — and a combo's seats are
+    // written with the transport ALIAS ("oc/…"), while a connection row
+    // carries the provider ID ("opencode-go"). Both sides are resolved to the
+    // provider ID so the two meet.
     const providers = new Set();
+    const addProvider = (name) => {
+      if (!name) return;
+      providers.add(String(resolveProviderId(name)).toLowerCase());
+      providers.add(String(name).toLowerCase());
+    };
 
     for (const entry of ctx.allow) {
       const lower = String(entry).toLowerCase();
@@ -76,21 +86,24 @@ async function filterConnectionsForKey(connections, apiKey) {
       if (combo) {
         for (const seat of combo.models || []) {
           const slash = seat.indexOf("/");
-          if (slash > 0) providers.add(seat.slice(0, slash).toLowerCase());
+          if (slash > 0) addProvider(seat.slice(0, slash));
         }
         continue;
       }
       // "provider/model" → that provider.
       const slash = entry.indexOf("/");
       if (slash > 0) {
-        providers.add(entry.slice(0, slash).toLowerCase());
+        addProvider(entry.slice(0, slash));
         continue;
       }
-      // A bare provider id.
-      providers.add(lower);
+      // A bare provider id or alias.
+      addProvider(lower);
     }
 
-    return connections.filter((c) => providers.has(String(c.provider || "").toLowerCase()));
+    return connections.filter((c) => {
+      const provider = String(c.provider || "").toLowerCase();
+      return providers.has(provider) || providers.has(String(resolveProviderId(c.provider || "")).toLowerCase());
+    });
   } catch {
     return [];
   }

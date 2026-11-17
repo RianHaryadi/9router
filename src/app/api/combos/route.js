@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { getCombos, createCombo, getComboByName } from "@/lib/localDb";
+import { getCombos, createCombo, getComboByName, getApiKeys } from "@/lib/localDb";
+import { isMemberSession, getSession } from "@/dashboardGuard";
 
 export const dynamic = "force-dynamic";
 
@@ -7,9 +8,32 @@ export const dynamic = "force-dynamic";
 const VALID_NAME_REGEX = /^[a-zA-Z0-9_.\-]+$/;
 
 // GET /api/combos - Get all combos
-export async function GET() {
+export async function GET(request) {
   try {
     const combos = await getCombos();
+
+    // A teammate member only sees the combos their key may call, so the
+    // picker cannot offer something the router will refuse.
+    if (await isMemberSession(request)) {
+      const session = await getSession(request);
+      const ref = session?.keyRef || null;
+      let allowedNames = null;
+      if (ref) {
+        try {
+          const keys = await getApiKeys();
+          const key = keys.find((k) => k.keyRef === ref && k.isActive !== false);
+          if (key?.access?.restricted) {
+            allowedNames = new Set((key.access.allow || []).map((e) => String(e).toLowerCase()));
+          }
+        } catch { /* fall through to the full list */ }
+      }
+      if (allowedNames) {
+        return NextResponse.json({
+          combos: combos.filter((c) => allowedNames.has(String(c.name).toLowerCase())),
+        });
+      }
+    }
+
     return NextResponse.json({ combos });
   } catch (error) {
     console.log("Error fetching combos:", error);
