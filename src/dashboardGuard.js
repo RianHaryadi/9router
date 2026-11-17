@@ -80,15 +80,15 @@ const PROTECTED_API_PATHS = [
 ];
 
 // Routes EVERY member may use, whatever areas the owner granted.
+// Endpoints a member may call with ANY method: the chat itself and the
+// session calls.
 const MEMBER_ALLOWED_PATHS = [
   "/api/auth/logout",
   "/api/auth/status",
   "/api/settings/require-login",
   "/api/dashboard/chat/completions",
-  // The chat's model picker needs these; they are already filtered to the
-  // member's own key allow-list.
-  ...MEMBER_BASE_API_PATHS,
 ];
+
 
 /**
  * The area an API path belongs to, or null when the path is owner-only.
@@ -96,7 +96,10 @@ const MEMBER_ALLOWED_PATHS = [
  * reachable just because the member holds some area.
  */
 function apiAreaFor(pathname) {
-  for (const [prefix, area] of Object.entries(API_AREA_FOR_PATH)) {
+  // Longest prefix first: /api/models/alias must match its own entry, not
+  // /api/models.
+  const entries = Object.entries(API_AREA_FOR_PATH).sort((a, b) => b[0].length - a[0].length);
+  for (const [prefix, area] of entries) {
     if (pathname === prefix || pathname.startsWith(prefix + "/")) return area;
   }
   return null;
@@ -322,6 +325,7 @@ export const __test__ = {
   canAccessPublicLlmApi,
   canAccessLocalOnlyRoute,
   MEMBER_ALLOWED_PATHS,
+  MEMBER_BASE_API_PATHS,
   apiAreaFor,
   pageAreaFor,
   isPublicApi,
@@ -363,13 +367,18 @@ export async function proxy(request) {
       // A teammate member may only use the chat endpoints. Everything else
       // (keys, providers, usage, settings) is owner-only.
       if (await isMemberSession(request)) {
+        const readOnly = request.method === "GET" || request.method === "HEAD";
         const alwaysAllowed = MEMBER_ALLOWED_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`));
+        // The base paths are read-only: /api/combos accepts POST to create a
+        // combo, and a member must never write one.
+        // Exact match only: /api/models must not open /api/models/custom,
+        // which accepts POST to create a model.
+        const baseAllowed = readOnly && MEMBER_BASE_API_PATHS.includes(pathname);
         const area = apiAreaFor(pathname);
         const hasArea = area ? (await liveAreasOf(request)).has(area) : false;
-        // A member may only READ the endpoints of the areas the owner
-        // granted; every mutating verb is owner-only.
-        const readOnly = request.method === "GET" || request.method === "HEAD";
-        if (!alwaysAllowed && !(readOnly && hasArea)) {
+        // A member may only READ the endpoints of the areas they hold; every
+        // mutating verb is owner-only.
+        if (!alwaysAllowed && !baseAllowed && !(readOnly && hasArea)) {
           return NextResponse.json({ error: "Forbidden" }, { status: 403 });
         }
       }

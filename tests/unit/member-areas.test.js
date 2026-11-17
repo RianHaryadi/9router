@@ -96,15 +96,27 @@ describe("area mapping", () => {
     expect(__test__.pageAreaFor("/dashboard/unknown")).toBeNull();
   });
 
+  it("keeps the base API paths read-only and exact", async () => {
+    const { __test__ } = await import("../../src/dashboardGuard.js");
+    // The base paths open the chat's model picker. They must not become a
+    // write path: /api/combos accepts POST, /api/models/custom accepts POST.
+    expect(__test__.MEMBER_ALLOWED_PATHS).not.toContain("/api/combos");
+    expect(__test__.MEMBER_ALLOWED_PATHS).not.toContain("/api/providers");
+    expect(__test__.MEMBER_BASE_API_PATHS).toEqual(["/api/providers", "/api/combos", "/api/models"]);
+    // The area map must not open the mutating sub-routes either.
+    expect(__test__.apiAreaFor("/api/models/custom")).toBe("combos");
+    expect(__test__.apiAreaFor("/api/combos/presets")).toBe("combos");
+  });
+
   it("never lets a member read the settings", async () => {
     const { __test__ } = await import("../../src/dashboardGuard.js");
     // /api/settings carries the deployment settings. It is owner-only for
     // every area — no member area maps to it.
     expect(__test__.apiAreaFor("/api/settings")).toBeNull();
     expect(__test__.MEMBER_ALLOWED_PATHS).not.toContain("/api/settings");
-    // The chat's model picker needs these three, and nothing else.
+    // The chat's model picker needs these three — as read-only base paths.
     for (const p of ["/api/providers", "/api/combos", "/api/models"]) {
-      expect(__test__.MEMBER_ALLOWED_PATHS).toContain(p);
+      expect(__test__.MEMBER_BASE_API_PATHS).toContain(p);
     }
   });
 
