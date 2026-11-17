@@ -34,6 +34,13 @@ export {
   getApiKeys, getApiKeyById, getApiKeyByKey, createApiKey, updateApiKey, deleteApiKey, validateApiKey,
 } from "./repos/apiKeysRepo.js";
 
+// Team members (teammates who sign in with an owner-chosen password)
+export {
+  getTeamMembers, getTeamMemberById,
+  createTeamMember, updateTeamMember, deleteTeamMember,
+  verifyTeamMemberPassword, getTeamMemberApiKey,
+} from "./repos/teamMembersRepo.js";
+
 // Combos
 export {
   getCombos, getComboById, getComboByName,

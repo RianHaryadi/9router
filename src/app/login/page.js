@@ -4,10 +4,9 @@ import { useState, useEffect } from "react";
 import { Card, Button, Input } from "@/shared/components";
 
 export default function LoginPage() {
+  // One field: the owner types the dashboard password, a teammate types the
+  // password the owner gave them.
   const [password, setPassword] = useState("");
-  // Empty = the owner (shared dashboard password). Filled = a teammate
-  // signing in with their API key.
-  const [apiKey, setApiKey] = useState("");
   const [error, setError] = useState("");
   const [resetHint, setResetHint] = useState("");
   const [retryAfter, setRetryAfter] = useState(0);
@@ -76,7 +75,7 @@ export default function LoginPage() {
       const res = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(apiKey.trim() ? { apiKey: apiKey.trim() } : { password }),
+        body: JSON.stringify({ password }),
       });
 
 
@@ -222,23 +221,13 @@ export default function LoginPage() {
                 )}
 
                 <div className="flex flex-col gap-2">
-                  <label className="text-sm font-medium">API key <span className="text-text-muted font-normal">(teammate)</span></label>
+                  <label className="text-sm font-medium">Password</label>
                   <Input
                     type="password"
-                    placeholder="Teammate: paste your API key here"
-                    value={apiKey}
-                    onChange={(e) => setApiKey(e.target.value)}
-                    autoComplete="off"
-                  />
-                </div>
-
-                <div className="flex flex-col gap-2">
-                  <label className="text-sm font-medium">Password <span className="text-text-muted font-normal">(owner)</span></label>
-                  <Input
-                    type="password"
-                    placeholder="Owner: enter your dashboard password"
+                    placeholder="Enter your password"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
+                    required
                     autoFocus={!oidcAvailable}
                   />
                   {error && <p className="text-xs text-danger">{error}</p>}
@@ -259,7 +248,7 @@ export default function LoginPage() {
                   variant="primary"
                   className="w-full"
                   loading={loading}
-                  disabled={retryAfter > 0 || (!apiKey.trim() && !password)}
+                  disabled={retryAfter > 0 || !password}
                 >
                   {retryAfter > 0 ? `Wait ${retryAfter}s` : "Login"}
                 </Button>

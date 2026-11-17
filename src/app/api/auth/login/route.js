@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getSettings, getApiKeyByKey } from "@/lib/localDb";
+import { getSettings, getApiKeyByKey, verifyTeamMemberPassword } from "@/lib/localDb";
 import bcrypt from "bcryptjs";
 import { cookies } from "next/headers";
 import { setDashboardAuthCookie, DASHBOARD_ROLE_OWNER, DASHBOARD_ROLE_MEMBER } from "@/lib/auth/dashboardSession";
@@ -51,7 +51,28 @@ export async function POST(request) {
     let member = null;
     let role = DASHBOARD_ROLE_OWNER;
 
-    if (apiKey) {
+    if (password && !apiKey) {
+      // ── Password sign-in ────────────────────────────────────────────
+      // One field: the password. The owner's shared dashboard password
+      // wins; otherwise it is a teammate's password, which identifies the
+      // member (and the key their requests are billed to).
+      const storedHash = settings.password;
+      let ownerMatch = false;
+      if (storedHash) {
+        ownerMatch = await bcrypt.compare(password, storedHash);
+      } else {
+        const initialPassword = process.env.INITIAL_PASSWORD || "123456";
+        ownerMatch = password === initialPassword;
+      }
+
+      if (ownerMatch) {
+        isValid = true;
+      } else {
+        member = await verifyTeamMemberPassword(password);
+        isValid = !!member;
+        if (isValid) role = DASHBOARD_ROLE_MEMBER;
+      }
+    } else if (apiKey) {
       // ── Key sign-in ────────────────────────────────────────────────
       // A teammate signs in with their API key. The key IS the identity:
       // the session is bound to the key's fingerprint, so every request
@@ -73,16 +94,6 @@ export async function POST(request) {
       };
       isValid = true;
       role = DASHBOARD_ROLE_MEMBER;
-    } else {
-      // Default password is '123456' if not set
-      const storedHash = settings.password;
-      if (storedHash) {
-        isValid = await bcrypt.compare(password, storedHash);
-      } else {
-        // Use env var or default
-        const initialPassword = process.env.INITIAL_PASSWORD || "123456";
-        isValid = password === initialPassword;
-      }
     }
 
     if (isValid) {
@@ -117,14 +128,15 @@ export async function POST(request) {
       await setDashboardAuthCookie(cookieStore, request, {
         role,
         userId: member?.id || null,
-        username: member?.username || null,
+        // The teammate's display name.
+        username: member?.name || member?.username || null,
         // The key fingerprint this session is bound to. The chat route bills
         // the member's requests to exactly this key.
-        keyRef: member?.keyRef || null,
+        keyRef: member?.keyRef || member?.apiKeyRef || null,
       });
 
       return NextResponse.json(
-        { success: true, mustChangePassword: false, role, username: member?.username || null },
+        { success: true, mustChangePassword: false, role, username: member?.name || member?.username || null },
         { headers: NO_STORE_HEADERS }
       );
     }

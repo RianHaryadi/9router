@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import { Card, Button, Toggle, Input } from "@/shared/components";
 import Modal, { ConfirmModal } from "@/shared/components/Modal";
 import LanguageSwitcher from "@/shared/components/LanguageSwitcher";
+import TeamMembersCard from "./components/TeamMembersCard";
 import { useTheme } from "@/shared/hooks/useTheme";
 import { cn } from "@/shared/utils/cn";
 import { APP_CONFIG } from "@/shared/constants/config";
@@ -1678,6 +1679,9 @@ export default function ProfilePage() {
             />
           </div>
         </Card>
+
+        {/* Teammates — sign in with a password, chat-only access */}
+        <TeamMembersCard />
 
         {/* Account actions */}
         <div className="flex flex-col sm:flex-row gap-2">
