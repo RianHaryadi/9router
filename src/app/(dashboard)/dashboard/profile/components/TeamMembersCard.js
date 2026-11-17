@@ -21,7 +21,7 @@ export default function TeamMembersCard() {
   const [apiKeys, setApiKeys] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [form, setForm] = useState({ name: "", password: "", apiKeyRef: "" });
+  const [form, setForm] = useState({ name: "", password: "", apiKeyRef: "", areas: [] });
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -58,11 +58,12 @@ export default function TeamMembersCard() {
           name: form.name.trim(),
           password: form.password,
           apiKeyRef: form.apiKeyRef || undefined,
+          areas: form.areas,
         }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || "Failed to add teammate");
-      setForm({ name: "", password: "", apiKeyRef: "" });
+      setForm({ name: "", password: "", apiKeyRef: "", areas: [] });
       load();
     } catch (e) {
       setError(e.message || "Failed to add teammate");
@@ -239,6 +240,40 @@ export default function TeamMembersCard() {
             </option>
           ))}
         </select>
+        <div className="flex flex-col gap-1">
+          <p className="text-xs font-medium text-text-muted">Can access</p>
+          <div className="flex flex-wrap gap-2">
+            {MEMBER_AREAS.map((area) => {
+              const locked = MEMBER_BASE_AREAS.includes(area.id);
+              const checked = locked || form.areas.includes(area.id);
+              return (
+                <label
+                  key={area.id}
+                  title={area.hint}
+                  className={`flex items-center gap-1.5 rounded-lg border px-2 py-1 text-xs ${
+                    checked
+                      ? "border-brand-600/40 bg-brand-300/25 text-text-main"
+                      : "border-ink/10 text-text-muted dark:border-white/10"
+                  }`}
+                >
+                  <input
+                    type="checkbox"
+                    checked={checked}
+                    disabled={locked}
+                    onChange={(e) => {
+                      const next = e.target.checked
+                        ? [...form.areas, area.id]
+                        : form.areas.filter((id) => id !== area.id);
+                      setForm({ ...form, areas: next });
+                    }}
+                    className="h-3.5 w-3.5 accent-[var(--color-brand-600)]"
+                  />
+                  {area.label}
+                </label>
+              );
+            })}
+          </div>
+        </div>
         <Button type="submit" variant="primary" className="w-full sm:w-auto">
           Add teammate
         </Button>

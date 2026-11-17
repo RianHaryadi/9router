@@ -96,6 +96,18 @@ describe("area mapping", () => {
     expect(__test__.pageAreaFor("/dashboard/unknown")).toBeNull();
   });
 
+  it("never lets a member read the settings", async () => {
+    const { __test__ } = await import("../../src/dashboardGuard.js");
+    // /api/settings carries the deployment settings. It is owner-only for
+    // every area — no member area maps to it.
+    expect(__test__.apiAreaFor("/api/settings")).toBeNull();
+    expect(__test__.MEMBER_ALLOWED_PATHS).not.toContain("/api/settings");
+    // The chat's model picker needs these three, and nothing else.
+    for (const p of ["/api/providers", "/api/combos", "/api/models"]) {
+      expect(__test__.MEMBER_ALLOWED_PATHS).toContain(p);
+    }
+  });
+
   it("keeps the health subtree out of the public list", async () => {
     const { __test__ } = await import("../../src/dashboardGuard.js");
     // /api/health is public; the matrix and breaker expose provider

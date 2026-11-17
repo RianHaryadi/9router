@@ -14,18 +14,28 @@
 export const MEMBER_AREAS = [
   { id: "basic-chat", label: "Basic Chat", hint: "Chat with the models their key allows. Always granted." },
   { id: "usage", label: "Usage & Stats", hint: "Read the usage numbers (no keys, no provider credentials)." },
-  { id: "combos", label: "Combos", hint: "Read the combo list and the model catalog." },
-  { id: "prompts", label: "Prompt Library", hint: "Read the prompt templates." },
-  { id: "health", label: "Health & Spend", hint: "Read provider health, latency and spend per project." },
-  { id: "quota", label: "Quota Tracker", hint: "Read the provider quota limits." },
-  { id: "providers", label: "Providers (read-only)", hint: "See which providers are connected — names only, no accounts." },
-  { id: "endpoint", label: "Endpoint & Keys", hint: "See the endpoint and the key list. A key VALUE is still never shown." },
+  { id: "combos", label: "Combos", hint: "Open the Combos page and manage your own combos." },
+  { id: "prompts", label: "Prompt Library", hint: "Open the Prompt Library and the template list." },
+  { id: "health", label: "Health & Spend", hint: "Open Health & Spend — provider health, latency and spend per project." },
+  { id: "quota", label: "Quota Tracker", hint: "Open the Quota Tracker — the provider quota limits." },
+  { id: "providers", label: "Providers (read-only)", hint: "Open the Providers page — names only, never an account identity." },
+  { id: "endpoint", label: "Endpoint & Keys", hint: "Open the Endpoint page and the key list. A key VALUE is never shown." },
 ];
 
 export const MEMBER_AREA_IDS = MEMBER_AREAS.map((a) => a.id);
 
 // The areas every member gets, whatever the owner ticked.
 export const MEMBER_BASE_AREAS = ["basic-chat"];
+
+// Endpoints every member may read, whatever areas the owner granted. The
+// chat page needs the provider and combo lists to fill its model picker.
+// These two answers are already filtered down to the member's own key
+// allow-list, so they expose nothing the member may not use.
+export const MEMBER_BASE_API_PATHS = [
+  "/api/providers",
+  "/api/combos",
+  "/api/models",
+];
 
 // Dashboard page prefix → area. A member without the area is redirected to
 // the first area they do have (Basic Chat).
@@ -67,9 +77,12 @@ export const API_AREA_FOR_PATH = {
   "/api/provider-nodes": "providers",
   "/api/proxy-pools": "providers",
   "/api/keys": "endpoint",
-  "/api/settings": "endpoint",
+  "/api/tunnel/status": "endpoint",
   "/api/translator": "combos",
   "/api/team": "endpoint",
+  // /api/settings is deliberately NOT mapped: it carries the deployment
+  // settings (proxy, headers, feature flags) and is owner-only for every
+  // area. A member never reads it.
 };
 
 /** Sidebar nav entry → area. */

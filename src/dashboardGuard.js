@@ -8,6 +8,7 @@ import {
   OWNER_AREA_FOR_PATH,
   API_AREA_FOR_PATH,
   MEMBER_BASE_AREAS,
+  MEMBER_BASE_API_PATHS,
 } from "@/shared/constants/memberAreas.js";
 
 const CLI_TOKEN_HEADER = "x-9r-cli-token";
@@ -84,6 +85,9 @@ const MEMBER_ALLOWED_PATHS = [
   "/api/auth/status",
   "/api/settings/require-login",
   "/api/dashboard/chat/completions",
+  // The chat's model picker needs these; they are already filtered to the
+  // member's own key allow-list.
+  ...MEMBER_BASE_API_PATHS,
 ];
 
 /**
