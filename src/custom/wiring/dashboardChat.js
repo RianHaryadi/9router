@@ -33,14 +33,16 @@ async function ensureTranslators() {
  * @returns {Promise<Response>} the router's response (stream or JSON)
  */
 export async function dispatchDashboardChat(request, opts = {}) {
-  let key;
-  try {
-    key = await getDashboardChatApiKey();
-  } catch {
-    return Response.json({ error: { message: "Dashboard chat authentication is unavailable" } }, { status: 503 });
-  }
+  let key = opts.apiKey || null;
   if (!key) {
-    return Response.json({ error: { message: "Dashboard Basic Chat key is disabled. Enable it in Endpoint & Key." } }, { status: 403 });
+    try {
+      key = await getDashboardChatApiKey();
+    } catch {
+      return Response.json({ error: { message: "Dashboard chat authentication is unavailable" } }, { status: 503 });
+    }
+    if (!key) {
+      return Response.json({ error: { message: "Dashboard Basic Chat key is disabled. Enable it in Endpoint & Key." } }, { status: 403 });
+    }
   }
   try {
     const limited = await enforceApiKeyRateLimit(key);

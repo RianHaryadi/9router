@@ -3,7 +3,7 @@
 // pre-change safety backup in migrate.js: when the stored version is lower,
 // one lightweight DB backup is taken before applying schema changes. Forgetting
 // to bump only skips that backup — it does NOT break the additive auto-sync.
-export const SCHEMA_VERSION = 9;
+export const SCHEMA_VERSION = 10;
 
 export const PRAGMA_SQL = `
 PRAGMA journal_mode = WAL;
@@ -210,6 +210,26 @@ export const TABLES = {
       "CREATE INDEX IF NOT EXISTS idx_rd_model ON requestDetails(model)",
       "CREATE INDEX IF NOT EXISTS idx_rd_conn ON requestDetails(connectionId)",
     ],
+  },
+  dashboardUsers: {
+    columns: {
+      id: "TEXT PRIMARY KEY",
+      username: "TEXT UNIQUE NOT NULL",
+      // bcrypt hash of the user's own password. The owner's hash lives in
+      // settings.password; a teammate's lives here.
+      passwordHash: "TEXT NOT NULL",
+      // "owner" | "member". A member may only use Basic Chat; the owner has
+      // the whole dashboard.
+      role: "TEXT NOT NULL DEFAULT 'member'",
+      isActive: "INTEGER DEFAULT 1",
+      displayName: "TEXT",
+      // The API key this member's chat requests are billed to. Members never
+      // see a key value; they only ever get their own requests routed.
+      apiKeyRef: "TEXT",
+      createdAt: "TEXT NOT NULL",
+      updatedAt: "TEXT NOT NULL",
+    },
+    indexes: ["CREATE INDEX IF NOT EXISTS idx_du_role ON dashboardUsers(role)"],
   },
   fallbackEvents: {
     columns: {

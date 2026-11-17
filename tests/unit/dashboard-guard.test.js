@@ -10,6 +10,8 @@ const mocks = vi.hoisted(() => ({
   validateApiKey: vi.fn(),
   getConsistentMachineId: vi.fn(),
   verifyDashboardAuthToken: vi.fn(),
+  getDashboardAuthSession: vi.fn(),
+  dashboardRoleOf: vi.fn((s) => (s?.role === "owner" ? "owner" : "member")),
 }));
 
 vi.mock("next/server", () => ({
@@ -31,6 +33,8 @@ vi.mock("@/shared/utils/machineId", () => ({
 
 vi.mock("@/lib/auth/dashboardSession", () => ({
   verifyDashboardAuthToken: mocks.verifyDashboardAuthToken,
+  getDashboardAuthSession: mocks.getDashboardAuthSession,
+  dashboardRoleOf: mocks.dashboardRoleOf,
 }));
 
 const { proxy, __test__ } = await import("../../src/dashboardGuard.js");
@@ -61,6 +65,9 @@ describe("dashboard guard public LLM API access", () => {
     mocks.validateApiKey.mockResolvedValue(false);
     mocks.getConsistentMachineId.mockResolvedValue("cli-token");
     mocks.verifyDashboardAuthToken.mockResolvedValue(false);
+    // No session → isMemberSession() is false → the owner-only paths stay
+    // reachable exactly as before.
+    mocks.getDashboardAuthSession.mockResolvedValue(null);
   });
 
   it("allows loopback public LLM API without API key", async () => {
@@ -224,6 +231,9 @@ describe("dashboard guard local-only access", () => {
     mocks.validateApiKey.mockResolvedValue(false);
     mocks.getConsistentMachineId.mockResolvedValue("cli-token");
     mocks.verifyDashboardAuthToken.mockResolvedValue(false);
+    // No session → isMemberSession() is false → the owner-only paths stay
+    // reachable exactly as before.
+    mocks.getDashboardAuthSession.mockResolvedValue(null);
   });
 
   it("rejects local-only route from non-loopback host without CLI token", async () => {

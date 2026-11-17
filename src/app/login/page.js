@@ -5,6 +5,9 @@ import { Card, Button, Input } from "@/shared/components";
 
 export default function LoginPage() {
   const [password, setPassword] = useState("");
+  // Empty = the owner (shared dashboard password). Filled = a teammate
+  // account with its own password.
+  const [username, setUsername] = useState("");
   const [error, setError] = useState("");
   const [resetHint, setResetHint] = useState("");
   const [retryAfter, setRetryAfter] = useState(0);
@@ -73,7 +76,7 @@ export default function LoginPage() {
       const res = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ password }),
+        body: JSON.stringify(username.trim() ? { password, username: username.trim() } : { password }),
       });
 
       if (res.ok) {
@@ -82,7 +85,7 @@ export default function LoginPage() {
           setMustChange(true);
           return;
         }
-        window.location.assign("/dashboard");
+        window.location.assign(data.role === "member" ? "/dashboard/basic-chat" : "/dashboard");
       } else {
         const data = await res.json();
         setError(data.error || "Invalid password");
@@ -216,6 +219,17 @@ export default function LoginPage() {
                     Password and {activeSsoType === "saml" ? "SAML SSO" : "OIDC"} login are both enabled.
                   </p>
                 )}
+
+                <div className="flex flex-col gap-2">
+                  <label className="text-sm font-medium">Username <span className="text-text-muted font-normal">(teammate only)</span></label>
+                  <Input
+                    type="text"
+                    placeholder="Leave empty for the owner account"
+                    value={username}
+                    onChange={(e) => setUsername(e.target.value)}
+                    autoComplete="username"
+                  />
+                </div>
 
                 <div className="flex flex-col gap-2">
                   <label className="text-sm font-medium">Password</label>

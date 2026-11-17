@@ -3,7 +3,7 @@ import { cookies } from "next/headers";
 import { getSettings } from "@/lib/localDb";
 import { isOidcConfigured } from "@/lib/auth/oidc";
 import { isSamlConfigured } from "@/lib/auth/saml.js";
-import { getDashboardAuthSession } from "@/lib/auth/dashboardSession";
+import { getDashboardAuthSession, dashboardRoleOf } from "@/lib/auth/dashboardSession";
 
 export async function GET() {
   try {
@@ -23,6 +23,7 @@ export async function GET() {
       samlEmail ||
       oidcName ||
       oidcEmail ||
+      session?.username ||
       (session?.saml ? "SAML user" : session?.oidc ? "OIDC user" : "Password user");
 
     const loginMethod = session?.saml ? "SAML" : session?.oidc ? "OIDC" : "Password";
@@ -36,6 +37,8 @@ export async function GET() {
       samlConfigured: isSamlConfigured(settings),
       samlLoginLabel: (settings.samlLoginLabel || "Sign in with SAML SSO").trim() || "Sign in with SAML SSO",
       hasPassword: !!settings.password,
+      role: session ? dashboardRoleOf(session) : null,
+      username: session?.username || null,
       displayName,
       loginMethod,
       authenticated: !!session,

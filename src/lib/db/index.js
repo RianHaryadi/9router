@@ -34,6 +34,14 @@ export {
   getApiKeys, getApiKeyById, getApiKeyByKey, createApiKey, updateApiKey, deleteApiKey, validateApiKey,
 } from "./repos/apiKeysRepo.js";
 
+// Dashboard users (teammates with their own password, Basic Chat only)
+export {
+  getDashboardUsers, getDashboardUserByUsername, getDashboardUserById,
+  createDashboardUser, updateDashboardUser, deleteDashboardUser,
+  verifyDashboardUserPassword, getDashboardUserApiKey,
+  ROLE_OWNER, ROLE_MEMBER,
+} from "./repos/dashboardUsersRepo.js";
+
 // Combos
 export {
   getCombos, getComboById, getComboByName,

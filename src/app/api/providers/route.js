@@ -10,6 +10,7 @@ import { APIKEY_PROVIDERS } from "@/shared/constants/config";
 import { AI_PROVIDERS, FREE_TIER_PROVIDERS, WEB_COOKIE_PROVIDERS, isOpenAICompatibleProvider, isAnthropicCompatibleProvider, isCustomEmbeddingProvider } from "@/shared/constants/providers";
 import { normalizeProviderId, normalizeProviderSpecificData } from "@/lib/providerNormalization";
 import { toProviderConnectionResponse } from "@/lib/providerConnectionResponse";
+import { isMemberSession } from "@/dashboardGuard";
 
 export const dynamic = "force-dynamic";
 
@@ -48,7 +49,7 @@ async function normalizeProxyPoolId(proxyPoolId) {
 }
 
 // GET /api/providers - List all connections
-export async function GET() {
+export async function GET(request) {
   try {
     const connections = await getProviderConnections();
 
@@ -61,15 +62,29 @@ export async function GET() {
       }
     } catch { }
 
+    // A teammate member may read the connection list (the chat model picker
+    // needs it) but must not learn anything about the owner's accounts:
+    // no email, no status, no errors, no ids beyond the provider id.
+    const isMember = await isMemberSession(request);
+
     // Hide sensitive fields, enrich name for compatible providers
     const safeConnections = connections.map(c => {
       const isCompatible = isOpenAICompatibleProvider(c.provider) || isAnthropicCompatibleProvider(c.provider);
       const name = isCompatible
         ? (c.name || nodeNameMap[c.provider] || c.providerSpecificData?.nodeName || c.provider)
         : c.name;
-      return {
+      const safe = {
         ...toProviderConnectionResponse(c),
         name,
+      };
+      if (!isMember) return safe;
+      const { email, displayName, id, testStatus, lastError, lastErrorAt, errorCode, lastUsedAt, consecutiveUseCount, rateLimitedUntil, expiresAt, expiresIn, defaultModel, globalPriority, priority, projectId, providerSpecificData, ...rest } = safe;
+      return {
+        ...rest,
+        provider: safe.provider,
+        name: safe.name || safe.provider,
+        authType: safe.authType,
+        isActive: safe.isActive,
       };
     });
 

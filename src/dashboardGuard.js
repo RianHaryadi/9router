@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getSettings, validateApiKey } from "@/lib/localDb";
 import { getConsistentMachineId } from "@/shared/utils/machineId";
-import { verifyDashboardAuthToken } from "@/lib/auth/dashboardSession";
+import { verifyDashboardAuthToken, getDashboardAuthSession, dashboardRoleOf, DASHBOARD_ROLE_OWNER } from "@/lib/auth/dashboardSession";
 import { hasTrustedPeerHeaders } from "@/lib/auth/trustedPeer";
 
 const CLI_TOKEN_HEADER = "x-9r-cli-token";
@@ -70,6 +70,32 @@ const PROTECTED_API_PATHS = [
   "/api/mcp",
   "/api/translator",
   "/api/tunnel",
+];
+
+// Routes a MEMBER (teammate) may use. A member logs in with their own
+// password and may only chat — nothing else. Everything else is owner-only.
+//
+// The Basic Chat endpoints are the whole point of the member role: a
+// teammate gets a working chat box with the owner's models, without ever
+// seeing a key, a provider credential, the usage data or the settings.
+const MEMBER_ALLOWED_PATHS = [
+  "/api/auth/logout",
+  "/api/auth/status",
+  "/api/settings/require-login",
+  "/api/dashboard/chat/completions",
+  "/api/models",
+  "/api/combos",
+  // The chat model picker needs the connection list and each connection's
+  // model catalog. Both routes answer with metadata only — the member
+  // never receives a credential (see toProviderConnectionResponse and the
+  // member filter in /api/providers).
+  "/api/providers",
+];
+
+// Dashboard pages a member may open. Only Basic Chat — the rest of the
+// dashboard exposes keys, providers, usage and settings.
+const MEMBER_ALLOWED_PAGE_PREFIXES = [
+  "/dashboard/basic-chat",
 ];
 
 // Routes that spawn child processes or read host secrets — restrict to localhost.
@@ -185,6 +211,29 @@ async function hasValidToken(request) {
   return await verifyDashboardAuthToken(token);
 }
 
+/**
+ * The session of the current request, or null.
+ * @returns {Promise<object|null>}
+ */
+export async function getSession(request) {
+  const token = request.cookies.get("auth_token")?.value;
+  return await getDashboardAuthSession(token);
+}
+
+/** True when the request carries an owner session (not a teammate member). */
+export async function isOwnerSession(request) {
+  const session = await getSession(request);
+  if (!session) return false;
+  return dashboardRoleOf(session) === DASHBOARD_ROLE_OWNER;
+}
+
+/** True when the request carries a teammate member session. */
+export async function isMemberSession(request) {
+  const session = await getSession(request);
+  if (!session) return false;
+  return dashboardRoleOf(session) !== DASHBOARD_ROLE_OWNER;
+}
+
 // Read settings directly from DB to avoid self-fetch deadlock in proxy
 async function loadSettings() {
   try {
@@ -215,6 +264,8 @@ export const __test__ = {
   extractApiKey,
   canAccessPublicLlmApi,
   canAccessLocalOnlyRoute,
+  MEMBER_ALLOWED_PATHS,
+  MEMBER_ALLOWED_PAGE_PREFIXES,
 };
 
 export async function proxy(request) {
@@ -244,8 +295,20 @@ export async function proxy(request) {
   // Deny-by-default for /api/* — public allow-list bypasses, everything else requires auth.
   if (pathname.startsWith("/api/")) {
     if (isPublicApi(pathname)) return NextResponse.next();
-    if (await hasValidCliToken(request) || await isAuthenticated(request))
+    if (await hasValidCliToken(request) || await isAuthenticated(request)) {
+      // A teammate member may only use the chat endpoints. Everything else
+      // (keys, providers, usage, settings) is owner-only.
+      if (await isMemberSession(request)) {
+        const allowed = MEMBER_ALLOWED_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`));
+        // A member may only READ the provider/model metadata; every mutating
+        // verb is owner-only.
+        const readOnly = request.method === "GET" || request.method === "HEAD";
+        if (!allowed || (!readOnly && !pathname.startsWith("/api/dashboard/chat/"))) {
+          return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+        }
+      }
       return NextResponse.next();
+    }
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -281,6 +344,11 @@ export async function proxy(request) {
     const token = request.cookies.get("auth_token")?.value;
     if (token) {
       if (await verifyDashboardAuthToken(token)) {
+        // A teammate member may only open Basic Chat; every other dashboard
+        // page exposes keys, providers, usage or settings.
+        if (await isMemberSession(request) && !MEMBER_ALLOWED_PAGE_PREFIXES.some((p) => pathname.startsWith(p))) {
+          return NextResponse.redirect(new URL("/dashboard/basic-chat", request.url));
+        }
         return NextResponse.next();
       } else {
         return NextResponse.redirect(new URL("/login", request.url));

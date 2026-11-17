@@ -2,9 +2,17 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { readFile } from "node:fs/promises";
 
 const handleChatMock = vi.hoisted(() => vi.fn());
-const auth = vi.hoisted(() => ({ isAuthenticated: vi.fn(), getDashboardChatApiKey: vi.fn(), enforceApiKeyRateLimit: vi.fn() }));
+const auth = vi.hoisted(() => ({
+  isAuthenticated: vi.fn(),
+  getSession: vi.fn(),
+  getDashboardChatApiKey: vi.fn(),
+  enforceApiKeyRateLimit: vi.fn(),
+}));
 vi.mock("@/sse/handlers/chat.js", () => ({ handleChat: handleChatMock }));
-vi.mock("@/dashboardGuard", () => ({ isAuthenticated: auth.isAuthenticated }));
+vi.mock("@/dashboardGuard", () => ({
+  isAuthenticated: auth.isAuthenticated,
+  getSession: auth.getSession,
+}));
 vi.mock("@/lib/db/repos/apiKeysRepo.js", () => ({ getDashboardChatApiKey: auth.getDashboardChatApiKey, enforceApiKeyRateLimit: auth.enforceApiKeyRateLimit }));
 
 const { POST } = await import("../../src/app/api/dashboard/chat/completions/route.js");
@@ -13,6 +21,8 @@ describe("dashboard playground chat route", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     auth.isAuthenticated.mockResolvedValue(true);
+    // An owner session (no userId) → the server-managed key is used.
+    auth.getSession.mockResolvedValue({ role: "owner" });
     auth.getDashboardChatApiKey.mockResolvedValue("server-managed-fixture-key");
     auth.enforceApiKeyRateLimit.mockResolvedValue(null);
   });

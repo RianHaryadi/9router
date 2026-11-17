@@ -29,6 +29,7 @@ vi.mock("@/lib/auth/oidc", () => ({
 
 vi.mock("@/lib/auth/dashboardSession", () => ({
   getDashboardAuthSession: mocks.getDashboardAuthSession,
+  dashboardRoleOf: (session) => (session?.role === "owner" ? "owner" : "member"),
 }));
 
 const { GET } = await import("../../src/app/api/auth/status/route.js");

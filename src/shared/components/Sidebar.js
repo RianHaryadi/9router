@@ -9,6 +9,7 @@ import { APP_CONFIG, UPDATER_CONFIG } from "@/shared/constants/config";
 import { MEDIA_PROVIDER_KINDS } from "@/shared/constants/providers";
 import { useCopyToClipboard } from "@/shared/hooks/useCopyToClipboard";
 import useSettingsStore from "@/store/settingsStore";
+import useSessionStore from "@/store/sessionStore";
 import Button from "./Button";
 import { ConfirmModal } from "./Modal";
 
@@ -41,8 +42,20 @@ const systemItems = [
   { href: "/dashboard/skills", label: "Skills", icon: "extension" },
 ];
 
+// A teammate member may only use Basic Chat — hide everything else.
+const MEMBER_NAV_ITEMS = [{ href: "/dashboard/basic-chat", label: "Basic Chat", icon: "chat" }];
+
 export default function Sidebar({ onClose }) {
   const pathname = usePathname();
+  const role = useSessionStore((s) => s.role);
+  const fetchSession = useSessionStore((s) => s.fetchSession);
+
+  useEffect(() => {
+    fetchSession();
+  }, [fetchSession]);
+
+  const isMember = role === "member";
+  const visibleNavItems = isMember ? MEMBER_NAV_ITEMS : navItems;
   const [mediaOpen, setMediaOpen] = useState(false);
   const [isDisconnected, setIsDisconnected] = useState(false);
   const [updateInfo, setUpdateInfo] = useState(null);
@@ -161,7 +174,7 @@ export default function Sidebar({ onClose }) {
 
         {/* Navigation */}
         <nav className="flex-1 px-4 py-2 space-y-0.5 overflow-y-auto custom-scrollbar">
-          {navItems.map((item) => (
+          {visibleNavItems.map((item) => (
             <Link
               key={item.href}
               href={item.href}
@@ -185,7 +198,8 @@ export default function Sidebar({ onClose }) {
             </Link>
           ))}
 
-          {/* System section */}
+          {/* System section — owner only */}
+          {!isMember && (
           <div className="pt-3 mt-2 space-y-0.5">
             <p className="px-2.5 text-[10px] font-bold text-white/40 uppercase tracking-[0.08em] mb-1.5">
               System
@@ -353,6 +367,7 @@ export default function Sidebar({ onClose }) {
               <span className="text-[12.5px] font-medium">Settings</span>
             </Link>
           </div>
+          )}
         </nav>
 
       </aside>
