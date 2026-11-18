@@ -14,7 +14,7 @@
 #   health     Health & Spend
 #   quota      Quota Tracker
 #   providers  Providers (nama provider saja, tanpa akun/email)
-#   endpoint   Endpoint & Key, daftar key, kartu Teammates
+#   endpoint   Endpoint & Key, daftar key
 #   (kosong = chat saja; basic-chat selalu ada)
 #
 # Yang boleh ditulis si teammate:
@@ -40,4 +40,4 @@
 # dengan password-nya saja — tanpa username, tanpa API key.
 #
 # Ganti password / disable / assign ulang key:
-#   Dashboard -> Profile -> kartu "Teammates"
+#   Dashboard -> Team (halaman baru, owner only)

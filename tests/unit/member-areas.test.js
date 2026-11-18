@@ -139,11 +139,11 @@ describe("area mapping", () => {
   it("maps API paths and pages to their area", async () => {
     const { __test__ } = await import("../../src/dashboardGuard.js");
 
-    expect(__test__.apiAreaFor("/api/usage/stats")).toBe("usage");
-    expect(__test__.apiAreaFor("/api/usage")).toBe("usage");
-    expect(__test__.apiAreaFor("/api/combos")).toBe("combos");
-    expect(__test__.apiAreaFor("/api/prompt-templates")).toBe("prompts");
-    expect(__test__.apiAreaFor("/api/dashboard/chat/completions")).toBe("basic-chat");
+    expect(__test__.apiAreaFor("/api/usage/stats")).toEqual(["usage"]);
+    expect(__test__.apiAreaFor("/api/usage")).toEqual(["usage"]);
+    expect(__test__.apiAreaFor("/api/combos")).toEqual(["combos"]);
+    expect(__test__.apiAreaFor("/api/prompt-templates")).toEqual(["prompts"]);
+    expect(__test__.apiAreaFor("/api/dashboard/chat/completions")).toEqual(["basic-chat"]);
     // An unknown endpoint is owner-only, not "some area".
     expect(__test__.apiAreaFor("/api/something-new")).toBeNull();
 
@@ -163,8 +163,8 @@ describe("area mapping", () => {
     expect(__test__.MEMBER_ALLOWED_PATHS).not.toContain("/api/providers");
     expect(__test__.MEMBER_BASE_API_PATHS).toEqual(["/api/providers", "/api/combos", "/api/models"]);
     // The area map must not open the mutating sub-routes either.
-    expect(__test__.apiAreaFor("/api/models/custom")).toBe("combos");
-    expect(__test__.apiAreaFor("/api/combos/presets")).toBe("combos");
+    expect(__test__.apiAreaFor("/api/models/custom")).toEqual(["combos", "providers"]);
+    expect(__test__.apiAreaFor("/api/combos/presets")).toEqual(["combos"]);
   });
 
   it("opens the live model catalog of one connection to every member", async () => {
@@ -210,8 +210,8 @@ describe("area mapping", () => {
     expect(__test__.isPublicApi("/api/health/matrix")).toBe(false);
     expect(__test__.isPublicApi("/api/health/breaker")).toBe(false);
     // The health area covers the sub-routes.
-    expect(__test__.apiAreaFor("/api/health/matrix")).toBe("health");
-    expect(__test__.apiAreaFor("/api/health/breaker")).toBe("health");
+    expect(__test__.apiAreaFor("/api/health/matrix")).toEqual(["health"]);
+    expect(__test__.apiAreaFor("/api/health/breaker")).toEqual(["health"]);
   });
 
   it("lets a member write only their own objects, and only in the areas they hold", async () => {
@@ -236,6 +236,21 @@ describe("area mapping", () => {
     // A version read of a template is not a write.
     expect(memberWriteScopeFor("GET", "/api/combos/abc")).toBeNull();
     expect(memberWriteScopeFor("PATCH", "/api/prompt-templates/abc/versions")).toBeNull();
+  });
+
+  it("keeps the team list owner-only and shares the model catalogue", async () => {
+    const { __test__ } = await import("../../src/dashboardGuard.js");
+    // The teammate list (names, key assignment, spend) is the owner's.
+    expect(__test__.apiAreaFor("/api/team/members")).toBeNull();
+    expect(__test__.pageAreaFor("/dashboard/team")).toBe("team");
+    // "team" is not a member area, so a member can never hold it.
+    const { MEMBER_AREA_IDS } = await import("../../src/shared/constants/memberAreas.js");
+    expect(MEMBER_AREA_IDS).not.toContain("team");
+    // The model catalogue serves the Providers page AND the Combos page:
+    // holding either area opens it.
+    expect(__test__.apiAreaFor("/api/models/alias")).toEqual(["combos", "providers"]);
+    expect(__test__.apiAreaFor("/api/models/custom")).toEqual(["combos", "providers"]);
+    expect(__test__.apiAreaFor("/api/models/disabled")).toEqual(["combos", "providers"]);
   });
 
   it("records the owner of a created object", async () => {

@@ -100,13 +100,17 @@ const MEMBER_ALLOWED_PATHS = [
  * The area an API path belongs to, or null when the path is owner-only.
  * A path with no entry is owner-only: an unknown endpoint must not become
  * reachable just because the member holds some area.
+ *
+ * The value may be a list of areas: the member needs to hold ONE of them.
  */
 function apiAreaFor(pathname) {
   // Longest prefix first: /api/models/alias must match its own entry, not
   // /api/models.
   const entries = Object.entries(API_AREA_FOR_PATH).sort((a, b) => b[0].length - a[0].length);
   for (const [prefix, area] of entries) {
-    if (pathname === prefix || pathname.startsWith(prefix + "/")) return area;
+    if (pathname === prefix || pathname.startsWith(prefix + "/")) {
+      return Array.isArray(area) ? area : [area];
+    }
   }
   return null;
 }
@@ -412,7 +416,8 @@ export async function proxy(request) {
         const baseItemAllowed = readOnly && !!memberBaseApiItemPathFor(pathname);
         const area = apiAreaFor(pathname);
         const areas = await liveAreasOf(request);
-        const hasArea = area ? areas.has(area) : false;
+        // A path may serve several areas: holding ONE of them is enough.
+        const hasArea = area ? area.some((a) => areas.has(a)) : false;
         // A member may only READ the endpoints of the areas they hold.
         if (!alwaysAllowed && !baseAllowed && !baseItemAllowed && !(readOnly && hasArea)) {
           // …plus the writes on their OWN objects: a teammate creates and

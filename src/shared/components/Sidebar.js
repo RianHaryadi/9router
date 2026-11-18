@@ -41,6 +41,7 @@ const debugItems = [
 const systemItems = [
   { href: "/dashboard/proxy-pools", label: "Proxy Pools", icon: "lan" },
   { href: "/dashboard/skills", label: "Skills", icon: "extension" },
+  { href: "/dashboard/team", label: "Team", icon: "group" },
 ];
 
 export default function Sidebar({ onClose }) {
@@ -263,7 +264,11 @@ export default function Sidebar({ onClose }) {
               </div>
             )}
 
-            {systemItems.map((item) => (
+            {systemItems
+              // The Team page is the owner's: it lists the teammates, their
+              // keys and their spend. A teammate never sees it.
+              .filter((item) => !(isMember && item.href === "/dashboard/team"))
+              .map((item) => (
               <Link
                 key={item.href}
                 href={item.href}

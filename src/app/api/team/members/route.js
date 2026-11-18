@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import {
-  getTeamMembers,
+  getTeamMembersWithUsage,
   createTeamMember,
   updateTeamMember,
   deleteTeamMember,
@@ -14,13 +14,13 @@ async function requireOwner(request) {
   return await isOwnerSession(request);
 }
 
-// GET /api/team/members - list teammates
+// GET /api/team/members - list teammates with their spend and key budget
 export async function GET(request) {
   if (!(await requireOwner(request))) {
     return NextResponse.json({ error: "Owner only" }, { status: 403 });
   }
   try {
-    const members = await getTeamMembers();
+    const members = await getTeamMembersWithUsage();
     return NextResponse.json({ members });
   } catch (error) {
     console.log("Error fetching team members:", error);

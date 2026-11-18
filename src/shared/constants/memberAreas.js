@@ -85,17 +85,25 @@ export const OWNER_AREA_FOR_PATH = {
   "/dashboard/profile": "endpoint",
   "/dashboard/mitm": "endpoint",
   "/dashboard/pxpipe": "combos",
+  // The team page is OWNER-only. "team" is not in MEMBER_AREA_IDS, so a
+  // member can never hold it: the guard bounces them to Basic Chat.
+  "/dashboard/team": "team",
 };
 
 // API path prefix → area. The read endpoints a member's page needs are
 // covered by its area; everything else stays owner-only.
+//
+// A value may be a LIST of areas: one endpoint serves more than one page
+// (the model catalogue is read by the Providers page and by the Combos page),
+// and a member holding either area may read it.
 export const API_AREA_FOR_PATH = {
   "/api/dashboard/chat": "basic-chat",
   "/api/combos": "combos",
   "/api/combos/presets": "combos",
   "/api/models": "combos",
-  "/api/models/alias": "combos",
-  "/api/models/custom": "combos",
+  "/api/models/alias": ["combos", "providers"],
+  "/api/models/custom": ["combos", "providers"],
+  "/api/models/disabled": ["combos", "providers"],
   "/api/prompt-templates": "prompts",
   "/api/usage": "usage",
   "/api/health/matrix": "health",
@@ -106,7 +114,8 @@ export const API_AREA_FOR_PATH = {
   "/api/keys": "endpoint",
   "/api/tunnel/status": "endpoint",
   "/api/translator": "combos",
-  "/api/team": "endpoint",
+  // /api/team is deliberately NOT mapped: it is the owner's teammate list
+  // (names, passwords, key assignment, spend). Owner-only for every area.
   // /api/settings is deliberately NOT mapped: it carries the deployment
   // settings (proxy, headers, feature flags) and is owner-only for every
   // area. A member never reads it.

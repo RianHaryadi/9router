@@ -39,6 +39,7 @@ export {
   getTeamMembers, getTeamMemberById,
   createTeamMember, updateTeamMember, deleteTeamMember,
   verifyTeamMemberPassword, getTeamMemberApiKey,
+  getTeamMembersWithUsage,
 } from "./repos/teamMembersRepo.js";
 
 // Combos
@@ -76,6 +77,7 @@ export {
 export {
   statsEmitter, trackPendingRequest, getActiveRequests,
   saveRequestUsage, getUsageHistory, getUsageStats, getChartData,
+  getUsageByKeyValue,
   appendRequestLog, getRecentLogs,
 } from "./repos/usageRepo.js";
 

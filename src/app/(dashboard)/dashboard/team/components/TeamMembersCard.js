@@ -9,6 +9,9 @@
 //
 // The key's own allow-list, budget and rate limits decide what the teammate
 // can reach, so assign them a key from Endpoint & Key.
+//
+// Every member row carries its own spend, request count and key budget, so
+// the owner sees who is using how much without leaving the page.
 
 import { useCallback, useEffect, useState } from "react";
 import Card from "@/shared/components/Card";
@@ -16,36 +19,54 @@ import Button from "@/shared/components/Button";
 import Input from "@/shared/components/Input";
 import { MEMBER_AREAS, MEMBER_BASE_AREAS } from "@/shared/constants/memberAreas";
 
+const money = (cents) => (cents == null ? "—" : `$${(cents / 100).toFixed(2)}`);
+
+// The spend is measured over the key's BUDGET window when the key has a
+// limit, and over the whole lifetime otherwise. Say which one it is.
+const windowLabel = (member) => (member.usageWindow === "budget" ? "this budget window" : "this key, all time");
+
 export default function TeamMembersCard() {
   const [members, setMembers] = useState([]);
   const [apiKeys, setApiKeys] = useState([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [form, setForm] = useState({ name: "", password: "", apiKeyRef: "", areas: [] });
+  const [form, setForm] = useState({ name: "", password: "", apiKeyRef: "", areas: ["providers"] });
+
+  // The fetch is a plain function: the effect applies the result in a
+  // promise callback, so no state is set synchronously inside the effect.
+  const fetchTeam = useCallback(async () => {
+    const [membersRes, keysRes] = await Promise.all([
+      fetch("/api/team/members", { cache: "no-store" }),
+      fetch("/api/keys", { cache: "no-store" }),
+    ]);
+    const membersData = await membersRes.json().catch(() => ({}));
+    const keysData = await keysRes.json().catch(() => ({}));
+    if (!membersRes.ok) throw new Error(membersData.error || "Failed to load teammates");
+    return { members: membersData.members || [], apiKeys: keysData.keys || [] };
+  }, []);
 
   const load = useCallback(async () => {
-    setLoading(true);
-    setError("");
     try {
-      const [membersRes, keysRes] = await Promise.all([
-        fetch("/api/team/members", { cache: "no-store" }),
-        fetch("/api/keys", { cache: "no-store" }),
-      ]);
-      const membersData = await membersRes.json().catch(() => ({}));
-      const keysData = await keysRes.json().catch(() => ({}));
-      if (!membersRes.ok) throw new Error(membersData.error || "Failed to load teammates");
-      setMembers(membersData.members || []);
-      setApiKeys(keysData.keys || []);
+      const data = await fetchTeam();
+      setMembers(data.members);
+      setApiKeys(data.apiKeys);
+      setError("");
     } catch (e) {
       setError(e.message || "Failed to load teammates");
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [fetchTeam]);
 
   useEffect(() => {
-    load();
-  }, [load]);
+    fetchTeam()
+      .then((data) => {
+        setMembers(data.members);
+        setApiKeys(data.apiKeys);
+      })
+      .catch((e) => setError(e.message || "Failed to load teammates"))
+      .finally(() => setLoading(false));
+  }, [fetchTeam]);
 
   const create = async (e) => {
     e.preventDefault();
@@ -63,7 +84,7 @@ export default function TeamMembersCard() {
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || "Failed to add teammate");
-      setForm({ name: "", password: "", apiKeyRef: "", areas: [] });
+      setForm({ name: "", password: "", apiKeyRef: "", areas: ["providers"] });
       load();
     } catch (e) {
       setError(e.message || "Failed to add teammate");
@@ -142,6 +163,52 @@ export default function TeamMembersCard() {
                 </Button>
               </div>
             </div>
+            {/* What this teammate is spending right now. */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 rounded-lg bg-black/[0.02] dark:bg-white/[0.04] p-2">
+              <div className="min-w-0">
+                <p className="text-[10px] uppercase tracking-wide text-text-muted">Spend</p>
+                <p className="text-sm font-semibold text-text-main">
+                  {member.sharedKey ? "Shared key" : `$${(member.usage?.cost || 0).toFixed(2)}`}
+                </p>
+                <p className="text-[10px] text-text-muted">
+                  {member.sharedKey ? "not tracked per teammate" : windowLabel(member)}
+                </p>
+              </div>
+              <div>
+                <p className="text-[10px] uppercase tracking-wide text-text-muted">Requests</p>
+                <p className="text-sm font-semibold text-text-main">
+                  {member.sharedKey ? "—" : (member.usage?.requests ?? 0)}
+                </p>
+                <p className="text-[10px] text-text-muted">
+                  {member.sharedKey ? "shared with the owner" : windowLabel(member)}
+                </p>
+              </div>
+              <div className="min-w-0">
+                <p className="text-[10px] uppercase tracking-wide text-text-muted">Key</p>
+                <p className="text-sm font-semibold text-text-main truncate">
+                  {member.keyMissing ? "Key deleted" : member.keyName || "No key assigned"}
+                </p>
+                <p className="text-[10px] text-text-muted">
+                  {member.keyMissing
+                    ? "assign a key — they cannot chat"
+                    : member.keyIsActive === false
+                      ? "disabled"
+                      : member.keyRef || "shared key"}
+                </p>
+              </div>
+              <div>
+                <p className="text-[10px] uppercase tracking-wide text-text-muted">Budget left</p>
+                <p className="text-sm font-semibold text-text-main">
+                  {member.budget?.limitCents == null ? "Unlimited" : money(member.budget.remainingCents)}
+                </p>
+                <p className="text-[10px] text-text-muted">
+                  {member.budget?.limitCents == null
+                    ? "no limit on this key"
+                    : `${money(member.budget.spentCents)} of ${money(member.budget.limitCents)} used`}
+                </p>
+              </div>
+            </div>
+
             <div className="flex flex-col sm:flex-row gap-2">
               <select
                 value={member.apiKeyRef || ""}

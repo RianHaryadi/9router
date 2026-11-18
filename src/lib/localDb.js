@@ -14,6 +14,7 @@ export {
   getTeamMembers, getTeamMemberById,
   createTeamMember, updateTeamMember, deleteTeamMember,
   verifyTeamMemberPassword, getTeamMemberApiKey,
+  getTeamMembersWithUsage,
   getCombos, getComboById, getComboByName,
   createCombo, updateCombo, deleteCombo,
   updateComboOwnedBy, deleteComboOwnedBy,

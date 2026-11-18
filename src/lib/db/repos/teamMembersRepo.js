@@ -12,6 +12,8 @@ import { v4 as uuidv4 } from "uuid";
 import bcrypt from "bcryptjs";
 import { getAdapter } from "../driver.js";
 import { MEMBER_AREA_IDS } from "@/shared/constants/memberAreas.js";
+import { getApiKeys } from "./apiKeysRepo.js";
+import { getUsageByKeyValue } from "./usageRepo.js";
 
 /** Keep only known area ids; an empty list means chat-only access. */
 function normalizeAreas(list) {
@@ -171,4 +173,97 @@ export async function getTeamMemberApiKey(member) {
   } catch {
     return null;
   }
+}
+
+/**
+ * The teammates with their spend, request count and key budget.
+ *
+ * The spend comes from the usage rows of the key the teammate is assigned
+ * to: usageHistory stores the key FINGERPRINT, which is exactly the
+ * keyRef the member row points at. The window is the key's own budget
+ * window (budgetStartedAt), so the number shown is the number the budget
+ * is measured against. A key without a budget has no window: the lifetime
+ * total is shown instead.
+ *
+ * A teammate WITHOUT a key of their own chats on the owner's shared key:
+ * their requests cannot be told apart from the owner's, so the usage is
+ * reported as shared rather than as a personal number.
+ *
+ * @returns {Promise<Array<object>>}
+ */
+export async function getTeamMembersWithUsage() {
+  const members = await getTeamMembers();
+  let keys = [];
+  try { keys = await getApiKeys(); } catch { /* no key table */ }
+
+  const usageCache = new Map();
+  const usageFor = async (startDate) => {
+    const cacheKey = startDate || "all";
+    if (!usageCache.has(cacheKey)) {
+      try { usageCache.set(cacheKey, await getUsageByKeyValue(startDate)); }
+      catch { usageCache.set(cacheKey, {}); }
+    }
+    return usageCache.get(cacheKey);
+  };
+
+  const out = [];
+  for (const member of members) {
+    const key = keys.find((k) => k.keyRef && k.keyRef === member.apiKeyRef) || null;
+    // A member WITHOUT a key of their own chats on the owner's shared key:
+    // their requests cannot be told apart from the owner's, so the usage is
+    // reported as shared rather than as a personal number.
+    if (!member.apiKeyRef) {
+      out.push({
+        ...member,
+        keyName: null,
+        keyRef: null,
+        keyIsActive: null,
+        usage: { requests: 0, cost: 0, promptTokens: 0, completionTokens: 0 },
+        budget: null,
+        sharedKey: true,
+        keyMissing: false,
+      });
+      continue;
+    }
+    // The member points at a key that is GONE: they cannot chat at all.
+    // This is not the shared key — report it as a broken assignment.
+    if (!key) {
+      out.push({
+        ...member,
+        keyName: null,
+        keyRef: member.apiKeyRef,
+        keyIsActive: false,
+        usage: { requests: 0, cost: 0, promptTokens: 0, completionTokens: 0 },
+        budget: null,
+        sharedKey: false,
+        keyMissing: true,
+      });
+      continue;
+    }
+    // Rows written before the fingerprint migration hold the raw key.
+    const usage = await usageFor(key.budgetLimitCents != null ? key.budgetStartedAt : null);
+    const row = usage[key.keyRef] || usage[key.key] || null;
+    const limit = key.budgetLimitCents;
+    const spent = key.budgetSpentCents || 0;
+    out.push({
+      ...member,
+      keyName: key.name,
+      keyRef: key.keyRef,
+      keyIsActive: key.isActive !== false,
+      usage: row || { requests: 0, cost: 0, promptTokens: 0, completionTokens: 0 },
+      budget: {
+        limitCents: limit,
+        spentCents: spent,
+        remainingCents: limit == null ? null : Math.max(0, limit - spent),
+        period: key.budgetPeriod || "monthly",
+        startedAt: key.budgetStartedAt || null,
+      },
+      // The spend is measured over the key's BUDGET window when it has one,
+      // and over the whole lifetime otherwise. The label must say which.
+      usageWindow: key.budgetLimitCents != null && key.budgetStartedAt ? "budget" : "all",
+      sharedKey: false,
+      keyMissing: false,
+    });
+  }
+  return out;
 }

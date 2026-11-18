@@ -497,6 +497,39 @@ export async function saveRequestUsage(entry) {
   }
 }
 
+/**
+ * The spend and the request count of every API key, grouped by the value
+ * stored in usageHistory.apiKey.
+ *
+ * That column holds the key FINGERPRINT (rows written before the migration
+ * still hold the raw key), so the returned map is keyed by the stored value.
+ * The caller matches it against the key table, which knows both spellings.
+ *
+ * @param {string|null} startDate ISO timestamp; null = all time
+ * @returns {Promise<Object<string, {requests:number, cost:number, promptTokens:number, completionTokens:number}>>}
+ */
+export async function getUsageByKeyValue(startDate = null) {
+  const db = await getAdapter();
+  const cols = `COUNT(*) AS requests, COALESCE(SUM(cost), 0) AS cost, COALESCE(SUM(promptTokens), 0) AS promptTokens, COALESCE(SUM(completionTokens), 0) AS completionTokens`;
+  const rows = startDate
+    ? db.all(
+        `SELECT apiKey, ${cols} FROM usageHistory WHERE timestamp >= ? GROUP BY apiKey`,
+        [new Date(startDate).toISOString()]
+      )
+    : db.all(`SELECT apiKey, ${cols} FROM usageHistory GROUP BY apiKey`);
+  const out = {};
+  for (const r of rows) {
+    if (!r.apiKey) continue;
+    out[r.apiKey] = {
+      requests: r.requests || 0,
+      cost: r.cost || 0,
+      promptTokens: r.promptTokens || 0,
+      completionTokens: r.completionTokens || 0,
+    };
+  }
+  return out;
+}
+
 export async function getUsageHistory(filter = {}) {
   const db = await getAdapter();
   const conds = [];
