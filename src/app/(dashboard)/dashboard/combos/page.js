@@ -812,22 +812,26 @@ function ComboCard({ combo, getCaps, comboByName = {}, activeProviders = [], cop
               </span>
               <span className="text-[10px] leading-tight">Copy</span>
             </button>
-            <button
-              onClick={onEdit}
-              className="flex flex-col items-center rounded px-2 py-1 text-text-muted transition-colors hover:bg-black/5 hover:text-brand-700 dark:text-brand-300 dark:hover:bg-white/5"
-              title="Edit"
-            >
-              <span className="material-symbols-outlined text-[18px]">edit</span>
-              <span className="text-[10px] leading-tight">Edit</span>
-            </button>
-            <button
-              onClick={onDelete}
-              className="flex flex-col items-center rounded px-2 py-1 text-danger transition-colors hover:bg-danger/10"
-              title="Delete"
-            >
-              <span className="material-symbols-outlined text-[18px]">delete</span>
-              <span className="text-[10px] leading-tight">Delete</span>
-            </button>
+            {combo.canWrite !== false && (
+              <button
+                onClick={onEdit}
+                className="flex flex-col items-center rounded px-2 py-1 text-text-muted transition-colors hover:bg-black/5 hover:text-brand-700 dark:text-brand-300 dark:hover:bg-white/5"
+                title="Edit"
+              >
+                <span className="material-symbols-outlined text-[18px]">edit</span>
+                <span className="text-[10px] leading-tight">Edit</span>
+              </button>
+            )}
+            {combo.canWrite !== false && (
+              <button
+                onClick={onDelete}
+                className="flex flex-col items-center rounded px-2 py-1 text-danger transition-colors hover:bg-danger/10"
+                title="Delete"
+              >
+                <span className="material-symbols-outlined text-[18px]">delete</span>
+                <span className="text-[10px] leading-tight">Delete</span>
+              </button>
+            )}
           </div>
         </div>
       </div>

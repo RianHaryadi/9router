@@ -15,7 +15,7 @@ export const MEMBER_AREAS = [
   { id: "basic-chat", label: "Basic Chat", hint: "Chat with the models their key allows. Always granted." },
   { id: "usage", label: "Usage & Stats", hint: "Read the usage numbers (no keys, no provider credentials)." },
   { id: "combos", label: "Combos", hint: "Open the Combos page and manage your own combos." },
-  { id: "prompts", label: "Prompt Library", hint: "Open the Prompt Library and the template list." },
+  { id: "prompts", label: "Prompt Library", hint: "Open the Prompt Library and manage your own templates." },
   { id: "health", label: "Health & Spend", hint: "Open Health & Spend — provider health, latency and spend per project." },
   { id: "quota", label: "Quota Tracker", hint: "Open the Quota Tracker — the provider quota limits." },
   { id: "providers", label: "Providers (read-only)", hint: "Open the Providers page — names only, never an account identity." },
@@ -97,6 +97,46 @@ export const AREA_FOR_NAV = {
   "/dashboard/endpoint": "endpoint",
 };
 
+// The member-owned writes a teammate may perform.
+//
+// A member owns the objects they created (their combos, their prompt
+// templates) and may edit or delete those. The objects the owner created are
+// READ-ONLY for a member: the ownership check happens in the route, where
+// the row is loaded and compared.
+//
+// Matched exactly for the collection path and by prefix for the item path,
+// so a sibling sub-route (e.g. /api/combos/presets, which creates MANY
+// combos at once) is never opened by accident.
+export const MEMBER_WRITE_SCOPES = [
+  { area: "combos", method: "POST", path: "/api/combos" },
+  { area: "combos", method: "PUT", item: "/api/combos/" },
+  { area: "combos", method: "DELETE", item: "/api/combos/" },
+  { area: "prompts", method: "POST", path: "/api/prompt-templates" },
+  { area: "prompts", method: "PATCH", item: "/api/prompt-templates/" },
+  { area: "prompts", method: "DELETE", item: "/api/prompt-templates/" },
+];
+
+/**
+ * The write scope a request falls into, or null when it is not a
+ * member-owned write.
+ *
+ * An `item` scope matches the item route only: exactly one path segment
+ * below the collection. A sub-route (e.g. /api/prompt-templates/x/versions)
+ * is a different route and is never matched by the item scope.
+ */
+export function memberWriteScopeFor(method, pathname) {
+  const verb = String(method || "").toUpperCase();
+  for (const scope of MEMBER_WRITE_SCOPES) {
+    if (scope.method !== verb) continue;
+    if (scope.path && pathname === scope.path) return scope;
+    if (scope.item && pathname.startsWith(scope.item)) {
+      const id = pathname.slice(scope.item.length);
+      if (id && !id.includes("/")) return scope;
+    }
+  }
+  return null;
+}
+
 /**
  * The areas a member holds.
  * @param {object|null} session
@@ -109,4 +149,14 @@ export function memberAreasOf(session) {
     if (MEMBER_AREA_IDS.includes(id)) out.add(id);
   }
   return out;
+}
+
+/**
+ * The id of the member a session belongs to, or null for the owner.
+ *
+ * A key sign-in has no member row, so it has no id: it may read the areas it
+ * was granted but owns nothing.
+ */
+export function ownerIdOfSession(session) {
+  return session?.userId || null;
 }

@@ -3,7 +3,7 @@
 // pre-change safety backup in migrate.js: when the stored version is lower,
 // one lightweight DB backup is taken before applying schema changes. Forgetting
 // to bump only skips that backup — it does NOT break the additive auto-sync.
-export const SCHEMA_VERSION = 11;
+export const SCHEMA_VERSION = 12;
 
 export const PRAGMA_SQL = `
 PRAGMA journal_mode = WAL;
@@ -115,6 +115,9 @@ export const TABLES = {
       name: "TEXT UNIQUE NOT NULL",
       kind: "TEXT",
       models: "TEXT NOT NULL",
+      // The member that created this combo (NULL = the owner). A teammate may
+      // edit or delete only the combos they own.
+      ownerId: "TEXT",
       createdAt: "TEXT NOT NULL",
       updatedAt: "TEXT NOT NULL",
     },
@@ -127,6 +130,8 @@ export const TABLES = {
       description: "TEXT NOT NULL DEFAULT ''",
       content: "TEXT NOT NULL",
       version: "INTEGER NOT NULL",
+      // The member that created this template (NULL = the owner).
+      ownerId: "TEXT",
       createdAt: "TEXT NOT NULL",
       updatedAt: "TEXT NOT NULL",
     },

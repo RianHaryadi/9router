@@ -17,6 +17,12 @@
 #   endpoint   Endpoint & Key, daftar key, kartu Teammates
 #   (kosong = chat saja; basic-chat selalu ada)
 #
+# Yang boleh ditulis si teammate:
+#   - area "combos" : buat / edit / HAPUS combo DIA SENDIRI
+#   - area "prompts": buat / edit / HAPUS template DIA SENDIRI
+#   Combo & template milik OWNER (dan teammate lain) cuma bisa dibaca.
+#   Semua write lain (keys, providers, settings, member, shutdown) = owner only.
+#
 # budgetCents:
 #   500  = $5/bulan   (default)
 #   2000 = $20/bulan

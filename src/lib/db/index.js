@@ -45,12 +45,14 @@ export {
 export {
   getCombos, getComboById, getComboByName,
   createCombo, updateCombo, deleteCombo,
+  updateComboOwnedBy, deleteComboOwnedBy,
 } from "./repos/combosRepo.js";
 
 // Prompt templates
 export {
   getPromptTemplates, getPromptTemplateById, getPromptTemplateVersions,
   createPromptTemplate, updatePromptTemplate, deletePromptTemplate,
+  updatePromptTemplateOwnedBy, deletePromptTemplateOwnedBy,
 } from "./repos/promptTemplatesRepo.js";
 
 // Aliases (model + custom + mitm)

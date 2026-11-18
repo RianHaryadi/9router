@@ -5,10 +5,12 @@ import { verifyDashboardAuthToken, getDashboardAuthSession, dashboardRoleOf, DAS
 import { hasTrustedPeerHeaders } from "@/lib/auth/trustedPeer";
 import {
   memberAreasOf,
+  ownerIdOfSession,
   OWNER_AREA_FOR_PATH,
   API_AREA_FOR_PATH,
   MEMBER_BASE_AREAS,
   MEMBER_BASE_API_PATHS,
+  memberWriteScopeFor,
 } from "@/shared/constants/memberAreas.js";
 
 const CLI_TOKEN_HEADER = "x-9r-cli-token";
@@ -27,6 +29,9 @@ async function hasValidCliToken(request) {
 }
 
 // Public API paths — no auth required (LLM API has its own key auth inside handler).
+//
+// Matched by PREFIX, so a subtree whose sensitivity differs from its parent
+// needs an explicit denial below — see isPublicApi().
 const PUBLIC_API_PATHS = [
   "/api/health",
   "/api/init",
@@ -279,6 +284,26 @@ export async function isOwnerSession(request) {
   return dashboardRoleOf(session) === DASHBOARD_ROLE_OWNER;
 }
 
+/**
+ * True when the request is the owner of this router.
+ *
+ * Three cases count as the owner:
+ *   - the CLI token (the local launcher),
+ *   - an owner session (the dashboard password),
+ *   - an instance with requireLogin disabled: there is only one user then,
+ *     and nobody can sign in as a teammate either, so the request is the
+ *     owner's by definition.
+ */
+export async function isOwnerRequest(request) {
+  // A teammate is never the owner, not even on an open instance: the member
+  // rows still exist and the owner may have granted them areas.
+  if (await isMemberSession(request)) return false;
+  if (await hasValidCliToken(request)) return true;
+  if (await isOwnerSession(request)) return true;
+  const settings = await loadSettings();
+  return !!settings && settings.requireLogin === false;
+}
+
 /** True when the request carries a teammate member session. */
 export async function isMemberSession(request) {
   // A caller without a cookie jar (a direct route invocation) is not a member.
@@ -306,12 +331,15 @@ async function isAuthenticated(request) {
 
 function isPublicApi(pathname) {
   if (isPublicLlmApi(pathname)) return true;
-  // /api/health is public (endpoint ping, tunnel health check, CORS), but its
-  // sub-routes expose provider internals — the matrix lists every provider,
-  // account and model state. A prefix match would publish them, so the
-  // health subtree is matched exactly, not by prefix.
-  if (pathname === "/api/health" || pathname === "/api/health/") return true;
+  // Two subtrees have a different sensitivity than their parent and must never
+  // be reached by prefix:
+  //
+  //   /api/health/* — the matrix and breaker list every provider, account
+  //                   and model state.
+  //   /api/version/* — shutdown and update kill or replace the running
+  //                   router. A teammate must never be able to stop it.
   if (pathname.startsWith("/api/health/")) return false;
+  if (pathname.startsWith("/api/version/")) return false;
   return PUBLIC_API_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`));
 }
 
@@ -341,10 +369,13 @@ export async function proxy(request) {
     }
   }
 
-  // Always protected - require valid JWT or local CLI token (machineId-based)
+  // Always protected - require valid JWT or local CLI token (machineId-based).
+  //
+  // OWNER-only: these routes shut the router down, replace it, or import
+  // provider credentials. A teammate's dashboard session is a valid JWT, so
+  // accepting any token here let a teammate stop the whole instance.
   if (ALWAYS_PROTECTED.some((p) => pathname.startsWith(p))) {
-    if (await hasValidCliToken(request) || await hasValidToken(request))
-      return NextResponse.next();
+    if (await isOwnerRequest(request)) return NextResponse.next();
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -370,16 +401,24 @@ export async function proxy(request) {
         const readOnly = request.method === "GET" || request.method === "HEAD";
         const alwaysAllowed = MEMBER_ALLOWED_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`));
         // The base paths are read-only: /api/combos accepts POST to create a
-        // combo, and a member must never write one.
+        // combo, and a member may only write a combo they own (see below).
         // Exact match only: /api/models must not open /api/models/custom,
         // which accepts POST to create a model.
         const baseAllowed = readOnly && MEMBER_BASE_API_PATHS.includes(pathname);
         const area = apiAreaFor(pathname);
-        const hasArea = area ? (await liveAreasOf(request)).has(area) : false;
-        // A member may only READ the endpoints of the areas they hold; every
-        // mutating verb is owner-only.
+        const areas = await liveAreasOf(request);
+        const hasArea = area ? areas.has(area) : false;
+        // A member may only READ the endpoints of the areas they hold.
         if (!alwaysAllowed && !baseAllowed && !(readOnly && hasArea)) {
-          return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+          // …plus the writes on their OWN objects: a teammate creates and
+          // manages their own combos and prompt templates with the same flow
+          // the owner has. The route checks the ownership of the row, so
+          // the owner's objects stay read-only for a member.
+          const scope = memberWriteScopeFor(request.method, pathname);
+          const scoped = scope && areas.has(scope.area);
+          if (!scoped) {
+            return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+          }
         }
       }
       return NextResponse.next();
