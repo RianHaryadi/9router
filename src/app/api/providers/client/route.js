@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getProviderConnections } from "@/lib/localDb";
 import { backfillCodexEmails } from "@/lib/oauth/providers";
 import { USAGE_APIKEY_PROVIDERS, USAGE_SUPPORTED_PROVIDERS } from "@/shared/constants/providers";
+import { isMemberSession } from "@/dashboardGuard";
 
 const SAFE_FIELDS = [
   "id", "provider", "authType", "name", "email", "displayName",
@@ -20,6 +21,17 @@ const SAFE_PSD_FIELDS = [
   "profileArn",
 ];
 
+// The account identity a teammate must never see.
+//
+// For OAuth providers the connection NAME is the owner's email, and the
+// provider-specific fields carry the GitHub login or the account name. A
+// teammate may see the provider and its health — never WHICH account it is.
+const MEMBER_UNSAFE_FIELDS = ["name", "email", "displayName", "lastError", "lastErrorAt", "errorCode"];
+const MEMBER_UNSAFE_PSD_FIELDS = [
+  "githubLogin", "githubName", "githubEmail", "githubUserId",
+  "username", "firstName", "lastName", "accountId", "projectId",
+];
+
 const DEFAULT_PAGE_SIZE = 20;
 const MAX_PAGE_SIZE = 500;
 
@@ -29,7 +41,7 @@ function maskName(name) {
   return name;
 }
 
-function sanitize(c) {
+function sanitize(c, forMember = false) {
   const safe = {};
   for (const f of SAFE_FIELDS) if (c[f] !== undefined) safe[f] = c[f];
   if (safe.name) safe.name = maskName(safe.name);
@@ -39,6 +51,14 @@ function sanitize(c) {
       if (c.providerSpecificData[f] !== undefined) psd[f] = c.providerSpecificData[f];
     }
     safe.providerSpecificData = psd;
+  }
+  if (!forMember) return safe;
+
+  // The teammate's view: no account identity, no error text.
+  for (const f of MEMBER_UNSAFE_FIELDS) delete safe[f];
+  safe.name = c.provider || safe.provider;
+  if (safe.providerSpecificData) {
+    for (const f of MEMBER_UNSAFE_PSD_FIELDS) delete safe.providerSpecificData[f];
   }
   return safe;
 }
@@ -78,6 +98,9 @@ export async function GET(request) {
   try {
     await backfillCodexEmails();
 
+    // A teammate sees the providers, never the accounts behind them.
+    const forMember = await isMemberSession(request);
+
     const { searchParams } = new URL(request.url);
     const provider = searchParams.get("provider") || "all";
     const accountStatus = searchParams.get("accountStatus") || "all";
@@ -104,7 +127,7 @@ export async function GET(request) {
     const totalPages = Math.max(1, Math.ceil(total / pageSize));
     const currentPage = Math.min(page, totalPages);
     const offset = (currentPage - 1) * pageSize;
-    const pageConnections = sortedConnections.slice(offset, offset + pageSize).map(sanitize);
+    const pageConnections = sortedConnections.slice(offset, offset + pageSize).map((c) => sanitize(c, forMember));
 
     return NextResponse.json({
       connections: pageConnections,

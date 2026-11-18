@@ -37,6 +37,33 @@ export const MEMBER_BASE_API_PATHS = [
   "/api/models",
 ];
 
+// The live model catalog of ONE connection: /api/providers/{id}/models.
+//
+// The chat picker needs it — it lists the models of every connection the
+// member may call — and it carries no account identity, only the provider
+// and the model ids. The pattern matches EXACTLY one id segment, so a
+// sibling route (e.g. /api/providers/client, /api/providers/web-login) is
+// never opened by accident.
+export const MEMBER_BASE_API_ITEM_PATHS = [
+  "/api/providers/*/models",
+];
+
+/**
+ * The base API item path a request falls into, or null.
+ *
+ * @param {string} pathname
+ * @returns {string|null} the matched pattern, or null
+ */
+export function memberBaseApiItemPathFor(pathname) {
+  for (const pattern of MEMBER_BASE_API_ITEM_PATHS) {
+    const [head, tail] = pattern.split("*");
+    if (!pathname.startsWith(head) || !pathname.endsWith(tail)) continue;
+    const id = pathname.slice(head.length, pathname.length - tail.length);
+    if (id && !id.includes("/")) return pattern;
+  }
+  return null;
+}
+
 // Dashboard page prefix → area. A member without the area is redirected to
 // the first area they do have (Basic Chat).
 export const OWNER_AREA_FOR_PATH = {

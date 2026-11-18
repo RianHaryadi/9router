@@ -5,7 +5,8 @@ import {
   updateProviderConnection,
   deleteProviderConnection,
 } from "@/models";
-import { toProviderConnectionResponse, usesAwsCredentialForm } from "@/lib/providerConnectionResponse";
+import { toProviderConnectionResponse, toMemberConnectionResponse, usesAwsCredentialForm } from "@/lib/providerConnectionResponse";
+import { isMemberSession } from "@/dashboardGuard";
 
 function normalizeProxyConfig(body = {}) {
   const hasAnyProxyField =
@@ -68,6 +69,13 @@ export async function GET(request, { params }) {
 
     if (!connection) {
       return NextResponse.json({ error: "Connection not found" }, { status: 404 });
+    }
+
+    // A teammate may look at a connection's model catalog (the chat picker
+    // does), but never at the ACCOUNT behind it: for OAuth providers the
+    // connection name IS the owner's email.
+    if (await isMemberSession(request)) {
+      return NextResponse.json({ connection: toMemberConnectionResponse(connection) });
     }
 
     return NextResponse.json({ connection: toProviderConnectionResponse(connection) });

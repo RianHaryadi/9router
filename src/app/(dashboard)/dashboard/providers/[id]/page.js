@@ -28,6 +28,7 @@ import AutoPingScheduleModal from "./AutoPingScheduleModal";
 import WebLoginButton, { WEB_LOGIN_PROVIDERS } from "../components/WebLoginButton.js";
 import MinimaxLeaseButton from "../components/MinimaxLeaseButton.js";
 import { getScheduleSlotLabels } from "@/shared/services/quotaPingSchedule";
+import useSessionStore from "@/store/sessionStore";
 
 const ONE_BY_ONE_DELAY_MS = 1000;
 
@@ -99,6 +100,16 @@ export default function ProviderDetailPage() {
   const [importingQoderModels, setImportingQoderModels] = useState(false);
   const [importingClineModels, setImportingClineModels] = useState(false);
   const { copied, copy } = useCopyToClipboard();
+  // The connections are the owner's and shared: a teammate may READ the
+  // setup, never change it. The server refuses the write either way; this
+  // only hides the actions the role may not use.
+  const role = useSessionStore((s) => s.role);
+  const fetchSession = useSessionStore((s) => s.fetchSession);
+  const isMember = role === "member";
+
+  useEffect(() => {
+    fetchSession();
+  }, [fetchSession]);
 
   const AG_RISK_STORAGE_KEY = "ag_risk_confirmed";
 
@@ -317,7 +328,10 @@ export default function ProviderDetailPage() {
   const fetchConnections = useCallback(async () => {
     try {
       const [connectionsRes, nodesRes, proxyPoolsRes, settingsRes] = await Promise.all([
-        fetch("/api/providers", { cache: "no-store" }),
+        // scope=shared: the connections are the owner's and shared. This page
+        // needs the whole setup; the chat picker uses the default scope, which
+        // stays limited to the caller's key.
+        fetch("/api/providers?scope=shared", { cache: "no-store" }),
         fetch("/api/provider-nodes", { cache: "no-store" }),
         fetch("/api/proxy-pools?isActive=true", { cache: "no-store" }),
         fetch("/api/settings", { cache: "no-store" }),
@@ -1108,6 +1122,7 @@ export default function ProviderDetailPage() {
                   setShowEditModal(true);
                 }}
                 onDelete={() => handleDelete(conn.id)}
+                readOnly={isMember}
                 oneByOneStatus={oneByOneResults[conn.id] || null}
               />
             </div>
@@ -1280,13 +1295,17 @@ export default function ProviderDetailPage() {
         })}
 
         {/* Add model button — inline, same style as model chips */}
-        <button
-          onClick={() => setShowAddCustomModel(true)}
-          className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-dashed border-brand-600/40 dark:border-brand-300/50 px-3 py-2 text-xs text-brand-700 dark:text-brand-300 transition-colors hover:border-brand-600 dark:border-brand-300/60 hover:bg-brand-300/15 sm:w-auto"
-        >
-          <span className="material-symbols-outlined text-sm">add</span>
-          Add Model
-        </button>
+        {/* The custom models are the owner's catalogue: a teammate reads
+            them, never writes them. */}
+        {!isMember && (
+          <button
+            onClick={() => setShowAddCustomModel(true)}
+            className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-dashed border-brand-600/40 dark:border-brand-300/50 px-3 py-2 text-xs text-brand-700 dark:text-brand-300 transition-colors hover:border-brand-600 dark:hover:border-brand-300/60 hover:bg-brand-300/15 sm:w-auto"
+          >
+            <span className="material-symbols-outlined text-sm">add</span>
+            Add Model
+          </button>
+        )}
 
         {/* Import Qoder models button — only show for qoder/qoder-cn provider */}
         {(providerId === "qoder" || providerId === "qoder-cn") && connections.some((conn) => conn.isActive !== false) && (
@@ -1496,7 +1515,8 @@ export default function ProviderDetailPage() {
                 {isAnthropicCompatible ? "messages" : (providerNode.apiType === "responses" ? "responses" : "chat/completions")}
               </p>
             </div>
-            <div className="grid grid-cols-1 gap-2 sm:flex sm:items-center">
+            <div className="grid grid-cols-1 gap-2 sm:items-center">
+              {!isMember && (
               <Button
                 size="sm"
                 icon="add"
@@ -1508,6 +1528,9 @@ export default function ProviderDetailPage() {
               >
                 Add API Key
               </Button>
+              )}
+              {!isMember && (
+              <>
               <Button
                 size="sm"
                 variant="secondary"
@@ -1542,6 +1565,8 @@ export default function ProviderDetailPage() {
               >
                 Delete
               </Button>
+              </>
+              )}
             </div>
           </div>
         </Card>
@@ -1555,7 +1580,7 @@ export default function ProviderDetailPage() {
           <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <h2 className="text-lg font-semibold">Connections</h2>
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4">
-              {connections.length > 0 && proxyPools.length > 0 && (
+              {!isMember && connections.length > 0 && proxyPools.length > 0 && (
                 <Button
                   size="sm"
                   variant="secondary"
@@ -1565,7 +1590,7 @@ export default function ProviderDetailPage() {
                   Apply Proxy
                 </Button>
               )}
-              {connections.length > 0 && (
+              {!isMember && connections.length > 0 && (
                 <>
                   {selectedConnectionIds.length > 0 && (
                     <Button
@@ -1599,7 +1624,9 @@ export default function ProviderDetailPage() {
                   )}
                 </>
               )}
-              {/* Round Robin toggle */}
+              {/* Round Robin toggle — it writes the provider strategy, which
+                  is the owner's setting. */}
+              {!isMember && (
               <div className="flex flex-wrap items-center gap-2">
                 <span className="text-xs text-text-muted font-medium">Round Robin</span>
                 <Toggle
@@ -1620,6 +1647,7 @@ export default function ProviderDetailPage() {
                   </div>
                 )}
               </div>
+              )}
             </div>
           </div>
 
@@ -1639,7 +1667,7 @@ export default function ProviderDetailPage() {
                 </div>
               </div>
               <div className="flex gap-2">
-                {hasDualAuthModes ? (
+                {isMember ? null : hasDualAuthModes ? (
                   <>
                     <Button size="sm" icon="lock" variant="secondary" onClick={triggerOAuthConnection}>
                       {oauthConnectionLabel}
@@ -1714,7 +1742,7 @@ export default function ProviderDetailPage() {
                 </div>
               )}
               {connectionsList}
-              {!isCompatible && (
+              {!isCompatible && !isMember && (
                 <div className="mt-4 grid grid-cols-1 gap-2 sm:flex">
                   {WEB_LOGIN_PROVIDERS.has(providerId) && (
                     <WebLoginButton providerId={providerId} onConnected={fetchConnections} />

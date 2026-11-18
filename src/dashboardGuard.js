@@ -10,6 +10,7 @@ import {
   API_AREA_FOR_PATH,
   MEMBER_BASE_AREAS,
   MEMBER_BASE_API_PATHS,
+  memberBaseApiItemPathFor,
   memberWriteScopeFor,
 } from "@/shared/constants/memberAreas.js";
 
@@ -405,11 +406,15 @@ export async function proxy(request) {
         // Exact match only: /api/models must not open /api/models/custom,
         // which accepts POST to create a model.
         const baseAllowed = readOnly && MEMBER_BASE_API_PATHS.includes(pathname);
+        // The chat picker also reads the live model catalog of each
+        // connection it may call: /api/providers/{id}/models. It carries no
+        // account identity, only the model ids.
+        const baseItemAllowed = readOnly && !!memberBaseApiItemPathFor(pathname);
         const area = apiAreaFor(pathname);
         const areas = await liveAreasOf(request);
         const hasArea = area ? areas.has(area) : false;
         // A member may only READ the endpoints of the areas they hold.
-        if (!alwaysAllowed && !baseAllowed && !(readOnly && hasArea)) {
+        if (!alwaysAllowed && !baseAllowed && !baseItemAllowed && !(readOnly && hasArea)) {
           // …plus the writes on their OWN objects: a teammate creates and
           // manages their own combos and prompt templates with the same flow
           // the owner has. The route checks the ownership of the row, so

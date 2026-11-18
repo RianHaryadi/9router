@@ -23,6 +23,7 @@ import Link from "next/link";
 import { getErrorCode, getRelativeTime } from "@/shared/utils";
 import { useNotificationStore } from "@/store/notificationStore";
 import { useHeaderSearchStore } from "@/store/headerSearchStore";
+import useSessionStore from "@/store/sessionStore";
 import ModelAvailabilityBadge from "./components/ModelAvailabilityBadge";
 import AddCompatibleModal from "./components/AddCompatibleModal";
 import { STATUS_FILTER_OPTIONS, matchesStatusFilter } from "./utils";
@@ -111,6 +112,16 @@ export default function ProvidersPage() {
   const searchQuery = useHeaderSearchStore((s) => s.query);
   const registerSearch = useHeaderSearchStore((s) => s.register);
   const unregisterSearch = useHeaderSearchStore((s) => s.unregister);
+  // The connections are the owner's and shared: a teammate SEES the whole
+  // setup, but may not change it. The server refuses the write either way;
+  // this only hides what the role may not use.
+  const role = useSessionStore((s) => s.role);
+  const fetchSession = useSessionStore((s) => s.fetchSession);
+  const isMember = role === "member";
+
+  useEffect(() => {
+    fetchSession();
+  }, [fetchSession]);
 
   useEffect(() => {
     registerSearch("Search providers...");
@@ -153,7 +164,10 @@ export default function ProvidersPage() {
     const fetchData = async () => {
       try {
         const [connectionsRes, nodesRes] = await Promise.all([
-          fetch("/api/providers"),
+          // scope=shared: the connections are the owner's and shared, so this
+          // page shows the whole setup. The chat model picker uses the default
+          // scope, which stays limited to the caller's key.
+          fetch("/api/providers?scope=shared"),
           fetch("/api/provider-nodes"),
         ]);
         const connectionsData = await connectionsRes.json();
@@ -436,25 +450,29 @@ export default function ProvidersPage() {
           <h2 className="text-lg sm:text-xl font-semibold flex items-center gap-2 leading-tight">
             Custom Providers (OpenAI/Anthropic Compatible){" "}
           </h2>
-          <div className="grid grid-cols-1 gap-2 sm:flex sm:w-auto">
-            <Button
-              size="sm"
-              icon="add"
-              onClick={() => setShowAddAnthropicCompatibleModal(true)}
-              className="w-full sm:w-auto"
-            >
-              Add Anthropic Compatible
-            </Button>
-            <Button
-              size="sm"
-              variant="secondary"
-              icon="add"
-              onClick={() => setShowAddCompatibleModal(true)}
-              className="w-full !bg-white !text-black hover:!bg-neutral sm:w-auto"
-            >
-              Add OpenAI Compatible
-            </Button>
-          </div>
+          {/* The shared setup is read-only for a teammate: the accounts are
+              the owner's, so adding one is the owner's job. */}
+          {!isMember && (
+            <div className="grid grid-cols-1 gap-2 sm:flex sm:w-auto">
+                <Button
+                  size="sm"
+                  icon="add"
+                  onClick={() => setShowAddAnthropicCompatibleModal(true)}
+                  className="w-full sm:w-auto"
+                >
+                  Add Anthropic Compatible
+                </Button>
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  icon="add"
+                  onClick={() => setShowAddCompatibleModal(true)}
+                  className="w-full !bg-white !text-black hover:!bg-neutral sm:w-auto"
+                >
+                  Add OpenAI Compatible
+                </Button>
+              </div>
+          )}
         </div>
         {compatibleProviders.length === 0 &&
         anthropicCompatibleProviders.length === 0 ? (
@@ -472,7 +490,7 @@ export default function ProvidersPage() {
                   provider={info}
                   stats={getProviderStats(info.id, "apikey")}
                   authType="compatible"
-                  onToggle={(active) =>
+                  onToggle={isMember ? undefined : (active) =>
                     handleToggleProvider(info.id, "apikey", active)
                   }
                 />
@@ -491,24 +509,26 @@ export default function ProvidersPage() {
           </h2>
           <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
             <ModelAvailabilityBadge />
-            <button
-              onClick={() => handleBatchTest("oauth")}
-              disabled={!!testingMode}
-              className={`flex w-full items-center justify-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-medium transition-colors sm:w-auto sm:py-1.5 ${
-                testingMode === "oauth"
-                  ? "bg-brand-300/35 border-brand-600/40 dark:border-brand-300/50 text-brand-700 dark:text-brand-300 animate-pulse"
-                  : "bg-bg border-border text-text-muted hover:text-text-main hover:border-brand-600/40 dark:border-brand-300/50"
-              }`}
-              title="Test all OAuth connections"
-              aria-label="Test all OAuth connections"
-            >
-              <span
-                className={`material-symbols-outlined text-[14px]${testingMode === "oauth" ? " animate-spin" : ""}`}
-              >
-                play_arrow
-              </span>
-              {testingMode === "oauth" ? "Testing..." : "Test All"}
-            </button>
+            {!isMember && (
+              <button
+                  onClick={() => handleBatchTest("oauth")}
+                  disabled={!!testingMode}
+                  className={`flex w-full items-center justify-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-medium transition-colors sm:w-auto sm:py-1.5 ${
+                    testingMode === "oauth"
+                      ? "bg-brand-300/35 border-brand-600/40 dark:border-brand-300/50 text-brand-700 dark:text-brand-300 animate-pulse"
+                      : "bg-bg border-border text-text-muted hover:text-text-main hover:border-brand-600/40 dark:border-brand-300/50"
+                  }`}
+                  title="Test all OAuth connections"
+                  aria-label="Test all OAuth connections"
+                >
+                  <span
+                    className={`material-symbols-outlined text-[14px]${testingMode === "oauth" ? " animate-spin" : ""}`}
+                  >
+                    play_arrow
+                  </span>
+                  {testingMode === "oauth" ? "Testing..." : "Test All"}
+                </button>
+            )}
           </div>
         </div>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4 lg:grid-cols-3 xl:grid-cols-4">
@@ -521,7 +541,7 @@ export default function ProvidersPage() {
                 provider={info}
                 stats={getProviderStats(key, authTypes)}
                 authType="oauth"
-                onToggle={(active) => handleToggleProvider(key, authTypes, active)}
+                onToggle={isMember ? undefined : (active) => handleToggleProvider(key, authTypes, active)}
               />
             );
           })}
@@ -536,24 +556,26 @@ export default function ProvidersPage() {
           <h2 className="text-lg sm:text-xl font-semibold flex items-center gap-2 leading-tight">
             Free Tier Providers
           </h2>
-          <button
-            onClick={() => handleBatchTest("free")}
-            disabled={!!testingMode}
-            className={`flex w-full items-center justify-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-medium transition-colors sm:w-auto sm:py-1.5 ${
-              testingMode === "free"
-                ? "bg-brand-300/35 border-brand-600/40 dark:border-brand-300/50 text-brand-700 dark:text-brand-300 animate-pulse"
-                : "bg-bg border-border text-text-muted hover:text-text-main hover:border-brand-600/40 dark:border-brand-300/50"
-            }`}
-            title="Test all Free connections"
-            aria-label="Test all Free provider connections"
-          >
-            <span
-              className={`material-symbols-outlined text-[14px]${testingMode === "free" ? " animate-spin" : ""}`}
-            >
-              play_arrow
-            </span>
-            {testingMode === "free" ? "Testing..." : "Test All"}
-          </button>
+          {!isMember && (
+            <button
+                onClick={() => handleBatchTest("free")}
+                disabled={!!testingMode}
+                className={`flex w-full items-center justify-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-medium transition-colors sm:w-auto sm:py-1.5 ${
+                  testingMode === "free"
+                    ? "bg-brand-300/35 border-brand-600/40 dark:border-brand-300/50 text-brand-700 dark:text-brand-300 animate-pulse"
+                    : "bg-bg border-border text-text-muted hover:text-text-main hover:border-brand-600/40 dark:border-brand-300/50"
+                }`}
+                title="Test all Free connections"
+                aria-label="Test all Free provider connections"
+              >
+                <span
+                  className={`material-symbols-outlined text-[14px]${testingMode === "free" ? " animate-spin" : ""}`}
+                >
+                  play_arrow
+                </span>
+                {testingMode === "free" ? "Testing..." : "Test All"}
+              </button>
+          )}
         </div>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4 lg:grid-cols-3 xl:grid-cols-4">
           {freeEntries.map(([key, info]) => {
@@ -567,7 +589,7 @@ export default function ProvidersPage() {
                 provider={info}
                 stats={getProviderStats(key, freeAuthTypes)}
                 authType="free"
-                onToggle={(active) =>
+                onToggle={isMember ? undefined : (active) =>
                   handleToggleProvider(key, freeAuthTypes, active)
                 }
               />
@@ -582,7 +604,7 @@ export default function ProvidersPage() {
                 provider={info}
                 stats={getProviderStats(key, freeAuthTypes)}
                 authType={Array.isArray(freeAuthTypes) ? (freeAuthTypes[0] ?? "apikey") : freeAuthTypes}
-                onToggle={(active) => handleToggleProvider(key, freeAuthTypes, active)}
+                onToggle={isMember ? undefined : (active) => handleToggleProvider(key, freeAuthTypes, active)}
               />
             );
           })}
@@ -597,24 +619,26 @@ export default function ProvidersPage() {
           <h2 className="text-lg sm:text-xl font-semibold flex items-center gap-2 leading-tight">
             API Key Providers{" "}
           </h2>
-          <button
-            onClick={() => handleBatchTest("apikey")}
-            disabled={!!testingMode}
-            className={`flex w-full items-center justify-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-medium transition-colors sm:w-auto sm:py-1.5 ${
-              testingMode === "apikey"
-                ? "bg-brand-300/35 border-brand-600/40 dark:border-brand-300/50 text-brand-700 dark:text-brand-300 animate-pulse"
-                : "bg-bg border-border text-text-muted hover:text-text-main hover:border-brand-600/40 dark:border-brand-300/50"
-            }`}
-            title="Test all API Key connections"
-            aria-label="Test all API Key connections"
-          >
-            <span
-              className={`material-symbols-outlined text-[14px]${testingMode === "apikey" ? " animate-spin" : ""}`}
-            >
-              play_arrow
-            </span>
-            {testingMode === "apikey" ? "Testing..." : "Test All"}
-          </button>
+          {!isMember && (
+            <button
+                onClick={() => handleBatchTest("apikey")}
+                disabled={!!testingMode}
+                className={`flex w-full items-center justify-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-medium transition-colors sm:w-auto sm:py-1.5 ${
+                  testingMode === "apikey"
+                    ? "bg-brand-300/35 border-brand-600/40 dark:border-brand-300/50 text-brand-700 dark:text-brand-300 animate-pulse"
+                    : "bg-bg border-border text-text-muted hover:text-text-main hover:border-brand-600/40 dark:border-brand-300/50"
+                }`}
+                title="Test all API Key connections"
+                aria-label="Test all API Key connections"
+              >
+                <span
+                  className={`material-symbols-outlined text-[14px]${testingMode === "apikey" ? " animate-spin" : ""}`}
+                >
+                  play_arrow
+                </span>
+                {testingMode === "apikey" ? "Testing..." : "Test All"}
+              </button>
+          )}
         </div>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4 lg:grid-cols-3 xl:grid-cols-4">
           {visibleApikeyEntries.map(([key, info]) => (
@@ -624,7 +648,7 @@ export default function ProvidersPage() {
               provider={info}
               stats={getProviderStats(key, "apikey")}
               authType="apikey"
-              onToggle={(active) => handleToggleProvider(key, "apikey", active)}
+              onToggle={isMember ? undefined : (active) => handleToggleProvider(key, "apikey", active)}
             />
           ))}
           {webCookieEntries.map(([key, info]) => (
@@ -634,7 +658,7 @@ export default function ProvidersPage() {
               provider={info}
               stats={getProviderStats(key, "cookie")}
               authType="cookie"
-              onToggle={(active) => handleToggleProvider(key, "cookie", active)}
+              onToggle={isMember ? undefined : (active) => handleToggleProvider(key, "cookie", active)}
             />
           ))}
         </div>

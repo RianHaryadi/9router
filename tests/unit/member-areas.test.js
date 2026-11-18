@@ -167,6 +167,17 @@ describe("area mapping", () => {
     expect(__test__.apiAreaFor("/api/combos/presets")).toBe("combos");
   });
 
+  it("opens the live model catalog of one connection to every member", async () => {
+    const { memberBaseApiItemPathFor } = await import("../../src/shared/constants/memberAreas.js");
+    // The chat picker reads the models of each connection it may call.
+    expect(memberBaseApiItemPathFor("/api/providers/abc-123/models")).toBe("/api/providers/*/models");
+    // A sibling route is never opened by accident.
+    expect(memberBaseApiItemPathFor("/api/providers/client")).toBeNull();
+    expect(memberBaseApiItemPathFor("/api/providers/abc/web-login")).toBeNull();
+    expect(memberBaseApiItemPathFor("/api/providers/abc/models/extra")).toBeNull();
+    expect(memberBaseApiItemPathFor("/api/providers/abc/test")).toBeNull();
+  });
+
   it("never lets a member read the settings", async () => {
     const { __test__ } = await import("../../src/dashboardGuard.js");
     // /api/settings carries the deployment settings. It is owner-only for
