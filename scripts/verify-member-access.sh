@@ -28,8 +28,14 @@ for p in /api/settings /api/keys /api/team/members /api/usage/stats /api/combos 
 done
 
 echo
-echo "=== write must be refused:"
-echo "  POST /api/combos -> $(curl -s -o /dev/null -w '%{http_code}' -X POST "$BASE/api/combos" -H "$AUTH" -H 'Content-Type: application/json' -d '{"name":"x","models":[]}')"
+echo "=== the member's own objects (must be writable when the area is held):"
+MCID=$(curl -s -X POST "$BASE/api/combos" -H "$AUTH" -H 'Content-Type: application/json' \
+  -d '{"name":"zz-verify-combo","models":[]}' | python3 -c "import sys,json;print(json.load(sys.stdin).get('id',''))" 2>/dev/null)
+echo "  POST /api/combos -> ${MCID:-failed}"
+if [ -n "$MCID" ]; then
+  echo "  PUT own combo    -> $(curl -s -o /dev/null -w '%{http_code}' -X PUT "$BASE/api/combos/$MCID" -H "$AUTH" -H 'Content-Type: application/json' -d '{"name":"zz-verify-combo-2","models":[]}')"
+  echo "  DELETE own combo -> $(curl -s -o /dev/null -w '%{http_code}' -X DELETE "$BASE/api/combos/$MCID" -H "$AUTH")"
+fi
 
 echo
 echo "=== pages:"
