@@ -25,6 +25,10 @@ describe("Kiro external_idp (CLIProxyAPI) import and refresh", () => {
   });
 
   it("refreshes Microsoft external_idp tokens with form-encoded OAuth body", async () => {
+    // refreshKiroToken() calls proxyAwareFetch(), and proxyFetch.js no longer
+    // routes through globalThis.fetch (it uses the package's own undici), so a
+    // global.fetch mock never reaches it. The transport seam itself is mocked
+    // here instead.
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
       json: () => Promise.resolve({
@@ -33,7 +37,9 @@ describe("Kiro external_idp (CLIProxyAPI) import and refresh", () => {
         expires_in: 3600,
       }),
     });
-    global.fetch = fetchMock;
+    vi.doMock("../../open-sse/utils/proxyFetch.js", () => ({
+      proxyAwareFetch: (...args) => fetchMock(...args),
+    }));
 
     const { refreshKiroToken } = await import("../../open-sse/services/tokenRefresh.js");
     const result = await refreshKiroToken("old-refresh-token", {
@@ -77,9 +83,12 @@ describe("Kiro external_idp (CLIProxyAPI) import and refresh", () => {
   });
 
   it("rejects external_idp refresh endpoints outside Microsoft login", async () => {
-    const { refreshKiroToken } = await import("../../open-sse/services/tokenRefresh.js");
     const fetchMock = vi.fn();
-    global.fetch = fetchMock;
+    vi.doMock("../../open-sse/utils/proxyFetch.js", () => ({
+      proxyAwareFetch: (...args) => fetchMock(...args),
+    }));
+
+    const { refreshKiroToken } = await import("../../open-sse/services/tokenRefresh.js");
 
     const result = await refreshKiroToken("old-refresh-token", {
       authMethod: "external_idp",

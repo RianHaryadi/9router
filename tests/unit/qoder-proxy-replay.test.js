@@ -23,14 +23,27 @@ function success() {
   });
 }
 
+// The executor calls proxyAwareFetch(), and open-sse/utils/proxyFetch.js no
+// longer routes through globalThis.fetch — it uses the package's own undici
+// instance (commit 736be957). A global.fetch mock therefore never reaches it.
+//
+// The transport is mocked at the undici level instead, so the REAL
+// proxyAwareFetch runs: it picks the ProxyAgent when a proxy is configured and
+// the direct Agent otherwise, and the test can assert that distinction for
+// real.
 async function loadExecutor(fetchMock, useProxy = true) {
   vi.resetModules();
   for (const key of ["HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "NO_PROXY", "http_proxy", "https_proxy", "all_proxy", "no_proxy"]) {
     vi.stubEnv(key, "");
   }
   if (useProxy) vi.stubEnv("HTTPS_PROXY", "http://proxy.test:3128");
-  // Exercise the real proxyAwareFetch: it captures fetch when imported.
-  vi.stubGlobal("fetch", fetchMock);
+
+  vi.doMock("undici", () => ({
+    fetch: async (url, options) => fetchMock(url, options),
+    Agent: class DirectAgent {},
+    ProxyAgent: class ProxyAgent {},
+  }));
+
   const { QoderExecutor } = await import("../../open-sse/executors/qoder.js");
   return new QoderExecutor();
 }
@@ -55,6 +68,11 @@ describe("Qoder signed inference transport", () => {
     await expect(executor.execute({ ...request, proxyOptions })).rejects.toThrow("response lost");
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(fetchMock.mock.calls[0][1].dispatcher).toBeDefined();
+    // The signed POST is NOT replayed: one upstream call, one identity.
+    const ids = fetchMock.mock.calls.map(([, options]) => JSON.parse(
+      Buffer.from(options.headers.Authorization.split(".")[1], "base64").toString(),
+    ).requestId);
+    expect(new Set(ids).size).toBe(1);
     if (proxyOptions) expect(proxyOptions.strictProxy).toBe(false);
   });
 
@@ -81,7 +99,12 @@ describe("Qoder signed inference transport", () => {
     expect(result.response.ok).toBe(true);
     await result.response.text();
     expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(!!fetchMock.mock.calls[0][1].dispatcher).toBe(useProxy);
+    // Both paths carry a dispatcher: since 963787f7 the direct path uses its
+    // own Agent (the default global agent's ClientHello gets RST-ed by DPI),
+    // so the DIRECTION is what distinguishes them, not the presence.
+    const dispatcher = fetchMock.mock.calls[0][1].dispatcher;
+    expect(dispatcher).toBeDefined();
+    expect(dispatcher.constructor.name).toBe(useProxy ? "ProxyAgent" : "DirectAgent");
   });
 
   it("preserves caller cancellation without replaying the request", async () => {

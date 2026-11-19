@@ -1,5 +1,23 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+// The OAuth provider modules import open-sse/utils/proxyFetch.js, which
+// replaces globalThis.fetch as an IMPORT side effect. A mock installed before
+// that import is clobbered, so the code under test hits the real network.
+// The helper below imports FIRST and installs the mock second.
+async function importThenMock(modulePath, payloads) {
+  const mod = await import(new URL(modulePath, import.meta.url).href);
+  const fetchMock = vi.fn();
+  for (const payload of payloads) {
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      json: async () => payload,
+      text: async () => JSON.stringify(payload),
+    });
+  }
+  vi.stubGlobal("fetch", fetchMock);
+  return { ...mod, fetchMock };
+}
+
 describe("xai/oauth service", () => {
   beforeEach(() => {
     vi.resetModules();
@@ -22,15 +40,13 @@ describe("xai/oauth service", () => {
   });
 
   it("discovers endpoints without custom user-agent headers", async () => {
-    fetch.mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({
+    const { discoverEndpoints } = await importThenMock(
+      "../../src/lib/oauth/services/xai.js",
+      [{
         authorization_endpoint: "https://auth.x.ai/oauth2/authorize",
         token_endpoint: "https://auth.x.ai/oauth2/token",
-      }),
-    });
-
-    const { discoverEndpoints } = await import("../../src/lib/oauth/services/xai.js");
+      }],
+    );
     await expect(discoverEndpoints()).resolves.toEqual({
       authorizeUrl: "https://auth.x.ai/oauth2/authorize",
       tokenUrl: "https://auth.x.ai/oauth2/token",
@@ -64,15 +80,13 @@ describe("xai/oauth service", () => {
   });
 
   it("generates dashboard auth data with CLIProxyAPI PKCE size and discovered endpoints", async () => {
-    fetch.mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({
+    const { generateAuthData } = await importThenMock(
+      "../../src/lib/oauth/providers.js",
+      [{
         authorization_endpoint: "https://auth.x.ai/oauth2/authorize-from-discovery",
         token_endpoint: "https://auth.x.ai/oauth2/token-from-discovery",
-      }),
-    });
-
-    const { generateAuthData } = await import("../../src/lib/oauth/providers.js");
+      }],
+    );
     const data = await generateAuthData("xai", "http://127.0.0.1:56121/callback");
     const parsed = new URL(data.authUrl);
 
@@ -85,25 +99,20 @@ describe("xai/oauth service", () => {
   });
 
   it("exchanges dashboard codes against the discovered xAI token endpoint", async () => {
-    const fetchMock = fetch;
-    fetchMock
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({
+    const { exchangeTokens, fetchMock } = await importThenMock(
+      "../../src/lib/oauth/providers.js",
+      [
+        {
           authorization_endpoint: "https://auth.x.ai/oauth2/authorize",
           token_endpoint: "https://auth.x.ai/oauth2/token-from-discovery",
-        }),
-      })
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({
+        },
+        {
           access_token: "access-token",
           refresh_token: "refresh-token",
           expires_in: 3600,
-        }),
-      });
-
-    const { exchangeTokens } = await import("../../src/lib/oauth/providers.js");
+        },
+      ],
+    );
     const tokens = await exchangeTokens(
       "xai",
       "auth-code",

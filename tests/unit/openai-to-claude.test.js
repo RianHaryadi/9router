@@ -243,8 +243,11 @@ describe("openaiToClaudeRequest", () => {
 
 describe("openaiToClaudeResponse", () => {
   it("omits empty Read pages tool argument before emitting Claude input deltas", () => {
+    // Since upstream 96a9a2b3 the tool arguments are BUFFERED and emitted as
+    // one sanitized input_json_delta when the turn finishes, so the delta
+    // arrives on the finish_reason chunk, not on the argument chunk.
     const state = { toolCalls: new Map() };
-    const chunk = {
+    openaiToClaudeResponse({
       id: "chatcmpl-test",
       model: "gpt-test",
       choices: [{
@@ -252,21 +255,33 @@ describe("openaiToClaudeResponse", () => {
           tool_calls: [{
             index: 0,
             id: "call_read",
+            function: { name: "Read" },
+          }],
+        },
+      }],
+    }, state);
+
+    const result = openaiToClaudeResponse({
+      id: "chatcmpl-test",
+      model: "gpt-test",
+      choices: [{
+        delta: {
+          tool_calls: [{
+            index: 0,
             function: {
-              name: "Read",
               arguments: JSON.stringify({
                 file_path: "/tmp/example.txt",
                 offset: 0,
                 limit: 120,
                 pages: ""
-              })
-            }
-          }]
-        }
-      }]
-    };
+              }),
+            },
+          }],
+        },
+        finish_reason: "tool_calls",
+      }],
+    }, state);
 
-    const result = openaiToClaudeResponse(chunk, state);
     const inputDelta = result.find(event => event.delta?.type === "input_json_delta");
 
     expect(inputDelta).toBeDefined();
