@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { getSettings, updateSettings } from "@/lib/localDb";
 import { applyOutboundProxyEnv } from "@/lib/network/outboundProxy";
 import { resetComboRotation } from "open-sse/services/combo.js";
+import { normalizeShadowSettings } from "@/custom/routing/shadowSettings.js";
+import { normalizeComplexityTiers } from "@/custom/routing/complexityRouting.js";
 import bcrypt from "bcryptjs";
 
 export const dynamic = "force-dynamic";
@@ -13,6 +15,7 @@ const SETTINGS_RESPONSE_HEADERS = {
 
 // Secrets must never be mass-assigned from request body (CWE-915)
 const PROTECTED_SETTING_KEYS = ["password", "mitmSudoEncrypted"];
+const BOOLEAN_SETTING_KEYS = ["piiRedactionEnabled", "promptInspectionEnabled", "guardrailsEnabled", "injectionFirewallEnabled", "loopGuardEnabled", "shadowRoutingEnabled", "complexityRoutingEnabled"];
 
 export async function GET() {
   try {
@@ -41,6 +44,11 @@ export async function PATCH(request) {
 
     // Strip protected secrets before any internal handling sets them
     for (const key of PROTECTED_SETTING_KEYS) delete body[key];
+    for (const key of BOOLEAN_SETTING_KEYS) {
+      if (Object.prototype.hasOwnProperty.call(body, key) && typeof body[key] !== "boolean") {
+        return NextResponse.json({ error: `${key} must be a boolean` }, { status: 400 });
+      }
+    }
 
     // If updating password, hash it
     if (body.newPassword) {
@@ -74,6 +82,25 @@ export async function PATCH(request) {
       if (!body.oidcClientSecret || !String(body.oidcClientSecret).trim()) {
         delete body.oidcClientSecret;
       }
+    }
+
+    if (Object.prototype.hasOwnProperty.call(body, "shadowRoutingRatio") ||
+        Object.prototype.hasOwnProperty.call(body, "shadowRoutingTargets")) {
+      const shadow = normalizeShadowSettings(body);
+      if (!shadow.ok) {
+        return NextResponse.json({ error: shadow.error }, { status: 400 });
+      }
+    }
+
+    if (Object.prototype.hasOwnProperty.call(body, "complexityRoutingTiers")) {
+      const tiers = normalizeComplexityTiers(body.complexityRoutingTiers);
+      if (Object.keys(tiers).length === 0 && body.complexityRoutingTiers && Object.keys(body.complexityRoutingTiers).length > 0) {
+        return NextResponse.json(
+          { error: "complexityRoutingTiers needs at least one level with a model" },
+          { status: 400 }
+        );
+      }
+      body.complexityRoutingTiers = tiers;
     }
 
     const settings = await updateSettings(body);

@@ -7,7 +7,10 @@ import { filterToOpenAIFormat } from "../../open-sse/translator/formats/openai.j
 import { parseSSELine } from "../../open-sse/utils/streamHelpers.js";
 
 describe("request normalization", () => {
-  it("claudeToOpenAIRequest flattens text-only content arrays into string", () => {
+  it("claudeToOpenAIRequest collapses a LONE text part into a string", () => {
+    // collapseTextParts() (upstream d3f61aac) only collapses a single text
+    // part. Several text parts stay an array so per-block cache_control and
+    // thinking metadata survive the translation.
     const body = {
       messages: [
         {
@@ -21,7 +24,15 @@ describe("request normalization", () => {
     };
 
     const result = claudeToOpenAIRequest("gpt-oss:120b", body, true);
-    expect(result.messages[0].content).toBe("hi\nthere");
+    expect(result.messages[0].content).toEqual([
+      { type: "text", text: "hi" },
+      { type: "text", text: "there" },
+    ]);
+
+    const single = claudeToOpenAIRequest("gpt-oss:120b", {
+      messages: [{ role: "user", content: [{ type: "text", text: "hi" }] }],
+    }, true);
+    expect(single.messages[0].content).toBe("hi");
   });
 
   it("claudeToOpenAIRequest preserves multimodal arrays", () => {
@@ -48,7 +59,9 @@ describe("request normalization", () => {
     expect(Array.isArray(result.messages[0].content)).toBe(true);
   });
 
-  it("filterToOpenAIFormat flattens text-only arrays to string", () => {
+  it("filterToOpenAIFormat keeps the content-part array shape", () => {
+    // filterToOpenAIFormat() only FILTERS blocks (it drops thinking,
+    // signature and unknown types) — it does not flatten text parts.
     const body = {
       messages: [
         {
@@ -62,7 +75,10 @@ describe("request normalization", () => {
     };
 
     const result = filterToOpenAIFormat(JSON.parse(JSON.stringify(body)));
-    expect(result.messages[0].content).toBe("a\nb");
+    expect(result.messages[0].content).toEqual([
+      { type: "text", text: "a" },
+      { type: "text", text: "b" },
+    ]);
   });
 
   it("translateRequest keeps /v1/messages Claude->OpenAI text payloads string-safe", () => {
@@ -92,8 +108,11 @@ describe("request normalization", () => {
     );
 
     const userMessage = result.messages.find((m) => m.role === "user");
-    expect(typeof userMessage.content).toBe("string");
-    expect(userMessage.content).toBe("hello\nworld");
+    expect(Array.isArray(userMessage.content)).toBe(true);
+    expect(userMessage.content).toEqual([
+      { type: "text", text: "hello" },
+      { type: "text", text: "world" },
+    ]);
   });
 
   it("translateRequest strips unsupported Anthropic output_config for MiniMax Claude-compatible endpoints", () => {
@@ -171,12 +190,16 @@ describe("request normalization", () => {
       done: false,
     });
 
-    const parsed = parseSSELine(raw);
+    // NDJSON is only parsed when the caller declares the Ollama format
+    // (upstream 83d94daa): without it the line is not an SSE "data:" line.
+    const parsed = parseSSELine(raw, FORMATS.OLLAMA);
     expect(parsed).toEqual({
       model: "gpt-oss:120b",
       message: { role: "assistant", content: "hello" },
       done: false,
     });
+
+    expect(parseSSELine(raw)).toBeNull();
   });
 
   it("parseSSELine still supports SSE data lines", () => {

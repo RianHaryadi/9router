@@ -7,6 +7,7 @@ import Drawer from "@/shared/components/Drawer";
 import Pagination from "@/shared/components/Pagination";
 import { cn } from "@/shared/utils/cn";
 import { AI_PROVIDERS, getProviderByAlias } from "@/shared/constants/providers";
+import { getInputTokens, getOutputTokens, getCachedTokens, getCacheCreationTokens } from "./tokenDisplay";
 
 let providerNameCache = null;
 let providerNodesCache = null;
@@ -55,7 +56,7 @@ function CollapsibleSection({ title, children, defaultOpen = false, icon = null 
   const [isOpen, setIsOpen] = useState(defaultOpen);
   
   return (
-    <div className="border border-black/5 dark:border-white/5 rounded-lg overflow-hidden">
+    <div className="border border-ink/5 dark:border-white/5 rounded-lg overflow-hidden">
       <button 
         type="button"
         onClick={() => setIsOpen(!isOpen)}
@@ -74,29 +75,12 @@ function CollapsibleSection({ title, children, defaultOpen = false, icon = null 
       </button>
       
       {isOpen && (
-        <div className="p-4 border-t border-black/5 dark:border-white/5">
+        <div className="p-4 border-t border-ink/5 dark:border-white/5">
           {children}
         </div>
       )}
     </div>
   );
-}
-
-function getCachedTokens(tokens) {
-  return tokens?.cached_tokens || tokens?.cache_read_input_tokens || 0;
-}
-
-function getCacheCreationTokens(tokens) {
-  return tokens?.cache_creation_input_tokens || 0;
-}
-
-function getInputTokens(tokens) {
-  const prompt = tokens?.prompt_tokens || tokens?.input_tokens || 0;
-  // Canonical storage keeps prompt cache-inclusive. Legacy Claude rows may have
-  // stored prompt cache-exclusive; fall back to cache when it's larger so old
-  // rows don't under-report input.
-  const cache = getCachedTokens(tokens);
-  return prompt < cache ? cache : prompt;
 }
 
 export default function RequestDetailsTab() {
@@ -109,6 +93,12 @@ export default function RequestDetailsTab() {
   });
   const [loading, setLoading] = useState(false);
   const [selectedDetail, setSelectedDetail] = useState(null);
+  const [fallbackEvents, setFallbackEvents] = useState([]);
+  const [fallbackLoading, setFallbackLoading] = useState(false);
+  const [fallbackError, setFallbackError] = useState(false);
+  const [replayLoading, setReplayLoading] = useState(false);
+  const [replayError, setReplayError] = useState("");
+  const [replayResult, setReplayResult] = useState(null);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [providers, setProviders] = useState([]);
   const [providerNameCache, setProviderNameCache] = useState(null);
@@ -117,6 +107,8 @@ export default function RequestDetailsTab() {
     startDate: "",
     endDate: ""
   });
+  // Owner toggle: request the stored prompt/response bodies.
+  const [showContent, setShowContent] = useState(false);
 
   const fetchProviders = useCallback(async () => {
     try {
@@ -141,6 +133,9 @@ export default function RequestDetailsTab() {
       if (filters.provider) params.append("provider", filters.provider);
       if (filters.startDate) params.append("startDate", filters.startDate);
       if (filters.endDate) params.append("endDate", filters.endDate);
+      // Ask for the stored prompt/response bodies; the server only returns
+      // them when the owner enabled prompt inspection.
+      if (showContent) params.append("includeContent", "1");
 
       const res = await fetch(`/api/usage/request-details?${params}`);
       const data = await res.json();
@@ -152,7 +147,7 @@ export default function RequestDetailsTab() {
     } finally {
       setLoading(false);
     }
-  }, [pagination.page, pagination.pageSize, filters]);
+  }, [pagination.page, pagination.pageSize, filters, showContent]);
 
   useEffect(() => {
     fetchProviders();
@@ -162,9 +157,47 @@ export default function RequestDetailsTab() {
     fetchDetails();
   }, [fetchDetails]);
 
-  const handleViewDetail = (detail) => {
+  const loadFallbackEvents = async (requestId) => {
+    if (!requestId) return;
+    setFallbackLoading(true);
+    setFallbackError(false);
+    try {
+      const params = new URLSearchParams({ requestId, limit: "100" });
+      const res = await fetch(`/api/usage/fallbacks?${params}`);
+      if (!res.ok) throw new Error("Failed to load fallback chain");
+      const data = await res.json();
+      setFallbackEvents(data.events || []);
+    } catch (error) {
+      setFallbackError(true);
+      console.error("Failed to fetch fallback events:", error);
+    } finally {
+      setFallbackLoading(false);
+    }
+  };
+  const openDetail = (detail) => {
     setSelectedDetail(detail);
+    setFallbackEvents([]);
+    setFallbackError(false);
+    setReplayResult(null);
     setIsDrawerOpen(true);
+    loadFallbackEvents(detail.requestId);
+  };
+
+  const replayDetail = async (detail) => {
+    setReplayLoading(true);
+    setReplayError("");
+    setReplayResult(null);
+    try {
+      const res = await fetch(`/api/usage/request-details/${encodeURIComponent(detail.id)}/replay`, { method: "POST" });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(data?.error || `Replay failed (${res.status})`);
+      const text = data?.choices?.[0]?.message?.content ?? data?.output_text ?? data?.text ?? JSON.stringify(data);
+      setReplayResult(String(text));
+    } catch (error) {
+      setReplayError(error.message || "Replay failed");
+    } finally {
+      setReplayLoading(false);
+    }
   };
 
   const handlePageChange = (newPage) => {
@@ -190,8 +223,8 @@ export default function RequestDetailsTab() {
               value={filters.provider}
               onChange={(e) => setFilters({ ...filters, provider: e.target.value })}
               className={cn(
-                "h-9 px-3 rounded-lg border border-black/10 dark:border-white/10 bg-surface",
-                "text-sm text-text-main focus:outline-none focus:ring-2 focus:ring-primary/20",
+                "h-9 px-3 rounded-lg border border-ink/10 dark:border-white/10 bg-surface",
+                "text-sm text-text-main focus:outline-none focus:ring-2 focus:ring-brand-600 dark:ring-brand-300/20",
                 "w-full min-w-0 cursor-pointer"
               )}
               style={{ colorScheme: 'auto' }}
@@ -213,8 +246,8 @@ export default function RequestDetailsTab() {
               value={filters.startDate}
               onChange={(e) => setFilters({ ...filters, startDate: e.target.value })}
               className={cn(
-                "h-9 px-3 rounded-lg border border-black/10 dark:border-white/10 bg-surface",
-                "w-full min-w-0 text-sm text-text-main focus:outline-none focus:ring-2 focus:ring-primary/20"
+                "h-9 px-3 rounded-lg border border-ink/10 dark:border-white/10 bg-surface",
+                "w-full min-w-0 text-sm text-text-main focus:outline-none focus:ring-2 focus:ring-brand-600 dark:ring-brand-300/20"
               )}
             />
           </div>
@@ -227,22 +260,35 @@ export default function RequestDetailsTab() {
               value={filters.endDate}
               onChange={(e) => setFilters({ ...filters, endDate: e.target.value })}
               className={cn(
-                "h-9 px-3 rounded-lg border border-black/10 dark:border-white/10 bg-surface",
-                "w-full min-w-0 text-sm text-text-main focus:outline-none focus:ring-2 focus:ring-primary/20"
+                "h-9 px-3 rounded-lg border border-ink/10 dark:border-white/10 bg-surface",
+                "w-full min-w-0 text-sm text-text-main focus:outline-none focus:ring-2 focus:ring-brand-600 dark:ring-brand-300/20"
               )}
             />
           </div>
           
           <div className="flex min-w-0 flex-col gap-2 sm:col-span-2 lg:col-span-1">
             <span className="hidden text-sm font-medium text-text-main opacity-0 lg:block" aria-hidden="true">Clear</span>
-            <Button 
-              variant="ghost" 
-              onClick={handleClearFilters}
-              disabled={!filters.provider && !filters.startDate && !filters.endDate}
-              className="w-full"
-            >
-              Clear Filters
-            </Button>
+            <div className="flex gap-2">
+              <Button
+                variant="ghost"
+                onClick={handleClearFilters}
+                disabled={!filters.provider && !filters.startDate && !filters.endDate}
+                className="flex-1"
+              >
+                Clear Filters
+              </Button>
+              <Button
+                variant={showContent ? "primary" : "outline"}
+                onClick={() => setShowContent((v) => !v)}
+                title={
+                  showContent
+                    ? "Hiding stored prompts and responses"
+                    : "Show stored prompts and responses (needs owner permission)"
+                }
+              >
+                {showContent ? "Prompts ON" : "Prompts OFF"}
+              </Button>
+            </div>
           </div>
         </div>
       </Card>
@@ -251,7 +297,7 @@ export default function RequestDetailsTab() {
         <div className="overflow-x-auto">
           <table className="w-full min-w-[880px]">
             <thead>
-              <tr className="border-b border-black/5 dark:border-white/5">
+              <tr className="border-b border-ink/5 dark:border-white/5">
                 <th className="text-left p-4 text-sm font-semibold text-text-main">Timestamp</th>
                 <th className="text-left p-4 text-sm font-semibold text-text-main">Model</th>
                 <th className="text-left p-4 text-sm font-semibold text-text-main">Provider</th>
@@ -283,7 +329,7 @@ export default function RequestDetailsTab() {
                 details.map((detail, index) => (
                   <tr
                     key={`${detail.id}-${index}`}
-                    className="border-b border-black/5 dark:border-white/5 last:border-b-0 hover:bg-black/[0.02] dark:hover:bg-white/[0.02] transition-colors"
+                    className="border-b border-ink/5 dark:border-white/5 last:border-b-0 hover:bg-black/[0.02] dark:hover:bg-white/[0.02] transition-colors"
                   >
                     <td className="whitespace-nowrap p-4 text-sm text-text-main">
                       {new Date(detail.timestamp).toLocaleString()}
@@ -306,7 +352,7 @@ export default function RequestDetailsTab() {
                       {getCacheCreationTokens(detail.tokens) > 0 ? getCacheCreationTokens(detail.tokens).toLocaleString() : "—"}
                     </td>
                     <td className="p-4 text-sm text-text-main text-right font-mono">
-                      {detail.tokens?.completion_tokens?.toLocaleString() || 0}
+                      {getOutputTokens(detail.tokens).toLocaleString()}
                     </td>
                     <td className="p-4 text-sm text-text-muted">
                       <div className="flex flex-col gap-0.5">
@@ -318,7 +364,7 @@ export default function RequestDetailsTab() {
                       <Button
                         variant="outline"
                         size="sm"
-                        onClick={() => handleViewDetail(detail)}
+                        onClick={() => openDetail(detail)}
                       >
                         Detail
                       </Button>
@@ -331,7 +377,7 @@ export default function RequestDetailsTab() {
         </div>
 
         {!loading && details.length > 0 && (
-          <div className="border-t border-black/5 dark:border-white/5">
+          <div className="border-t border-ink/5 dark:border-white/5">
             <Pagination
               currentPage={pagination.page}
               pageSize={pagination.pageSize}
@@ -360,6 +406,38 @@ export default function RequestDetailsTab() {
                 <span className="text-text-muted">Timestamp:</span>{" "}
                 <span className="text-text-main">{new Date(selectedDetail.timestamp).toLocaleString()}</span>
               </div>
+              {selectedDetail.requestId && (
+                <div className="sm:col-span-2">
+                  <span className="text-text-muted">Request ID:</span>{" "}
+                  <span className="break-all font-mono text-text-main">{selectedDetail.requestId}</span>
+                </div>
+              )}
+              {selectedDetail.projectName && (
+                <div>
+                  <span className="text-text-muted">Project:</span>{" "}
+                  <span className="text-text-main">{selectedDetail.projectName}</span>
+                </div>
+              )}
+              {(selectedDetail.fallbackCount || 0) > 0 && (
+                <div>
+                  <span className="text-text-muted">Fallbacks:</span>{" "}
+                  <span className="font-mono text-text-main">{selectedDetail.fallbackCount}</span>
+                </div>
+              )}
+              <div className="sm:col-span-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={replayLoading}
+                  onClick={() => replayDetail(selectedDetail)}
+                >
+                  {replayLoading ? "Replaying…" : "Replay request"}
+                </Button>
+                {replayError && <span role="alert" className="ml-3 text-sm text-danger">{replayError}</span>}
+                {replayResult != null && (
+                  <pre className="mt-2 max-h-[220px] w-full overflow-auto whitespace-pre-wrap rounded-lg border border-ink/5 bg-black/5 p-3 font-mono text-xs text-text-main dark:border-white/5 dark:bg-white/5">{replayResult}</pre>
+                )}
+              </div>
               <div>
                  <span className="text-text-muted">Provider:</span>{" "}
                  <span className="text-text-main font-medium">{getProviderName(selectedDetail.provider, providerNameCache)}</span>
@@ -372,7 +450,7 @@ export default function RequestDetailsTab() {
                 <span className="text-text-muted">Status:</span>{" "}
                 <span className={cn(
                   "font-medium",
-                  selectedDetail.status === "success" ? "text-green-600" : "text-red-600"
+                  selectedDetail.status === "success" ? "text-success" : "text-danger"
                 )}>
                   {selectedDetail.status}
                 </span>
@@ -408,21 +486,21 @@ export default function RequestDetailsTab() {
               <div>
                 <span className="text-text-muted">Output Tokens:</span>{" "}
                 <span className="text-text-main font-mono">
-                  {selectedDetail.tokens?.completion_tokens?.toLocaleString() || 0}
+                  {getOutputTokens(selectedDetail.tokens).toLocaleString()}
                 </span>
               </div>
             </div>
 
             {selectedDetail.pxpipe && (
-              <div className="rounded-lg border border-black/5 dark:border-white/5 p-4">
+              <div className="rounded-lg border border-ink/5 dark:border-white/5 p-4">
                 <div className="flex items-center gap-2 mb-2">
                   <span className="material-symbols-outlined text-[18px] text-text-muted">image</span>
                   <span className="font-semibold text-sm text-text-main">PXPIPE</span>
                   <span className={cn(
                     "text-xs px-2 py-0.5 rounded",
                     selectedDetail.pxpipe.applied
-                      ? "bg-green-500/15 text-green-600"
-                      : "bg-amber-500/15 text-amber-600"
+                      ? "bg-success/15 text-success"
+                      : "bg-warning/15 text-warning"
                   )}>
                     {selectedDetail.pxpipe.applied ? "Activated" : "Skipped"}
                   </span>
@@ -439,7 +517,7 @@ export default function RequestDetailsTab() {
                     </div>
                     <div>
                       <span className="text-text-muted block text-xs">Saved</span>
-                      <span className="font-mono text-green-600">{selectedDetail.pxpipe.savedPct || 0}%</span>
+                      <span className="font-mono text-success">{selectedDetail.pxpipe.savedPct || 0}%</span>
                     </div>
                     <div>
                       <span className="text-text-muted block text-xs">Images</span>
@@ -455,16 +533,46 @@ export default function RequestDetailsTab() {
               </div>
             )}
 
+            {selectedDetail.requestId && (
+              <CollapsibleSection title={`Fallback chain (${fallbackEvents.length})`} icon="alt_route">
+                {fallbackLoading ? (
+                  <p role="status" className="text-sm text-text-muted">Loading fallback history…</p>
+                ) : fallbackError ? (
+                  <p role="alert" className="text-sm text-danger">Could not load fallback history.</p>
+                ) : fallbackEvents.length ? (
+                  <ol className="space-y-3">
+                    {fallbackEvents.map((event) => (
+                      <li key={event.id} className="flex flex-col gap-1 rounded-lg border border-ink/5 p-3 text-sm dark:border-white/5">
+                        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 font-medium text-text-main">
+                          <span>{event.fromProvider || event.provider || "?"}/{event.fromModel || event.model || "?"}</span>
+                          <span aria-hidden="true">→</span>
+                          <span>{event.provider || "?"}/{event.model || "?"}</span>
+                          <span className="font-mono text-text-muted">HTTP {event.status ?? "—"}</span>
+                        </div>
+                        <p className="break-words text-text-muted">{event.reason || "Provider unavailable"}</p>
+                        <div className="flex gap-4 font-mono text-xs text-text-subtle">
+                          <span>{event.latencyMs ?? 0}ms</span>
+                          {event.cooldownMs > 0 && <span>cooldown {event.cooldownMs}ms</span>}
+                        </div>
+                      </li>
+                    ))}
+                  </ol>
+                ) : (
+                  <p className="text-sm text-text-muted">{selectedDetail.fallbackCount ? "Fallback events unavailable for this request." : "No fallback occurred."}</p>
+                )}
+              </CollapsibleSection>
+            )}
+
             <div className="space-y-4">
               <CollapsibleSection title="1. Client Request (Input)" defaultOpen={true} icon="input">
-                <pre className="max-h-[300px] max-w-full overflow-auto rounded-lg border border-black/5 bg-black/5 p-3 font-mono text-xs text-text-main dark:border-white/5 dark:bg-white/5 sm:p-4">
+                <pre className="max-h-[300px] max-w-full overflow-auto rounded-lg border border-ink/5 bg-black/5 p-3 font-mono text-xs text-text-main dark:border-white/5 dark:bg-white/5 sm:p-4">
                   {JSON.stringify(selectedDetail.request, null, 2)}
                 </pre>
               </CollapsibleSection>
 
               {selectedDetail.providerRequest && (
                 <CollapsibleSection title="2. Provider Request (Translated)" icon="translate">
-                  <pre className="max-h-[300px] max-w-full overflow-auto rounded-lg border border-black/5 bg-black/5 p-3 font-mono text-xs text-text-main dark:border-white/5 dark:bg-white/5 sm:p-4">
+                  <pre className="max-h-[300px] max-w-full overflow-auto rounded-lg border border-ink/5 bg-black/5 p-3 font-mono text-xs text-text-main dark:border-white/5 dark:bg-white/5 sm:p-4">
                     {JSON.stringify(selectedDetail.providerRequest, null, 2)}
                   </pre>
                 </CollapsibleSection>
@@ -472,7 +580,7 @@ export default function RequestDetailsTab() {
 
               {selectedDetail.providerResponse && (
                 <CollapsibleSection title="3. Provider Response (Raw)" icon="data_object">
-                  <pre className="max-h-[300px] max-w-full overflow-auto rounded-lg border border-black/5 bg-black/5 p-3 font-mono text-xs text-text-main dark:border-white/5 dark:bg-white/5 sm:p-4">
+                  <pre className="max-h-[300px] max-w-full overflow-auto rounded-lg border border-ink/5 bg-black/5 p-3 font-mono text-xs text-text-main dark:border-white/5 dark:bg-white/5 sm:p-4">
                     {typeof selectedDetail.providerResponse === 'object'
                       ? JSON.stringify(selectedDetail.providerResponse, null, 2)
                       : selectedDetail.providerResponse
@@ -488,7 +596,7 @@ export default function RequestDetailsTab() {
                       <span className="material-symbols-outlined text-[16px]">psychology</span>
                       Thinking Process
                     </h4>
-                    <pre className="max-h-[200px] max-w-full overflow-auto rounded-lg border border-amber-200 bg-amber-50 p-3 font-mono text-xs text-amber-900 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-100 sm:p-4">
+                    <pre className="max-h-[200px] max-w-full overflow-auto rounded-lg border border-warning bg-warning p-3 font-mono text-xs text-warning sm:p-4">
                       {selectedDetail.response.thinking}
                     </pre>
                   </div>
@@ -497,7 +605,7 @@ export default function RequestDetailsTab() {
                 <h4 className="font-semibold text-text-main mb-2 text-xs uppercase tracking-wide opacity-70">
                   Content
                 </h4>
-                <pre className="max-h-[300px] max-w-full overflow-auto rounded-lg border border-black/5 bg-black/5 p-3 font-mono text-xs text-text-main dark:border-white/5 dark:bg-white/5 sm:p-4">
+                <pre className="max-h-[300px] max-w-full overflow-auto rounded-lg border border-ink/5 bg-black/5 p-3 font-mono text-xs text-text-main dark:border-white/5 dark:bg-white/5 sm:p-4">
                   {selectedDetail.response?.content || "[No content]"}
                 </pre>
               </CollapsibleSection>

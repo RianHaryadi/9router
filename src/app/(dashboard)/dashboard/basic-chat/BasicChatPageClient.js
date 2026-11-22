@@ -3,7 +3,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Badge, Button } from "@/shared/components";
 import { getModelsByProviderId } from "@/shared/constants/models";
-import { isAnthropicCompatibleProvider, isOpenAICompatibleProvider } from "@/shared/constants/providers";
+import { getProviderAlias, isAnthropicCompatibleProvider, isOpenAICompatibleProvider } from "@/shared/constants/providers";
+import { readChatResponse, toChatRequestModel } from "@/shared/utils/basicChat";
 
 const STORAGE_KEYS = {
   sessions: "basic-chat.sessions",
@@ -83,15 +84,6 @@ function buildUserContent(message) {
   return content.length > 0 ? content : text;
 }
 
-function readAssistantText(chunk) {
-  if (!chunk || typeof chunk !== "object") return "";
-  const choice = chunk.choices?.[0];
-  const delta = choice?.delta || {};
-  const pieces = [delta.content, choice?.message?.content, chunk.output_text, chunk.text]
-    .map(textValue)
-    .filter(Boolean);
-  return pieces[0] || "";
-}
 
 async function fileToDataUrl(file) {
   return await new Promise((resolve, reject) => {
@@ -133,11 +125,7 @@ function normalizeLiveModel(model, connection) {
     ? model
     : model?.name || model?.displayName || rawId;
 
-  let requestModel = rawId;
-  const isCompatible = isOpenAICompatibleProvider(connection.provider) || isAnthropicCompatibleProvider(connection.provider);
-  if (isCompatible && !rawId.includes("/")) {
-    requestModel = `${connection.provider}/${rawId}`;
-  }
+  const requestModel = toChatRequestModel(connection.provider, rawId, getProviderAlias(connection.provider));
 
   return {
     id: requestModel,
@@ -170,29 +158,11 @@ export default function BasicChatPageClient() {
   const [providerGroups, setProviderGroups] = useState([]);
   const [loadingData, setLoadingData] = useState(true);
   const [loadError, setLoadError] = useState("");
-  const [sessions, setSessions] = useState(() => {
-    if (typeof window === "undefined") return [];
-    try {
-      const saved = safeParse(globalThis.localStorage.getItem(STORAGE_KEYS.sessions), []);
-      return Array.isArray(saved) ? saved.map((session) => ({
-        ...session,
-        messages: Array.isArray(session.messages) ? session.messages : [],
-      })) : [];
-    } catch { return []; }
-  });
-  const [activeSessionId, setActiveSessionId] = useState(() => {
-    if (typeof window === "undefined") return "";
-    return globalThis.localStorage.getItem(STORAGE_KEYS.activeSessionId) || "";
-  });
-  const [activeProviderId, setActiveProviderId] = useState(() => {
-    if (typeof window === "undefined") return "";
-    return globalThis.localStorage.getItem(STORAGE_KEYS.activeProviderId) || "";
-  });
+  const [sessions, setSessions] = useState([]);
+  const [activeSessionId, setActiveSessionId] = useState("");
+  const [activeProviderId, setActiveProviderId] = useState("");
   const [activeModelId, setActiveModelId] = useState("");
-  const [draft, setDraft] = useState(() => {
-    if (typeof window === "undefined") return "";
-    return globalThis.localStorage.getItem(STORAGE_KEYS.draft) || "";
-  });
+  const [draft, setDraft] = useState("");
   const [attachments, setAttachments] = useState([]);
   const [isSending, setIsSending] = useState(false);
   const [streamingMessageId, setStreamingMessageId] = useState("");
@@ -202,29 +172,51 @@ export default function BasicChatPageClient() {
   const [historyOpen, setHistoryOpen] = useState(false);
   const fileInputRef = useRef(null);
   const abortRef = useRef(null);
-  const initializedRef = useRef(false);
+
   const modelMenuRef = useRef(null);
   const historyMenuRef = useRef(null);
 
   useEffect(() => {
-    setIsHydrated(true);
+    return () => abortRef.current?.abort();
   }, []);
 
   useEffect(() => {
     let cancelled = false;
 
     async function loadData() {
+      let availableGroups = [];
+      let savedSessions = [];
+      let savedSessionId = "";
+      let savedProviderId = "";
+      let savedDraft = "";
+      try {
+        const saved = safeParse(localStorage.getItem(STORAGE_KEYS.sessions), []);
+        savedSessions = Array.isArray(saved) ? saved.filter((session) => session && typeof session.id === "string").map((session) => ({
+          ...session,
+          messages: Array.isArray(session.messages) ? session.messages.map((message) => message.status === "streaming" ? { ...message, status: "stopped" } : message) : [],
+        })) : [];
+        savedSessionId = localStorage.getItem(STORAGE_KEYS.activeSessionId) || "";
+        savedProviderId = localStorage.getItem(STORAGE_KEYS.activeProviderId) || "";
+        savedDraft = localStorage.getItem(STORAGE_KEYS.draft) || "";
+      } catch { /* Storage may be unavailable in private/restricted browsers. */ }
       setLoadingData(true);
       setLoadError("");
 
       try {
-        const providersRes = await fetch("/api/providers", { cache: "no-store" });
+        const [providersRes, combosRes] = await Promise.all([
+          fetch("/api/providers", { cache: "no-store" }),
+          fetch("/api/combos", { cache: "no-store" }),
+        ]);
         const providersData = await providersRes.json().catch(() => ({}));
+        if (!providersRes.ok) throw new Error(textValue(providersData.error) || "Failed to load providers.");
+        const combosData = await combosRes.json().catch(() => ({}));
+        const combos = (Array.isArray(combosData.combos) ? combosData.combos : [])
+          .filter((combo) => (!combo.kind || combo.kind === "llm") && combo.models?.length > 0);
         const connections = Array.isArray(providersData.connections)
           ? providersData.connections.filter((connection) => connection?.isActive !== false)
           : [];
 
-        if (connections.length === 0) {
+        if (connections.length === 0 && combos.length === 0) {
           if (!cancelled) {
             setProviderGroups([]);
             setLoadError("No providers connected yet.");
@@ -267,7 +259,7 @@ export default function BasicChatPageClient() {
         const liveResults = await Promise.all(
           connections.map(async (connection) => {
             try {
-              const response = await fetch(`/api/providers/${connection.id}/models`, { cache: "no-store" });
+              const response = await fetch(`/api/providers/${connection.id}/models`, { cache: "no-store", signal: AbortSignal.timeout(15000) });
               const data = await response.json().catch(() => ({}));
               if (!response.ok) return { connection, models: [] };
               const models = parseProviderModelsPayload(data)
@@ -295,6 +287,19 @@ export default function BasicChatPageClient() {
           .filter((group) => group.models.length > 0)
           .sort((a, b) => a.providerName.localeCompare(b.providerName));
 
+        if (combos.length > 0) normalized.push({
+          providerId: "combos",
+          providerName: "Combos",
+          models: combos.map((combo) => ({
+            id: combo.name,
+            requestModel: combo.name,
+            name: combo.name,
+            providerId: "combos",
+            providerName: "Combos",
+          })),
+        });
+
+        availableGroups = normalized;
         if (!cancelled) {
           setProviderGroups(normalized);
           if (normalized.length === 0) {
@@ -307,7 +312,28 @@ export default function BasicChatPageClient() {
           setProviderGroups([]);
         }
       } finally {
-        if (!cancelled) setLoadingData(false);
+        if (!cancelled) {
+          // Restore history and selection together after catalog loading. This
+          // also keeps the first client render identical to the server HTML.
+          let session = savedSessions.find((item) => item.id === savedSessionId) || savedSessions[0];
+          const group = availableGroups.find((item) => item.providerId === savedProviderId) || availableGroups[0];
+          const model = availableGroups.flatMap((item) => item.models).find((item) => item.id === session?.modelId) || group?.models[0];
+          if (!session && model) {
+            session = {
+              id: createId(), title: "New chat", providerId: model.providerId,
+              providerName: model.providerName, modelId: model.id, modelName: model.name,
+              createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), messages: [],
+            };
+            savedSessions = [session];
+          }
+          setSessions(savedSessions);
+          setActiveSessionId(session?.id || "");
+          setActiveProviderId(model?.providerId || savedProviderId);
+          setActiveModelId(model?.id || "");
+          setDraft(savedDraft);
+          setIsHydrated(true);
+          setLoadingData(false);
+        }
       }
     }
 
@@ -375,45 +401,6 @@ export default function BasicChatPageClient() {
     }
   }, [isHydrated, sessions, activeSessionId, activeProviderId, draft]);
 
-  useEffect(() => {
-    if (!isHydrated || loadingData || initializedRef.current) return;
-    if (providerGroups.length === 0) return;
-
-    const savedProvider = providerGroups.find((group) => group.providerId === activeProviderId) || providerGroups[0];
-    const savedModel = activeModelId && modelIndex.has(activeModelId)
-      ? modelIndex.get(activeModelId)
-      : savedProvider.models[0];
-
-    if (sessions.length > 0) {
-      const session = sessions.find((item) => item.id === activeSessionId) || sessions[0];
-      const sessionModel = session?.modelId && modelIndex.has(session.modelId)
-        ? modelIndex.get(session.modelId)
-        : savedModel;
-      initializedRef.current = true;
-      setActiveSessionId(session.id);
-      setActiveProviderId(sessionModel?.providerId || savedProvider.providerId);
-      setActiveModelId(sessionModel?.id || savedModel.id);
-      return;
-    }
-
-    const session = {
-      id: createId(),
-      title: "New chat",
-      providerId: savedProvider.providerId,
-      providerName: savedProvider.providerName,
-      modelId: savedModel.id,
-      modelName: savedModel.name,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-      messages: [],
-    };
-
-    initializedRef.current = true;
-    setSessions([session]);
-    setActiveSessionId(session.id);
-    setActiveProviderId(savedProvider.providerId);
-    setActiveModelId(savedModel.id);
-  }, [isHydrated, loadingData, providerGroups, modelIndex, sessions, activeSessionId, activeProviderId, activeModelId]);
 
   const updateSession = (sessionId, updater) => {
     setSessions((prev) => prev.map((session) => (session.id === sessionId ? updater(cloneSession(session)) : session)));
@@ -435,7 +422,7 @@ export default function BasicChatPageClient() {
   };
 
   const handleNewChat = () => {
-    if (!activeModel) return;
+    if (!activeModel || isSending) return;
     const session = ensureSessionForModel(activeModel);
     if (!session) return;
     setSessions((prev) => [session, ...prev]);
@@ -446,9 +433,11 @@ export default function BasicChatPageClient() {
     setAttachments([]);
     setStreamingMessageId("");
     setStreamingText("");
+    setLoadError("");
   };
 
   const handleSelectSession = (sessionId) => {
+    if (isSending) return;
     const session = sessions.find((item) => item.id === sessionId);
     if (!session) return;
     setActiveSessionId(sessionId);
@@ -458,7 +447,7 @@ export default function BasicChatPageClient() {
   };
 
   const handleDeleteCurrentChat = () => {
-    if (!activeSessionId) return;
+    if (!activeSessionId || isSending) return;
     const nextSessions = sessions.filter((session) => session.id !== activeSessionId);
     const fallback = nextSessions[0] || null;
     setSessions(nextSessions);
@@ -501,6 +490,7 @@ export default function BasicChatPageClient() {
   };
 
   const handleSelectModel = (modelId) => {
+    if (isSending) return;
     const model = modelIndex.get(modelId);
     if (!model) return;
 
@@ -571,6 +561,7 @@ export default function BasicChatPageClient() {
   };
 
   const sendMessage = async () => {
+    if (isSending || abortRef.current) return;
     const model = activeModel || activeProviderGroup?.models?.[0] || null;
     if (!model) return;
 
@@ -621,6 +612,7 @@ export default function BasicChatPageClient() {
       title: item.title === "New chat" ? makeSessionTitle(userText) : item.title,
     } : item)));
     setDraft("");
+    setLoadError("");
     setAttachments([]);
     setIsSending(true);
     setStreamingMessageId(assistantMessageId);
@@ -629,7 +621,7 @@ export default function BasicChatPageClient() {
     abortRef.current = new AbortController();
 
     const requestMessages = nextMessages
-      .filter((message) => !(message.role === "assistant" && message.id === assistantMessageId))
+      .filter((message) => !(message.role === "assistant" && (message.id === assistantMessageId || message.status === "error" || !message.content)))
       .map((message) => ({
         role: message.role,
         content: message.role === "user" ? buildUserContent(message) : message.content,
@@ -641,6 +633,7 @@ export default function BasicChatPageClient() {
         headers: {
           "Content-Type": "application/json",
           Accept: "text/event-stream",
+          "x-end-user-facing": "true",
         },
         body: JSON.stringify({
           model: model.requestModel || model.id,
@@ -650,59 +643,14 @@ export default function BasicChatPageClient() {
         signal: abortRef.current.signal,
       });
 
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(textValue(errorData.error || errorData.message || `Request failed (${response.status})`));
-      }
-
-      const reader = response.body?.getReader();
-      if (!reader) {
-        const data = await response.json().catch(() => ({}));
-        const fallbackText = textValue(data?.choices?.[0]?.message?.content || data?.output_text || data?.error || data?.message || "");
+      const assistantText = await readChatResponse(response, (text) => {
+        setStreamingText(text);
         updateSession(sessionId, (currentSession) => ({
           ...currentSession,
-          messages: currentSession.messages.map((message) => (message.id === assistantMessageId ? { ...message, content: fallbackText, status: "done" } : message)),
+          messages: currentSession.messages.map((message) => (message.id === assistantMessageId ? { ...message, content: text, status: "streaming" } : message)),
           updatedAt: new Date().toISOString(),
         }));
-        return;
-      }
-
-      const decoder = new TextDecoder();
-      let buffer = "";
-      let assistantText = "";
-
-      while (true) {
-        const { value, done } = await reader.read();
-        if (done) break;
-
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split(/\r?\n/);
-        buffer = lines.pop() || "";
-
-        for (const line of lines) {
-          const trimmed = line.trim();
-          if (!trimmed.startsWith("data:")) continue;
-
-          const payload = trimmed.slice(5).trim();
-          if (!payload || payload === "[DONE]") continue;
-
-          try {
-            const chunk = JSON.parse(payload);
-            const text = readAssistantText(chunk);
-            if (!text) continue;
-
-            assistantText += text;
-            setStreamingText(assistantText);
-            updateSession(sessionId, (currentSession) => ({
-              ...currentSession,
-              messages: currentSession.messages.map((message) => (message.id === assistantMessageId ? { ...message, content: assistantText, status: "streaming" } : message)),
-              updatedAt: new Date().toISOString(),
-            }));
-          } catch {
-            // Ignore malformed chunks.
-          }
-        }
-      }
+      });
 
       updateSession(sessionId, (currentSession) => ({
         ...currentSession,
@@ -711,7 +659,13 @@ export default function BasicChatPageClient() {
       }));
       finalizeSessionTitle(sessionId, userText);
     } catch (error) {
-      if (error.name !== "AbortError") {
+      if (error.name === "AbortError") {
+        updateSession(sessionId, (currentSession) => ({
+          ...currentSession,
+          messages: currentSession.messages.map((message) => (message.id === assistantMessageId ? { ...message, status: "stopped" } : message)),
+          updatedAt: new Date().toISOString(),
+        }));
+      } else {
         const errorText = textValue(error?.message || error);
         updateSession(sessionId, (currentSession) => ({
           ...currentSession,
@@ -741,16 +695,19 @@ export default function BasicChatPageClient() {
   return (
     <div className="relative flex-1 flex flex-col h-full min-h-0 min-w-0 bg-[#212121] text-white overflow-hidden">
       <div className="relative mx-auto flex flex-1 h-full min-h-0 w-full max-w-4xl flex-col">
-        <div className="flex shrink-0 items-center justify-between gap-3 px-4 py-3 lg:px-6">
-          <div ref={modelMenuRef} className="relative">
+        <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 px-4 py-3 lg:px-6">
+          <div ref={modelMenuRef} className="relative min-w-0 max-w-full">
             <button
               type="button"
+              aria-label="Select model"
+              aria-expanded={modelMenuOpen}
+              disabled={loadingData || isSending}
               onClick={() => setModelMenuOpen((value) => !value)}
-              className="flex items-center gap-3 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-left transition hover:bg-white/8"
+              className="flex max-w-full items-center gap-3 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-left transition hover:bg-white/8 disabled:opacity-50"
             >
               <div className="min-w-0">
                 <div className="flex items-center gap-2">
-                  <span className="text-sm font-semibold text-white">{modelLabel}</span>
+                  <span className="truncate text-sm font-semibold text-white">{loadingData ? "Loading models…" : modelLabel}</span>
                   <span className="material-symbols-outlined text-[18px] text-white/70">expand_more</span>
                 </div>
                 <p className="truncate text-xs text-white/55">{modelSubLabel}</p>
@@ -758,14 +715,14 @@ export default function BasicChatPageClient() {
             </button>
 
             {modelMenuOpen ? (
-              <div className="absolute left-0 top-[calc(100%+10px)] z-30 w-[min(520px,calc(100vw-2rem))] overflow-hidden rounded-[20px] border border-white/10 bg-[#262626] shadow-2xl shadow-black/50">
+              <div data-testid="chat-model-menu" className="absolute left-0 top-[calc(100%+10px)] z-30 w-[min(520px,calc(100vw-2rem))] overflow-hidden rounded-[12px] border border-white/10 bg-[#262626] shadow-2xl shadow-black/50">
                 <div className="border-b border-white/10 px-4 py-3">
                   <p className="text-xs uppercase tracking-[0.22em] text-white/45">Models</p>
-                  <p className="text-sm text-white/75">Only from connected providers</p>
+                  <p className="text-sm text-white/75">Connected providers and chat combos</p>
                 </div>
                 <div className="max-h-[60vh] overflow-y-auto p-2 custom-scrollbar">
                   {providerGroups.map((group) => (
-                    <div key={group.providerId} className="mb-2 rounded-[16px] border border-white/10 bg-black/20 p-2">
+                    <div key={group.providerId} className="mb-2 rounded-[12px] border border-white/10 bg-black/20 p-2">
                       <div className="flex items-center justify-between px-2 py-2">
                         <p className="text-sm font-semibold text-white">{group.providerName}</p>
                         <Badge size="sm" variant="default">{group.models.length}</Badge>
@@ -778,14 +735,14 @@ export default function BasicChatPageClient() {
                               key={model.id}
                               type="button"
                               onClick={() => handleSelectModel(model.id)}
-                              className={`rounded-[14px] border px-3 py-3 text-left transition ${isActive ? "border-blue-400/40 bg-blue-500/15" : "border-white/10 bg-white/5 hover:bg-white/8"}`}
+                              className={`rounded-[12px] border px-3 py-3 text-left transition ${isActive ? "border-info/40 bg-info/15" : "border-white/10 bg-white/5 hover:bg-white/8"}`}
                             >
                               <div className="flex items-start justify-between gap-3">
                                 <div className="min-w-0">
                                   <p className="truncate text-sm font-medium text-white">{model.name}</p>
                                   <p className="truncate text-[11px] text-white/45">{model.requestModel}</p>
                                 </div>
-                                {isActive ? <span className="material-symbols-outlined text-[18px] text-blue-300">check_circle</span> : null}
+                                {isActive ? <span className="material-symbols-outlined text-[18px] text-info">check_circle</span> : null}
                               </div>
                             </button>
                           );
@@ -799,27 +756,31 @@ export default function BasicChatPageClient() {
           </div>
 
           <div className="flex items-center gap-2">
+            <Button aria-label="New chat" variant="primary" size="sm" icon="add" onClick={handleNewChat} disabled={!activeModel || isSending}>
+              New chat
+            </Button>
             <button
               type="button"
+              disabled={isSending}
               onClick={() => setHistoryOpen((value) => !value)}
               className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white/80 transition hover:bg-white/8"
             >
               History
             </button>
-            <Button variant="ghost" size="sm" icon="delete" onClick={handleDeleteCurrentChat} disabled={!activeSessionId || sessions.length === 0}>
+            <button type="button" aria-label="Clear" onClick={handleDeleteCurrentChat} disabled={isSending || !activeSessionId || sessions.length === 0} className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white/80 transition hover:bg-white/10 disabled:opacity-50">
               Clear
-            </Button>
+            </button>
           </div>
         </div>
 
         {historyOpen ? (
-          <div ref={historyMenuRef} className="absolute right-4 top-[72px] z-20 w-[min(360px,calc(100vw-2rem))] rounded-[20px] border border-white/10 bg-[#262626] p-2 shadow-2xl shadow-black/50 lg:right-6">
+          <div ref={historyMenuRef} className="absolute right-4 top-[72px] z-20 w-[min(360px,calc(100vw-2rem))] rounded-[12px] border border-white/10 bg-[#262626] p-2 shadow-2xl shadow-black/50 lg:right-6">
             <div className="px-3 py-2">
               <p className="text-xs uppercase tracking-[0.22em] text-white/45">Recent chats</p>
             </div>
             <div className="max-h-[48vh] space-y-2 overflow-y-auto p-1 custom-scrollbar">
               {sessionItems.length === 0 ? (
-                <div className="rounded-[16px] border border-dashed border-white/10 bg-white/5 p-4 text-sm text-white/55">
+                <div className="rounded-[12px] border border-dashed border-white/10 bg-white/5 p-4 text-sm text-white/55">
                   No conversations yet.
                 </div>
               ) : sessionItems.map((session) => {
@@ -830,7 +791,7 @@ export default function BasicChatPageClient() {
                     key={session.id}
                     type="button"
                     onClick={() => handleSelectSession(session.id)}
-                    className={`w-full rounded-[16px] border px-3 py-3 text-left transition ${isActive ? "border-blue-400/40 bg-blue-500/15" : "border-white/10 bg-white/5 hover:bg-white/8"}`}
+                    className={`w-full rounded-[12px] border px-3 py-3 text-left transition ${isActive ? "border-info/40 bg-info/15" : "border-white/10 bg-white/5 hover:bg-white/8"}`}
                   >
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0 flex-1">
@@ -847,7 +808,7 @@ export default function BasicChatPageClient() {
         ) : null}
 
         {loadError ? (
-          <div className="mt-4 rounded-[18px] border border-rose-500/20 bg-rose-500/10 px-4 py-3 text-rose-100">
+          <div role="alert" className="mx-4 mt-4 rounded-[12px] border border-danger/40 bg-danger/10 px-4 py-3 text-white">
             <div className="flex items-start gap-3">
               <span className="material-symbols-outlined text-[20px]">error</span>
               <p className="text-sm leading-6">{loadError}</p>
@@ -860,13 +821,13 @@ export default function BasicChatPageClient() {
             {currentMessages.length === 0 ? (
               <div className="flex min-h-[50vh] items-center justify-center px-4 text-center">
                 <div className="max-w-xl space-y-4">
-                  <div className="mx-auto flex size-16 items-center justify-center rounded-[20px] border border-white/10 bg-white/5 text-white/80">
+                  <div className="mx-auto flex size-16 items-center justify-center rounded-[12px] border border-white/10 bg-white/5 text-white/80">
                     <span className="material-symbols-outlined text-[30px]">chat</span>
                   </div>
                   <div className="space-y-2">
                     <h2 className="text-2xl font-semibold text-white">Start a conversation</h2>
                     <p className="text-sm leading-6 text-white/60">
-                      Simple chat interface to interact with any AI model from connected providers. Select a model and start chatting!
+                      Choose a model or combo, then send a message to test your router.
                     </p>
                   </div>
                 </div>
@@ -878,7 +839,7 @@ export default function BasicChatPageClient() {
                 const isUser = message.role === "user";
                 const isAssistant = message.role === "assistant";
                 const isStreaming = isAssistant && message.id === streamingMessageId && message.status === "streaming";
-                const content = textValue(message.content) || (isAssistant ? streamingText : "");
+                const content = textValue(message.content) || (isStreaming ? streamingText : "");
 
                 return (
                   <div key={message.id} className={`flex w-full ${isUser ? "justify-end" : "justify-start"} mb-6`}>
@@ -890,7 +851,7 @@ export default function BasicChatPageClient() {
                       {message.attachments?.length ? (
                         <div className="mb-3 grid grid-cols-2 gap-2 sm:grid-cols-3 mt-2">
                           {message.attachments.map((attachment) => (
-                            <a key={attachment.id} href={attachment.dataUrl} target="_blank" rel="noreferrer" className="overflow-hidden rounded-[18px] border border-white/10 bg-black/20">
+                            <a key={attachment.id} href={attachment.dataUrl} target="_blank" rel="noreferrer" className="overflow-hidden rounded-[12px] border border-white/10 bg-black/20">
                               <img src={attachment.dataUrl} alt={attachment.name} className="h-28 w-full object-cover" loading="lazy" decoding="async" />
                             </a>
                           ))}
@@ -900,6 +861,7 @@ export default function BasicChatPageClient() {
                       <div className="whitespace-pre-wrap break-words text-[15px] leading-7">
                         {content}
                         {isAssistant && isStreaming && !streamingText ? <span className="inline-block animate-pulse">▋</span> : null}
+                        {message.status === "stopped" ? <span className="block text-xs text-white/60">Stopped</span> : null}
                       </div>
                     </div>
                   </div>
@@ -923,8 +885,10 @@ export default function BasicChatPageClient() {
             ) : null}
 
             <div className="mx-auto w-full max-w-3xl px-4 pb-2">
-              <div className="rounded-[26px] bg-[#2f2f2f] px-3 pt-3 pb-2 shadow-[0_0_15px_rgba(0,0,0,0.10)] ring-1 ring-white/5">
+              <p className="mb-3 text-xs text-white/60">Uses your dashboard session. No API key needed here.</p>
+              <div className="rounded-[12px] bg-[#2f2f2f] px-3 pt-3 pb-2 shadow-[0_0_15px_rgba(0,0,0,0.10)] ring-1 ring-white/5">
                 <textarea
+                  disabled={loadingData || !isHydrated}
                   value={draft}
                   onChange={(event) => setDraft(event.target.value)}
                   onKeyDown={handleKeyDown}
@@ -935,7 +899,7 @@ export default function BasicChatPageClient() {
 
                 <div className="mt-2 flex items-center justify-between gap-3">
                   <div className="flex items-center gap-2">
-                    <button type="button" onClick={() => fileInputRef.current?.click()} disabled={!activeModel || loadingData} className="p-2 text-white/50 hover:text-white transition rounded-full hover:bg-white/5">
+                    <button type="button" aria-label="Attach images" onClick={() => fileInputRef.current?.click()} disabled={!activeModel || loadingData || isSending} className="p-2 text-white/50 hover:text-white transition rounded-full hover:bg-white/5">
                       <span className="material-symbols-outlined text-[20px]">attach_file</span>
                     </button>
                     <input ref={fileInputRef} type="file" accept="image/*" multiple className="hidden" onChange={handleAttachFiles} />
@@ -944,11 +908,11 @@ export default function BasicChatPageClient() {
 
                   <div className="flex items-center gap-2">
                     {isSending ? (
-                      <button type="button" onClick={handleStop} className="p-2 text-white bg-white/10 hover:bg-white/20 transition rounded-full h-8 w-8 flex items-center justify-center">
+                      <button type="button" aria-label="Stop response" onClick={handleStop} className="p-2 text-white bg-white/10 hover:bg-white/20 transition rounded-full h-8 w-8 flex items-center justify-center">
                         <span className="material-symbols-outlined text-[16px]">stop</span>
                       </button>
                     ) : null}
-                    <button onClick={sendMessage} disabled={!canSend} className={`h-8 w-8 rounded-full flex items-center justify-center transition ${canSend ? 'bg-white text-black hover:opacity-90' : 'bg-white/10 text-white/30 cursor-not-allowed'}`}>
+                    <button type="button" aria-label="Send message" onClick={sendMessage} disabled={!canSend} className={`h-8 w-8 rounded-full flex items-center justify-center transition ${canSend ? 'bg-white text-black hover:opacity-90' : 'bg-white/10 text-white/30 cursor-not-allowed'}`}>
                       <span className="material-symbols-outlined text-[16px]">arrow_upward</span>
                     </button>
                   </div>

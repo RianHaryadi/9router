@@ -93,6 +93,7 @@ export function buildRequestDetail(base, overrides = {}) {
     response: base.response || {},
     pxpipe: base.pxpipe || undefined,
     status: base.status || "success",
+    ...requestObservability(base.clientRawRequest),
     ...overrides
   };
 }
@@ -115,18 +116,39 @@ export function formatDoneLine({ usage, latency }) {
   return `DONE ${latency?.total ?? 0}ms${ttftStr} · ${inStr} · OUT ${outTok}`;
 }
 
-export function saveUsageStats({ provider, model, tokens, connectionId, apiKey, endpoint, label = "USAGE", silent = false }) {
+/**
+ * Request-scoped observability fields as they ride on clientRawRequest into
+ * chatCore's shared context (the same object path apiKey takes). Read them at
+ * save time so they reflect every fallback that happened before this attempt.
+ */
+export function requestObservability(clientRawRequest) {
+  return {
+    projectName: clientRawRequest?.projectName ?? null,
+    fallbackCount: clientRawRequest?.fallbackCount ?? 0,
+    requestId: clientRawRequest?.requestId ?? null,
+    taskId: clientRawRequest?.taskId ?? null,
+  };
+}
+
+export function saveUsageStats({ provider, model, tokens, connectionId, apiKey, endpoint, label = "USAGE", silent = false, latency = null, projectName = null, fallbackCount = null, requestId = null, taskId = null }) {
   if (!tokens || typeof tokens !== "object") return;
 
   const inTokens = tokens.input_tokens ?? tokens.prompt_tokens ?? 0;
   const outTokens = tokens.output_tokens ?? tokens.completion_tokens ?? 0;
 
-  if (inTokens === 0 && outTokens === 0) return;
+  // Fork (T8): a request that produced no token counts still happened. The
+  // old guard dropped the row entirely, so a provider that sends no usage
+  // frame (and whose body cannot be estimated) vanished from usageHistory —
+  // and with it the latency, ttft, project attribution and fallback count
+  // that the Health & Spend dashboard reads. Record it with the tokens we
+  // have (possibly zero) so the request stays visible and countable.
+  const hasTokens = inTokens !== 0 || outTokens !== 0;
 
   if (!silent) {
     const time = new Date().toLocaleTimeString("en-US", { hour12: false, hour: "2-digit", minute: "2-digit", second: "2-digit" });
     const accountSuffix = connectionId ? ` | account=${connectionId.slice(0, 8)}...` : "";
-    console.log(`${COLORS.green}[${time}] 📊 [${label}] ${provider.toUpperCase()} | in=${inTokens} | out=${outTokens}${accountSuffix}${COLORS.reset}`);
+    const tokenNote = hasTokens ? "" : " (no usage reported)";
+    console.log(`${COLORS.green}[${time}] 📊 [${label}] ${provider.toUpperCase()} | in=${inTokens} | out=${outTokens}${accountSuffix}${tokenNote}${COLORS.reset}`);
   }
 
   // Canonicalize to one storage convention (prompt_tokens cache-inclusive) so
@@ -143,6 +165,15 @@ export function saveUsageStats({ provider, model, tokens, connectionId, apiKey, 
     timestamp: new Date().toISOString(),
     connectionId: connectionId || undefined,
     apiKey: apiKey || undefined,
-    endpoint: endpoint || null
+    endpoint: endpoint || null,
+    // Observability (T3): real per-request latency + attribution.
+    // Fork (T8): usageHistory now stores requestId, so a tokenless request
+    // can still be told apart from another one.
+    latencyMs: latency?.total ?? 0,
+    ttftMs: latency?.ttft ?? 0,
+    projectName: projectName ?? null,
+    fallbackCount: fallbackCount ?? 0,
+    requestId: requestId ?? null,
+    taskId: taskId ?? null,
   }).catch(() => {});
 }

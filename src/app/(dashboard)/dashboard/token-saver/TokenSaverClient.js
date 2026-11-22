@@ -491,13 +491,13 @@ export default function TokenSaverClient() {
       <Card id="rtk">
         <div className="flex items-center justify-between mb-2">
           <h2 className="text-lg font-semibold flex items-center gap-2">
-            <span className="material-symbols-outlined text-primary">
+            <span className="material-symbols-outlined text-brand-700 dark:text-brand-300">
               bolt
             </span>
             Token Saver
           </h2>
         </div>
-        <div className="flex items-center justify-between pt-2 pb-4 border-b border-border gap-4">
+        <div className="flex items-center justify-between pt-2 pb-4 border-b-2 border-ink gap-4">
           <div className="min-w-0 flex-1">
             <p className="font-medium">
               Compress tool output{" "}
@@ -505,7 +505,7 @@ export default function TokenSaverClient() {
                 href="https://github.com/rtk-ai/rtk"
                 target="_blank"
                 rel="noreferrer"
-                className="text-xs font-normal text-primary underline hover:opacity-80"
+                className="text-xs font-normal text-brand-700 dark:text-brand-300 underline hover:opacity-80"
               >
                 (RTK)
               </a>
@@ -528,7 +528,7 @@ export default function TokenSaverClient() {
                   href="https://github.com/chopratejas/headroom"
                   target="_blank"
                   rel="noreferrer"
-                  className="text-xs font-normal text-primary underline hover:opacity-80"
+                  className="text-xs font-normal text-brand-700 dark:text-brand-300 underline hover:opacity-80"
                 >
                   (Headroom)
                 </a>
@@ -541,7 +541,7 @@ export default function TokenSaverClient() {
               <button
                 type="button"
                 onClick={() => setShowHeadroomInstallModal(true)}
-                className="text-xs text-primary underline hover:opacity-80"
+                className="text-xs text-brand-700 dark:text-brand-300 underline hover:opacity-80"
               >
                 {headroomRunning ? "Manage" : "Setup"}
               </button>
@@ -603,7 +603,7 @@ export default function TokenSaverClient() {
                     key={extra}
                     className={`flex items-center gap-1.5 text-xs px-2 py-1 rounded border cursor-pointer transition-colors ${
                       pending
-                        ? "border-primary bg-primary/10 text-primary"
+                        ? "border-brand-600 dark:border-brand-300/60 bg-brand-300/25 text-brand-700 dark:text-brand-300"
                         : "border-border text-text-muted hover:bg-surface-2"
                     }`}
                     title={extraTitle}
@@ -623,7 +623,7 @@ export default function TokenSaverClient() {
                 <button
                   onClick={handleInstallExtras}
                   disabled={extrasActionLoading}
-                  className="text-xs px-2.5 py-1 rounded bg-primary text-white hover:opacity-90 disabled:opacity-50"
+                  className="text-xs px-2.5 py-1 rounded bg-ink text-[#FAF7F0] hover:opacity-90 disabled:opacity-50"
                 >
                   {extrasActionLoading
                     ? "Installing…"
@@ -653,7 +653,7 @@ export default function TokenSaverClient() {
             </p>
           </div>
         )}
-        <div className="flex items-center justify-between pt-4 border-t border-border gap-4 flex-wrap">
+        <div className="flex items-center justify-between pt-4 border-t-2 border-ink gap-4 flex-wrap">
           <div className="min-w-0 flex-1">
             <p className="font-medium">
               Compress LLM output{" "}
@@ -661,7 +661,7 @@ export default function TokenSaverClient() {
                 href="https://github.com/JuliusBrussee/caveman"
                 target="_blank"
                 rel="noreferrer"
-                className="text-xs font-normal text-primary underline hover:opacity-80"
+                className="text-xs font-normal text-brand-700 dark:text-brand-300 underline hover:opacity-80"
               >
                 (Caveman)
               </a>
@@ -680,7 +680,7 @@ export default function TokenSaverClient() {
                       onClick={() => handleCavemanLevel(lvl.id)}
                       className={`px-3 py-1.5 rounded text-xs font-medium border transition-colors ${
                         cavemanLevel === lvl.id
-                          ? "bg-primary text-white border-primary"
+                          ? "bg-ink text-[#FAF7F0] border-brand-600 dark:border-brand-300/60"
                           : "bg-transparent border-border text-text-muted hover:bg-surface-2"
                       }`}
                       title={lvl.desc}
@@ -689,7 +689,7 @@ export default function TokenSaverClient() {
                     </button>
                   ))}
                 </div>
-                <p className="text-xs text-primary">
+                <p className="text-xs text-brand-700 dark:text-brand-300">
                   {
                     CAVEMAN_LEVELS.find((lvl) => lvl.id === cavemanLevel)
                       ?.desc
@@ -703,7 +703,7 @@ export default function TokenSaverClient() {
             />
           </div>
         </div>
-        <div className="flex items-center justify-between pt-4 mt-4 border-t border-border gap-4 flex-wrap">
+        <div className="flex items-center justify-between pt-4 mt-4 border-t-2 border-ink gap-4 flex-wrap">
           <div className="min-w-0 flex-1">
             <p className="font-medium">
               Lazy senior dev{" "}
@@ -711,7 +711,7 @@ export default function TokenSaverClient() {
                 href="https://github.com/DietrichGebert/ponytail"
                 target="_blank"
                 rel="noreferrer"
-                className="text-xs font-normal text-primary underline hover:opacity-80"
+                className="text-xs font-normal text-brand-700 dark:text-brand-300 underline hover:opacity-80"
               >
                 (Ponytail)
               </a>
@@ -731,7 +731,7 @@ export default function TokenSaverClient() {
                       onClick={() => handlePonytailLevel(lvl.id)}
                       className={`px-3 py-1.5 rounded text-xs font-medium border transition-colors ${
                         ponytailLevel === lvl.id
-                          ? "bg-primary text-white border-primary"
+                          ? "bg-ink text-[#FAF7F0] border-brand-600 dark:border-brand-300/60"
                           : "bg-transparent border-border text-text-muted hover:bg-surface-2"
                       }`}
                       title={lvl.desc}
@@ -740,7 +740,7 @@ export default function TokenSaverClient() {
                     </button>
                   ))}
                 </div>
-                <p className="text-xs text-primary">
+                <p className="text-xs text-brand-700 dark:text-brand-300">
                   {
                     PONYTAIL_LEVELS.find((lvl) => lvl.id === ponytailLevel)
                       ?.desc
@@ -754,7 +754,7 @@ export default function TokenSaverClient() {
             />
           </div>
         </div>
-        <div className="flex items-center justify-between pt-4 mt-4 border-t border-border gap-4 flex-wrap">
+        <div className="flex items-center justify-between pt-4 mt-4 border-t-2 border-ink gap-4 flex-wrap">
           <div className="min-w-0 flex-1">
             <p className="font-medium">Custom system prompt</p>
             <p className="text-sm text-text-muted">
@@ -777,7 +777,7 @@ export default function TokenSaverClient() {
               onBlur={handleCustomPromptBlur}
               rows={4}
               placeholder="e.g. Prefer editing existing files over creating new ones."
-              className="w-full rounded border border-border bg-transparent p-2 text-xs"
+              className="w-full rounded border-2 border-ink bg-transparent p-2 text-xs"
             />
             <p className="text-xs text-text-muted mt-1">
               Applied to every provider and model. Sent as-is to upstream; an
@@ -787,7 +787,7 @@ export default function TokenSaverClient() {
         )}
         {/* PXPIPE hidden from UI — experimental, not exposed to users yet */}
         {false && (
-        <div className="flex items-center justify-between pt-4 mt-4 border-t border-border gap-4 flex-wrap">
+        <div className="flex items-center justify-between pt-4 mt-4 border-t-2 border-ink gap-4 flex-wrap">
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-3 flex-wrap">
               <p className="font-medium">
@@ -796,7 +796,7 @@ export default function TokenSaverClient() {
                   href="https://github.com/teamchong/pxpipe"
                   target="_blank"
                   rel="noreferrer"
-                  className="text-xs font-normal text-primary underline hover:opacity-80"
+                  className="text-xs font-normal text-brand-700 dark:text-brand-300 underline hover:opacity-80"
                 >
                   (PXPIPE)
                 </a>
@@ -807,13 +807,13 @@ export default function TokenSaverClient() {
               <button
                 type="button"
                 onClick={() => setShowPxpipeModal(true)}
-                className="text-xs text-primary underline hover:opacity-80"
+                className="text-xs text-brand-700 dark:text-brand-300 underline hover:opacity-80"
               >
                 {pxpipeStatus.installed ? "Manage" : "Setup"}
               </button>
               <a
                 href="/dashboard/pxpipe"
-                className="text-xs text-primary underline hover:opacity-80"
+                className="text-xs text-brand-700 dark:text-brand-300 underline hover:opacity-80"
               >
                 Dashboard
               </a>
@@ -852,7 +852,7 @@ export default function TokenSaverClient() {
               href="/api/headroom/proxy/dashboard"
               target="_blank"
               rel="noreferrer"
-              className="w-full rounded border border-border px-4 py-2 text-center text-sm hover:bg-surface-2"
+              className="w-full rounded border-2 border-ink px-4 py-2 text-center text-sm hover:bg-surface-2"
             >
               Open Headroom Dashboard
             </a>
@@ -972,7 +972,7 @@ export default function TokenSaverClient() {
             </span>
           </div>
           {pxpipeHealth?.checks?.length > 0 && (
-            <div className="flex flex-col gap-1 rounded border border-border p-3">
+            <div className="flex flex-col gap-1 rounded border-2 border-ink p-3">
               <p className="text-sm font-medium mb-1">Health check</p>
               {pxpipeHealth.checks.map((check) => (
                 <div key={check.id} className="flex items-center justify-between text-xs">
@@ -1001,7 +1001,7 @@ export default function TokenSaverClient() {
               </Button>
               <p className="text-xs text-text-muted">
                 Installs the npm package <code className="font-mono">pxpipe-proxy</code> into
-                the 9Router data directory. May take a few minutes.
+                the Ryo data directory. May take a few minutes.
               </p>
             </div>
           ) : (
@@ -1025,7 +1025,7 @@ export default function TokenSaverClient() {
               </Button>
               <a
                 href="/dashboard/pxpipe#logs"
-                className="col-span-2 rounded border border-border px-4 py-2 text-center text-sm hover:bg-surface-2"
+                className="col-span-2 rounded border-2 border-ink px-4 py-2 text-center text-sm hover:bg-surface-2"
               >
                 Open Logs
               </a>

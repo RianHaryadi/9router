@@ -1,9 +1,38 @@
 import { NextResponse } from "next/server";
-import { getComboById, updateCombo, deleteCombo, getComboByName } from "@/lib/localDb";
+import { getComboById, updateCombo, deleteCombo, getComboByName, updateComboOwnedBy, deleteComboOwnedBy } from "@/lib/localDb";
 import { resetComboRotation } from "open-sse/services/combo.js";
+import { isMemberSession, getSession } from "@/dashboardGuard";
+import { ownerIdOfSession } from "@/shared/constants/memberAreas.js";
 
 // Validate combo name: only a-z, A-Z, 0-9, -, _
 const VALID_NAME_REGEX = /^[a-zA-Z0-9_.\-]+$/;
+
+/**
+ * Update a combo on behalf of the caller.
+ *
+ * The owner updates any combo; a teammate updates only their own. The
+ * ownership test lives in the repo, in the same place as the write.
+ */
+async function updateComboForCaller(request, id, body) {
+  if (await isMemberSession(request)) {
+    return await updateComboOwnedBy(id, body, {
+      isOwner: false,
+      memberId: ownerIdOfSession(await getSession(request)),
+    });
+  }
+  return await updateCombo(id, body);
+}
+
+/** Delete a combo on behalf of the caller. @see updateComboForCaller */
+async function deleteComboForCaller(request, id) {
+  if (await isMemberSession(request)) {
+    return await deleteComboOwnedBy(id, {
+      isOwner: false,
+      memberId: ownerIdOfSession(await getSession(request)),
+    });
+  }
+  return await deleteCombo(id);
+}
 
 // GET /api/combos/[id] - Get combo by ID
 export async function GET(request, { params }) {
@@ -43,8 +72,8 @@ export async function PUT(request, { params }) {
     
     // Capture previous name to invalidate rotation state on rename
     const prev = await getComboById(id);
-    const combo = await updateCombo(id, body);
-    
+    const combo = await updateComboForCaller(request, id, body);
+
     if (!combo) {
       return NextResponse.json({ error: "Combo not found" }, { status: 404 });
     }
@@ -65,7 +94,7 @@ export async function DELETE(request, { params }) {
   try {
     const { id } = await params;
     const prev = await getComboById(id);
-    const success = await deleteCombo(id);
+    const success = await deleteComboForCaller(request, id);
     
     if (!success) {
       return NextResponse.json({ error: "Combo not found" }, { status: 404 });

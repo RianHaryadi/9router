@@ -89,7 +89,7 @@ function resolveStandaloneBuild(appDir, buildDistDir) {
     : legacyStandaloneRoot;
 
   // Next.js 16 nests standalone output under the project name when
-  // NEXT_TRACING_ROOT_MODE=workspace, e.g. standalone/9router/server.js.
+  // NEXT_TRACING_ROOT_MODE=workspace, e.g. standalone/Ryo/server.js.
   const pkgName = path.basename(appDir);
   const nestedRoot = path.join(standaloneRoot, pkgName);
   if (fs.existsSync(path.join(nestedRoot, "server.js")) && !fs.existsSync(path.join(standaloneRoot, "server.js"))) {
@@ -148,8 +148,39 @@ function assertRequiredApiArtifacts(cliAppDir) {
   }
 }
 
+const DEEPSEEK_POW_FILES = ["deepseek-pow-worker.mjs", "deepseek-pow-hash.js"];
+
+// The PoW worker runs in a worker_threads Worker and resolves its relative
+// import from the filesystem, so neither Next bundling nor standalone file
+// tracing follows it: tracing ships the worker but drops deepseek-pow-hash.js
+// (Ryo issue 5460). Copy both explicitly instead of relying on tracing.
+function copyDeepSeekPowFiles(appDir, cliAppDir) {
+  const srcDir = path.join(appDir, "open-sse/lib");
+  const destDir = path.join(cliAppDir, "open-sse/lib");
+  for (const file of DEEPSEEK_POW_FILES) {
+    const src = path.join(srcDir, file);
+    if (!fs.existsSync(src)) {
+      throw new Error(`DeepSeek PoW source file not found: ${src}`);
+    }
+    fs.mkdirSync(destDir, { recursive: true });
+    fs.copyFileSync(src, path.join(destDir, file));
+  }
+}
+
+function assertDeepSeekPowFiles(cliAppDir) {
+  const missing = DEEPSEEK_POW_FILES
+    .map((file) => path.join(cliAppDir, "open-sse/lib", file))
+    .filter((filePath) => !fs.existsSync(filePath));
+  if (missing.length > 0) {
+    throw new Error(
+      `Required DeepSeek PoW worker file${missing.length === 1 ? " is" : "s are"} missing:\n` +
+      missing.join("\n"),
+    );
+  }
+}
+
 function buildCliPackage() {
-  console.log("📦 Building 9Router CLI package with Next.js...\n");
+  console.log("📦 Building Ryo CLI package with Next.js...\n");
 
   fs.mkdirSync(buildHomeDir, { recursive: true });
   fs.mkdirSync(path.join(buildHomeDir, "AppData", "Roaming"), { recursive: true });
@@ -221,11 +252,17 @@ function buildCliPackage() {
     process.exit(1);
   }
 
-  // Step 3b: Ensure sql.js (pure JS fallback) bundled in app/cli/app/node_modules.
+  // Step 3b: DeepSeek PoW worker + its hash dependency (runtime-loaded, not traced).
+  console.log("3️⃣ b Copying DeepSeek PoW worker files...");
+  copyDeepSeekPowFiles(appDir, cliAppDir);
+  assertDeepSeekPowFiles(cliAppDir);
+  console.log("✅ Copied DeepSeek PoW worker files\n");
+
+  // Step 3c: Ensure sql.js (pure JS fallback) bundled in app/cli/app/node_modules.
   // Strip better-sqlite3 (native) — it lives in ~/.9router/runtime to avoid
   // Windows EBUSY during global CLI updates. node:sqlite (Node ≥22.5) is also
   // available as a no-install middle tier.
-  console.log("3️⃣ b Configuring SQLite drivers...");
+  console.log("3️⃣ c Configuring SQLite drivers...");
   function ensureModuleInBundle(pkg) {
     const dest = path.join(cliAppDir, "node_modules", pkg);
     if (fs.existsSync(dest)) {
@@ -344,7 +381,9 @@ function buildCliPackage() {
 }
 
 module.exports = {
+  assertDeepSeekPowFiles,
   assertRequiredApiArtifacts,
+  copyDeepSeekPowFiles,
   copyStandaloneBuild,
   mergeServerArtifacts,
 };

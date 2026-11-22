@@ -202,7 +202,7 @@ export default function WebLoginButton({ providerId, onConnected, size = "sm" })
                 type="button"
                 onClick={handleNewProfile}
                 disabled={busy}
-                className="flex items-center gap-1 text-xs text-primary hover:underline disabled:opacity-50"
+                className="flex items-center gap-1 text-xs text-brand-700 dark:text-brand-300 hover:underline disabled:opacity-50"
               >
                 <span className="material-symbols-outlined text-[14px]">add</span>
                 {translate("New profile")}
@@ -217,14 +217,14 @@ export default function WebLoginButton({ providerId, onConnected, size = "sm" })
                     type="button"
                     disabled={busy}
                     onClick={() => pickProfile(name)}
-                    className={`flex items-center gap-2 rounded border border-accent/30 bg-sidebar p-2 text-left text-sm transition-colors focus:outline-none focus:ring-1 focus:ring-primary disabled:opacity-50 ${
-                      selected ? "border-primary ring-1 ring-primary" : "hover:border-accent/60"
+                    className={`flex items-center gap-2 rounded border border-accent/30 bg-sidebar p-2 text-left text-sm transition-colors focus:outline-none focus:ring-1 focus:ring-brand-600 dark:ring-brand-300 disabled:opacity-50 ${
+                      selected ? "border-brand-600 dark:border-brand-300/60 ring-1 ring-brand-600 dark:ring-brand-300" : "hover:border-accent/60"
                     }`}
                   >
                     <span className="material-symbols-outlined text-[18px] text-text-muted">{profileIcon(name)}</span>
                     <span className="min-w-0 flex-1 truncate">{name}</span>
                     {selected && (
-                      <span className="material-symbols-outlined text-[16px] text-primary">check_circle</span>
+                      <span className="material-symbols-outlined text-[16px] text-brand-700 dark:text-brand-300">check_circle</span>
                     )}
                   </button>
                 );
@@ -235,17 +235,17 @@ export default function WebLoginButton({ providerId, onConnected, size = "sm" })
           {phase !== "idle" && (
             <div className="rounded border border-accent/20 bg-sidebar/50 p-3">
               {phase === "success" ? (
-                <div className="flex items-center gap-2 text-sm font-medium text-green-400">
+                <div className="flex items-center gap-2 text-sm font-medium text-success">
                   <span className="material-symbols-outlined text-[18px]">check_circle</span>
                   ✓ {message || translate("Connection saved")}
                 </div>
               ) : phase === "error" ? (
                 <div className="flex flex-col gap-1">
-                  <div className="flex items-center gap-2 text-sm font-medium text-yellow-400">
+                  <div className="flex items-center gap-2 text-sm font-medium text-warning">
                     <span className="material-symbols-outlined text-[18px]">error</span>
                     {translate("Login failed")}
                   </div>
-                  {message && <p className="pl-6 text-xs text-red-500 break-words">{message}</p>}
+                  {message && <p className="pl-6 text-xs text-danger break-words">{message}</p>}
                 </div>
               ) : (
                 <ol className="flex flex-col gap-2">
@@ -256,7 +256,7 @@ export default function WebLoginButton({ providerId, onConnected, size = "sm" })
                       <li
                         key={stage.key}
                         className={`flex items-center gap-2 text-sm ${
-                          done ? "text-green-400" : active ? "text-primary" : "text-text-muted opacity-50"
+                          done ? "text-success" : active ? "text-brand-700 dark:text-brand-300" : "text-text-muted opacity-50"
                         }`}
                       >
                         <span className={`material-symbols-outlined text-[18px] ${active ? "animate-pulse" : ""}`}>

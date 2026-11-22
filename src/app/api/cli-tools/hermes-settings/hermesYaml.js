@@ -55,7 +55,7 @@ export const parseModelBlock = (yaml) => {
 export const upsertModelBlock = (yaml, newBlock) => {
   if (MODEL_BLOCK_RE.test(yaml)) return yaml.replace(MODEL_BLOCK_RE, newBlock);
   // Scalar sentinel would otherwise survive the upsert and produce a duplicate `model:` key
-  // (last-wins in most YAML loaders → the 9router block is silently ignored).
+  // (last-wins in most YAML loaders → the Ryo block is silently ignored).
   if (MODEL_SCALAR_RE.test(yaml)) return yaml.replace(MODEL_SCALAR_RE, newBlock);
   return yaml.length > 0 ? `${newBlock}\n${yaml}` : newBlock;
 };
@@ -126,28 +126,28 @@ export const removeEnvVar = (envText, key) => {
   return envText.replace(re, "");
 };
 
-// Detect 9router by base_url containing localhost/127.0.0.1 or matching tunnel URL
+// Detect Ryo by base_url containing localhost/127.0.0.1 or matching tunnel URL
 export const has9RouterConfig = (modelCfg) => {
   if (!modelCfg?.base_url) return false;
   return modelCfg.provider === "custom" && /localhost|127\.0\.0\.1|0\.0\.0\.0/.test(modelCfg.base_url);
 };
 
-// A block 9router wrote (provider "custom") regardless of endpoint — covers tunnel URLs,
+// A block Ryo wrote (provider "custom") regardless of endpoint — covers tunnel URLs,
 // so reset/bulk logic can find them even when base_url is not localhost.
 export const isCustomBlock = (cfg) => cfg?.provider === "custom";
 
-// ── stt: audio transcription via 9router ─────────────────────────────────────────────
+// ── stt: audio transcription via Ryo ─────────────────────────────────────────────
 // Hermes runs voice messages / audio attachments through `stt.provider`; the "openai"
 // backend is OpenAI-SDK-shaped and honours stt.openai.base_url + stt.openai.api_key as
 // endpoint overrides (tools/transcription_cloud.py `_direct_openai_credentials`), and
 // load_config() expands the ${OPENAI_API_KEY} reference from the profile's .env. Pointing
-// it at 9router's /v1/audio/transcriptions routes every transcription through the proxy:
+// it at Ryo's /v1/audio/transcriptions routes every transcription through the proxy:
 //
 //   stt:
 //     enabled: true
 //     provider: "openai"
 //     openai:
-//       model: "groq/whisper-large-v3"   # provider-qualified — 9router routes on it
+//       model: "groq/whisper-large-v3"   # provider-qualified — Ryo routes on it
 //       base_url: "http://127.0.0.1:20128/v1"
 //       api_key: ${OPENAI_API_KEY}
 
@@ -225,7 +225,7 @@ const upsertSttOpenai = (body, key, value) => {
   return body.replace(sttSubRe("openai"), `  openai:\n${subBody}`);
 };
 
-// Write the 9router STT wiring, preserving every sibling setting the user already has
+// Write the Ryo STT wiring, preserving every sibling setting the user already has
 // (language, local model, echo_transcripts, ...). Upserts the openai backend keys only.
 export const upsertStt9Router = (yaml, model, baseUrl) => {
   let body = yaml.match(STT_BLOCK_RE)?.[1] ?? null;

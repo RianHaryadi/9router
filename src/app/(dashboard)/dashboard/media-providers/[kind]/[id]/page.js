@@ -75,7 +75,7 @@ export default function MediaProviderDetailPage() {
       <div>
         <Link
           href={`/dashboard/media-providers/${kind}`}
-          className="inline-flex items-center gap-1 text-sm text-text-muted hover:text-primary transition-colors mb-4"
+          className="inline-flex items-center gap-1 text-sm text-text-muted hover:text-brand-700 dark:text-brand-300 transition-colors mb-4"
         >
           <span className="material-symbols-outlined text-lg">arrow_back</span>
           {kindConfig.label}
@@ -95,13 +95,13 @@ export default function MediaProviderDetailPage() {
           </div>
           <div className="flex-1">
             <div className="flex flex-wrap items-center gap-2 sm:gap-3">
-              <h1 className="text-3xl font-semibold tracking-tight">{provider.name}</h1>
+              <h1 className="text-3xl font-semibold tracking-normal">{provider.name}</h1>
               {!isCustom && provider.notice?.apiKeyUrl && (
                 <a
                   href={provider.notice.apiKeyUrl}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-xs text-primary hover:underline inline-flex items-center gap-1"
+                  className="text-xs text-brand-700 dark:text-brand-300 hover:underline inline-flex items-center gap-1"
                 >
                   <span className="material-symbols-outlined text-sm">open_in_new</span>
                   Get API Key
@@ -132,7 +132,7 @@ export default function MediaProviderDetailPage() {
 
       {/* Kind-specific notice (e.g. codex/image requires Plus) */}
       {!isCustom && provider.kindNotice?.[kind] && (
-        <div className="flex items-start gap-3 px-4 py-3 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-700 dark:text-amber-400">
+        <div className="flex items-start gap-3 px-4 py-3 rounded-lg bg-warning/10 border border-warning/30 text-warning dark:text-warning">
           <span className="material-symbols-outlined text-[20px] mt-0.5">warning</span>
           <p className="text-sm">{provider.kindNotice[kind]}</p>
         </div>
@@ -140,15 +140,15 @@ export default function MediaProviderDetailPage() {
 
       {/* Provider notice text (only when there's actual text content) */}
       {!isCustom && provider.notice?.text && !provider.deprecated && (
-        <div className="flex flex-col gap-2 rounded-lg border border-blue-500/30 bg-blue-500/10 px-3 py-2 sm:flex-row sm:items-center">
-          <span className="material-symbols-outlined text-[16px] text-blue-500 shrink-0">info</span>
-          <p className="min-w-0 flex-1 text-xs leading-relaxed text-blue-600 dark:text-blue-400">{provider.notice.text}</p>
+        <div className="flex flex-col gap-2 rounded-lg border border-info/30 bg-info/10 px-3 py-2 sm:flex-row sm:items-center">
+          <span className="material-symbols-outlined text-[16px] text-info shrink-0">info</span>
+          <p className="min-w-0 flex-1 text-xs leading-relaxed text-info dark:text-info">{provider.notice.text}</p>
           {provider.notice.apiKeyUrl && (
             <a
               href={provider.notice.apiKeyUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex justify-center rounded bg-blue-500 px-2 py-1 text-xs font-medium text-white transition-colors hover:bg-blue-600 sm:py-0.5"
+              className="inline-flex justify-center rounded bg-info px-2 py-1 text-xs font-medium text-white transition-colors hover:bg-info sm:py-0.5"
             >
               Get API Key →
             </a>
@@ -162,7 +162,7 @@ export default function MediaProviderDetailPage() {
       ) : kind === "stt" && OAUTH_PROVIDERS[id] ? (
         <Card>
           <p className="text-sm text-text-muted mb-3">This service shares your existing OAuth connections.</p>
-          <Link href={`/dashboard/providers/${id}`} className="text-primary hover:underline">Manage OAuth connections →</Link>
+          <Link href={`/dashboard/providers/${id}`} className="text-brand-700 dark:text-brand-300 hover:underline">Manage OAuth connections →</Link>
         </Card>
       ) : (
         <ConnectionsCard

@@ -1,8 +1,18 @@
 import { NextResponse } from "next/server";
 import { getSettings, validateApiKey } from "@/lib/localDb";
 import { getConsistentMachineId } from "@/shared/utils/machineId";
-import { verifyDashboardAuthToken } from "@/lib/auth/dashboardSession";
+import { verifyDashboardAuthToken, getDashboardAuthSession, dashboardRoleOf, DASHBOARD_ROLE_OWNER } from "@/lib/auth/dashboardSession";
 import { hasTrustedPeerHeaders } from "@/lib/auth/trustedPeer";
+import {
+  memberAreasOf,
+  ownerIdOfSession,
+  OWNER_AREA_FOR_PATH,
+  API_AREA_FOR_PATH,
+  MEMBER_BASE_AREAS,
+  MEMBER_BASE_API_PATHS,
+  memberBaseApiItemPathFor,
+  memberWriteScopeFor,
+} from "@/shared/constants/memberAreas.js";
 
 const CLI_TOKEN_HEADER = "x-9r-cli-token";
 const CLI_TOKEN_SALT = "9r-cli-auth";
@@ -20,6 +30,9 @@ async function hasValidCliToken(request) {
 }
 
 // Public API paths — no auth required (LLM API has its own key auth inside handler).
+//
+// Matched by PREFIX, so a subtree whose sensitivity differs from its parent
+// needs an explicit denial below — see isPublicApi().
 const PUBLIC_API_PATHS = [
   "/api/health",
   "/api/init",
@@ -58,6 +71,7 @@ const PROTECTED_API_PATHS = [
   "/api/provider-nodes",
   "/api/proxy-pools",
   "/api/combos",
+  "/api/prompt-templates",
   "/api/models",
   "/api/usage",
   "/api/oauth",
@@ -70,6 +84,81 @@ const PROTECTED_API_PATHS = [
   "/api/translator",
   "/api/tunnel",
 ];
+
+// Routes EVERY member may use, whatever areas the owner granted.
+// Endpoints a member may call with ANY method: the chat itself and the
+// session calls.
+const MEMBER_ALLOWED_PATHS = [
+  "/api/auth/logout",
+  "/api/auth/status",
+  "/api/settings/require-login",
+  "/api/dashboard/chat/completions",
+];
+
+
+/**
+ * The area an API path belongs to, or null when the path is owner-only.
+ * A path with no entry is owner-only: an unknown endpoint must not become
+ * reachable just because the member holds some area.
+ *
+ * The value may be a list of areas: the member needs to hold ONE of them.
+ */
+function apiAreaFor(pathname) {
+  // Longest prefix first: /api/models/alias must match its own entry, not
+  // /api/models.
+  const entries = Object.entries(API_AREA_FOR_PATH).sort((a, b) => b[0].length - a[0].length);
+  for (const [prefix, area] of entries) {
+    if (pathname === prefix || pathname.startsWith(prefix + "/")) {
+      return Array.isArray(area) ? area : [area];
+    }
+  }
+  return null;
+}
+
+/**
+ * The area a dashboard page belongs to, or null when the page is
+ * owner-only.
+ */
+function pageAreaFor(pathname) {
+  // Longest prefix first: /dashboard/media-providers/web must match its own
+  // entry, not /dashboard/media-providers.
+  const entries = Object.entries(OWNER_AREA_FOR_PATH).sort((a, b) => b[0].length - a[0].length);
+  for (const [prefix, area] of entries) {
+    if (pathname === prefix || pathname.startsWith(prefix + "/")) return area;
+  }
+  return null;
+}
+
+/** The areas a member holds in the given session. */
+export function areasOfSession(session) {
+  return memberAreasOf(session);
+}
+
+/**
+ * The areas a member holds RIGHT NOW.
+ *
+ * Read live from the member row rather than from the session claims: the
+ * owner grants or revokes an area in the dashboard, and it must take effect
+ * for the teammate without waiting for them to sign in again. The session
+ * claims are the fallback when the row cannot be read (fail closed: only the
+ * base areas).
+ */
+export async function liveAreasOf(request) {
+  const session = await getSession(request);
+  if (!session) return new Set(MEMBER_BASE_AREAS);
+  const memberId = session.userId || null;
+  if (!memberId) return memberAreasOf(session);
+  try {
+    const { getTeamMemberById } = await import("@/lib/db/repos/teamMembersRepo.js");
+    const member = await getTeamMemberById(memberId);
+    if (!member || member.isActive === false) return new Set(MEMBER_BASE_AREAS);
+    const areas = new Set(MEMBER_BASE_AREAS);
+    for (const id of member.areas || []) areas.add(id);
+    return areas;
+  } catch {
+    return memberAreasOf(session);
+  }
+}
 
 // Routes that spawn child processes or read host secrets — restrict to localhost.
 const LOCAL_ONLY_PATHS = [
@@ -159,9 +248,17 @@ async function hasValidApiKey(request) {
 }
 
 async function canAccessPublicLlmApi(request) {
-  if (isLocalRequest(request)) return true;
+  const apiKey = extractApiKey(request);
+  if (isLocalRequest(request) && !apiKey) return true;
   if (await hasValidCliToken(request)) return true;
-  return await hasValidApiKey(request);
+  if (!apiKey || !(await hasValidApiKey(request))) return false;
+  if (request.method !== "POST") return true;
+  try {
+    const { enforceApiKeyRateLimit } = await import("@/lib/db/repos/apiKeysRepo.js");
+    return (await enforceApiKeyRateLimit(apiKey)) || true;
+  } catch {
+    return NextResponse.json({ error: "Rate limit service unavailable" }, { status: 503, headers: { "Retry-After": "1" } });
+  }
 }
 
 async function canAccessLocalOnlyRoute(request) {
@@ -174,6 +271,51 @@ async function canAccessLocalOnlyRoute(request) {
 async function hasValidToken(request) {
   const token = request.cookies.get("auth_token")?.value;
   return await verifyDashboardAuthToken(token);
+}
+
+/**
+ * The session of the current request, or null.
+ * @returns {Promise<object|null>}
+ */
+export async function getSession(request) {
+  const token = request?.cookies?.get?.("auth_token")?.value;
+  return await getDashboardAuthSession(token);
+}
+
+/** True when the request carries an owner session (not a teammate member). */
+export async function isOwnerSession(request) {
+  const session = await getSession(request);
+  if (!session) return false;
+  return dashboardRoleOf(session) === DASHBOARD_ROLE_OWNER;
+}
+
+/**
+ * True when the request is the owner of this router.
+ *
+ * Three cases count as the owner:
+ *   - the CLI token (the local launcher),
+ *   - an owner session (the dashboard password),
+ *   - an instance with requireLogin disabled: there is only one user then,
+ *     and nobody can sign in as a teammate either, so the request is the
+ *     owner's by definition.
+ */
+export async function isOwnerRequest(request) {
+  // A teammate is never the owner, not even on an open instance: the member
+  // rows still exist and the owner may have granted them areas.
+  if (await isMemberSession(request)) return false;
+  if (await hasValidCliToken(request)) return true;
+  if (await isOwnerSession(request)) return true;
+  const settings = await loadSettings();
+  return !!settings && settings.requireLogin === false;
+}
+
+/** True when the request carries a teammate member session. */
+export async function isMemberSession(request) {
+  // A caller without a cookie jar (a direct route invocation) is not a member.
+  if (!request?.cookies?.get) return false;
+  const session = await getSession(request);
+  if (!session) return false;
+  return dashboardRoleOf(session) !== DASHBOARD_ROLE_OWNER;
 }
 
 // Read settings directly from DB to avoid self-fetch deadlock in proxy
@@ -194,6 +336,15 @@ async function isAuthenticated(request) {
 
 function isPublicApi(pathname) {
   if (isPublicLlmApi(pathname)) return true;
+  // Two subtrees have a different sensitivity than their parent and must never
+  // be reached by prefix:
+  //
+  //   /api/health/* — the matrix and breaker list every provider, account
+  //                   and model state.
+  //   /api/version/* — shutdown and update kill or replace the running
+  //                   router. A teammate must never be able to stop it.
+  if (pathname.startsWith("/api/health/")) return false;
+  if (pathname.startsWith("/api/version/")) return false;
   return PUBLIC_API_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`));
 }
 
@@ -206,6 +357,11 @@ export const __test__ = {
   extractApiKey,
   canAccessPublicLlmApi,
   canAccessLocalOnlyRoute,
+  MEMBER_ALLOWED_PATHS,
+  MEMBER_BASE_API_PATHS,
+  apiAreaFor,
+  pageAreaFor,
+  isPublicApi,
 };
 
 export async function proxy(request) {
@@ -218,23 +374,65 @@ export async function proxy(request) {
     }
   }
 
-  // Always protected - require valid JWT or local CLI token (machineId-based)
+  // Always protected - require valid JWT or local CLI token (machineId-based).
+  //
+  // OWNER-only: these routes shut the router down, replace it, or import
+  // provider credentials. A teammate's dashboard session is a valid JWT, so
+  // accepting any token here let a teammate stop the whole instance.
   if (ALWAYS_PROTECTED.some((p) => pathname.startsWith(p))) {
-    if (await hasValidCliToken(request) || await hasValidToken(request))
-      return NextResponse.next();
+    if (await isOwnerRequest(request)) return NextResponse.next();
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   if (isPublicLlmApi(pathname)) {
-    if (await canAccessPublicLlmApi(request)) return NextResponse.next();
+    const access = await canAccessPublicLlmApi(request);
+    if (access === true) return NextResponse.next();
+    if (access) return access;
     return NextResponse.json({ error: "API key required for remote API access" }, { status: 401 });
   }
 
   // Deny-by-default for /api/* — public allow-list bypasses, everything else requires auth.
   if (pathname.startsWith("/api/")) {
     if (isPublicApi(pathname)) return NextResponse.next();
-    if (await hasValidCliToken(request) || await isAuthenticated(request))
+    // The owner and the CLI keep unrestricted access to the health subtree
+    // (the matrix is the operator's own view of the router's state).
+    if (pathname.startsWith("/api/health/") && (await hasValidCliToken(request) || (await isAuthenticated(request) && (await isOwnerSession(request))))) {
       return NextResponse.next();
+    }
+    if (await hasValidCliToken(request) || await isAuthenticated(request)) {
+      // A teammate member may only use the chat endpoints. Everything else
+      // (keys, providers, usage, settings) is owner-only.
+      if (await isMemberSession(request)) {
+        const readOnly = request.method === "GET" || request.method === "HEAD";
+        const alwaysAllowed = MEMBER_ALLOWED_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`));
+        // The base paths are read-only: /api/combos accepts POST to create a
+        // combo, and a member may only write a combo they own (see below).
+        // Exact match only: /api/models must not open /api/models/custom,
+        // which accepts POST to create a model.
+        const baseAllowed = readOnly && MEMBER_BASE_API_PATHS.includes(pathname);
+        // The chat picker also reads the live model catalog of each
+        // connection it may call: /api/providers/{id}/models. It carries no
+        // account identity, only the model ids.
+        const baseItemAllowed = readOnly && !!memberBaseApiItemPathFor(pathname);
+        const area = apiAreaFor(pathname);
+        const areas = await liveAreasOf(request);
+        // A path may serve several areas: holding ONE of them is enough.
+        const hasArea = area ? area.some((a) => areas.has(a)) : false;
+        // A member may only READ the endpoints of the areas they hold.
+        if (!alwaysAllowed && !baseAllowed && !baseItemAllowed && !(readOnly && hasArea)) {
+          // …plus the writes on their OWN objects: a teammate creates and
+          // manages their own combos and prompt templates with the same flow
+          // the owner has. The route checks the ownership of the row, so
+          // the owner's objects stay read-only for a member.
+          const scope = memberWriteScopeFor(request.method, pathname);
+          const scoped = scope && areas.has(scope.area);
+          if (!scoped) {
+            return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+          }
+        }
+      }
+      return NextResponse.next();
+    }
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -270,6 +468,17 @@ export async function proxy(request) {
     const token = request.cookies.get("auth_token")?.value;
     if (token) {
       if (await verifyDashboardAuthToken(token)) {
+        // A teammate member may only open the pages of the areas the owner
+        // granted; anything else bounces them to the first page they do
+        // have.
+        if (await isMemberSession(request)) {
+          const areas = await liveAreasOf(request);
+          const area = pageAreaFor(pathname);
+          if (!area || !areas.has(area)) {
+            const fallback = MEMBER_BASE_AREAS.map((a) => OWNER_AREA_FOR_PATH[`/dashboard/${a}`]).find(Boolean);
+            return NextResponse.redirect(new URL(fallback || "/dashboard/basic-chat", request.url));
+          }
+        }
         return NextResponse.next();
       } else {
         return NextResponse.redirect(new URL("/login", request.url));

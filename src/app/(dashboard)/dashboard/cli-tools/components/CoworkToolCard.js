@@ -259,9 +259,9 @@ export default function CoworkToolCard({
           <div className="min-w-0">
             <div className="flex min-w-0 flex-wrap items-center gap-2">
               <h3 className="font-medium text-sm">{tool.name}</h3>
-              {configStatus === "configured" && <span className="px-1.5 py-0.5 text-[10px] font-medium bg-green-500/10 text-green-600 dark:text-green-400 rounded-full">Connected</span>}
-              {configStatus === "not_configured" && <span className="px-1.5 py-0.5 text-[10px] font-medium bg-yellow-500/10 text-yellow-600 dark:text-yellow-400 rounded-full">Not configured</span>}
-              {configStatus === "other" && <span className="px-1.5 py-0.5 text-[10px] font-medium bg-blue-500/10 text-blue-600 dark:text-blue-400 rounded-full">Other</span>}
+              {configStatus === "configured" && <span className="px-1.5 py-0.5 text-[10px] font-medium bg-success/10 text-success rounded-full">Connected</span>}
+              {configStatus === "not_configured" && <span className="px-1.5 py-0.5 text-[10px] font-medium bg-warning/10 text-warning rounded-full">Not configured</span>}
+              {configStatus === "other" && <span className="px-1.5 py-0.5 text-[10px] font-medium bg-info/10 text-info rounded-full">Other</span>}
             </div>
             <p className="text-xs text-text-muted truncate">{tool.description}</p>
           </div>
@@ -270,7 +270,7 @@ export default function CoworkToolCard({
       </div>
 
       {isExpanded && (
-        <div className="mt-4 pt-4 border-t border-border flex flex-col gap-4">
+        <div className="mt-4 pt-4 border-t-2 border-ink flex flex-col gap-4">
           {checking && (
             <div className="flex items-center gap-2 text-text-muted">
               <span className="material-symbols-outlined animate-spin">progress_activity</span>
@@ -279,16 +279,16 @@ export default function CoworkToolCard({
           )}
 
           {!checking && status && !status.installed && (
-            <div className="flex flex-col gap-3 p-4 bg-yellow-500/10 border border-yellow-500/30 rounded-lg">
+            <div className="flex flex-col gap-3 p-4 bg-warning/10 border border-warning/30 rounded-lg">
               <div className="flex items-start gap-3">
-                <span className="material-symbols-outlined text-yellow-500">warning</span>
+                <span className="material-symbols-outlined text-warning">warning</span>
                 <div className="flex-1">
-                  <p className="font-medium text-yellow-600 dark:text-yellow-400">Claude Desktop (Cowork mode) not detected</p>
+                  <p className="font-medium text-warning dark:text-warning">Claude Desktop (Cowork mode) not detected</p>
                   <p className="text-sm text-text-muted">Open Claude Desktop → Help → Troubleshooting → Enable Developer mode → Configure third-party inference, then return here.</p>
                 </div>
               </div>
               <div className="pl-9">
-                <Button variant="secondary" size="sm" onClick={() => setShowManualConfigModal(true)} className="!bg-yellow-500/20 !border-yellow-500/40 !text-yellow-700 dark:!text-yellow-300 hover:!bg-yellow-500/30">
+                <Button variant="secondary" size="sm" onClick={() => setShowManualConfigModal(true)} className="!bg-warning/20 !border-warning/40 !text-warning dark:!text-warning hover:!bg-warning/30">
                   <span className="material-symbols-outlined text-[18px] mr-1">content_copy</span>
                   Manual Config
                 </Button>
@@ -335,21 +335,21 @@ export default function CoworkToolCard({
                   <span className="w-32 shrink-0 text-sm font-semibold text-text-main text-right">Models</span>
                   <span className="material-symbols-outlined text-text-muted text-[14px]">arrow_forward</span>
                   <div className="flex-1 flex items-center gap-2">
-                    <div className="flex-1 flex flex-wrap gap-1.5 min-h-[28px] px-2 py-1.5 bg-surface rounded border border-border">
+                    <div className="flex-1 flex flex-wrap gap-1.5 min-h-[28px] px-2 py-1.5 bg-surface rounded border-2 border-ink">
                       {selectedModels.length === 0 ? (
                         <span className="text-xs text-text-muted">No models selected</span>
                       ) : (
                         selectedModels.map((m) => (
                           <span key={m} className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs bg-black/5 dark:bg-white/5 text-text-muted border border-transparent hover:border-border">
                             {m}
-                            <button onClick={() => handleRemoveModel(m)} className="ml-0.5 hover:text-red-500">
+                            <button onClick={() => handleRemoveModel(m)} className="ml-0.5 hover:text-danger">
                               <span className="material-symbols-outlined text-[12px]">close</span>
                             </button>
                           </span>
                         ))
                       )}
                     </div>
-                    <button onClick={() => setComboModalOpen(true)} disabled={!hasActiveProviders} className={`shrink-0 px-2 py-1.5 rounded border text-xs whitespace-nowrap transition-colors ${hasActiveProviders ? "bg-primary/10 border-primary/40 text-primary hover:bg-primary/20 cursor-pointer" : "opacity-50 cursor-not-allowed border-border"}`}>+ Combo</button>
+                    <button onClick={() => setComboModalOpen(true)} disabled={!hasActiveProviders} className={`shrink-0 px-2 py-1.5 rounded border text-xs whitespace-nowrap transition-colors ${hasActiveProviders ? "bg-brand-300/25 border-brand-600/40 dark:border-brand-300/50 text-brand-700 dark:text-brand-300 hover:bg-brand-300/35 cursor-pointer" : "opacity-50 cursor-not-allowed border-border"}`}>+ Combo</button>
                   </div>
                 </div>
 
@@ -359,9 +359,9 @@ export default function CoworkToolCard({
                   <div className="flex-1 flex flex-col gap-1">
                     {/* Preset plugins */}
                     {plugins.filter((p) => p.name !== "exa").map((p) => (
-                      <div key={p.name} className="flex items-center gap-2 px-2 py-1 bg-surface rounded border border-border">
+                      <div key={p.name} className="flex items-center gap-2 px-2 py-1 bg-surface rounded border-2 border-ink">
                         <span className="text-xs font-medium min-w-0 truncate flex-shrink-0">{p.title || p.name}</span>
-                        {p.oauth && <span className="text-[8px] text-amber-600 shrink-0">OAuth</span>}
+                        {p.oauth && <span className="text-[8px] text-warning shrink-0">OAuth</span>}
                         <div className="flex-1 flex flex-wrap gap-1 overflow-hidden" style={{ maxHeight: "1.5rem" }}>
                           {Array.isArray(p.toolNames) && p.toolNames.slice(0, 6).map((t) => (
                             <span key={t} className="text-[9px] px-1 py-0.5 rounded bg-black/5 dark:bg-white/5 text-text-muted whitespace-nowrap">{t}</span>
@@ -370,34 +370,34 @@ export default function CoworkToolCard({
                             <span className="text-[9px] px-1 py-0.5 rounded bg-black/5 dark:bg-white/5 text-text-muted whitespace-nowrap">+{p.toolNames.length - 6}</span>
                           )}
                         </div>
-                        <button onClick={() => removePlugin(p.name)} className="shrink-0 hover:text-red-500 ml-auto">
+                        <button onClick={() => removePlugin(p.name)} className="shrink-0 hover:text-danger ml-auto">
                           <span className="material-symbols-outlined text-[12px]">close</span>
                         </button>
                       </div>
                     ))}
                     {/* Custom plugins */}
                     {customPlugins.map((p) => (
-                      <div key={p.name} className="flex items-center gap-2 px-2 py-1 bg-surface rounded border border-border">
+                      <div key={p.name} className="flex items-center gap-2 px-2 py-1 bg-surface rounded border-2 border-ink">
                         <span className="text-xs font-medium min-w-0 truncate flex-shrink-0">{p.name}</span>
-                        <span className="text-[8px] px-1 py-0.5 rounded bg-blue-500/10 text-blue-500 shrink-0">custom</span>
+                        <span className="text-[8px] px-1 py-0.5 rounded bg-info/10 text-info shrink-0">custom</span>
                         <span className="flex-1 text-[9px] text-text-muted truncate">{p.url}</span>
-                        <button onClick={() => setCustomPlugins(customPlugins.filter((x) => x.name !== p.name))} className="shrink-0 hover:text-red-500 ml-auto">
+                        <button onClick={() => setCustomPlugins(customPlugins.filter((x) => x.name !== p.name))} className="shrink-0 hover:text-danger ml-auto">
                           <span className="material-symbols-outlined text-[12px]">close</span>
                         </button>
                       </div>
                     ))}
                     {plugins.filter((p) => p.name !== "exa").length === 0 && customPlugins.length === 0 && (
-                      <div className="px-2 py-1.5 bg-surface rounded border border-border text-xs text-text-muted">No MCPs added</div>
+                      <div className="px-2 py-1.5 bg-surface rounded border-2 border-ink text-xs text-text-muted">No MCPs added</div>
                     )}
                     {/* Actions row */}
                     <div className="flex items-center gap-2 mt-0.5">
-                      <button onClick={() => setMarketplaceOpen(true)} className="px-2 py-1 rounded border text-xs bg-primary/10 border-primary/40 text-primary hover:bg-primary/20 cursor-pointer whitespace-nowrap">
+                      <button onClick={() => setMarketplaceOpen(true)} className="px-2 py-1 rounded border text-xs bg-brand-300/25 border-brand-600/40 dark:border-brand-300/50 text-brand-700 dark:text-brand-300 hover:bg-brand-300/35 cursor-pointer whitespace-nowrap">
                         + Browse
                       </button>
-                      <button onClick={() => { setAddMcpForm({ name: "", url: "" }); setAddMcpOpen(true); }} className="px-2 py-1 rounded border text-xs bg-surface border-border text-text-muted hover:border-primary hover:text-primary cursor-pointer whitespace-nowrap">
+                      <button onClick={() => { setAddMcpForm({ name: "", url: "" }); setAddMcpOpen(true); }} className="px-2 py-1 rounded border text-xs bg-surface border-border text-text-muted hover:border-brand-600 dark:border-brand-300/60 hover:text-brand-700 dark:text-brand-300 cursor-pointer whitespace-nowrap">
                         + Custom
                       </button>
-                      <a href="https://mcp.so" target="_blank" rel="noopener noreferrer" className="text-[10px] text-text-muted hover:text-primary underline ml-auto">Find MCPs →</a>
+                      <a href="https://mcp.so" target="_blank" rel="noopener noreferrer" className="text-[10px] text-text-muted hover:text-brand-700 dark:text-brand-300 underline ml-auto">Find MCPs →</a>
                     </div>
                   </div>
                 </div>
@@ -410,7 +410,7 @@ export default function CoworkToolCard({
                       const exaEnabled = plugins.some((p) => p.name === "exa");
                       const exaDef = (status?.defaultPlugins || []).find((d) => d.name === "exa");
                       return (
-                        <label className="flex items-start gap-2 cursor-pointer px-2 py-1.5 bg-surface rounded border border-border">
+                        <label className="flex items-start gap-2 cursor-pointer px-2 py-1.5 bg-surface rounded border-2 border-ink">
                           <input
                             type="checkbox"
                             checked={exaEnabled}
@@ -432,7 +432,7 @@ export default function CoworkToolCard({
                       if (!browserDef) return null;
                       const browserEnabled = localPlugins.includes("browsermcp");
                       return (
-                        <label className="flex items-start gap-2 cursor-pointer px-2 py-1.5 bg-surface rounded border border-border">
+                        <label className="flex items-start gap-2 cursor-pointer px-2 py-1.5 bg-surface rounded border-2 border-ink">
                           <input
                             type="checkbox"
                             checked={browserEnabled}
@@ -443,7 +443,7 @@ export default function CoworkToolCard({
                             <div className="text-xs font-medium">Browser Control (Browser MCP)</div>
                             <p className="text-[10px] text-text-muted leading-snug">
                               Controls your running Chrome. Auto-strips Cowork&apos;s built-in browser tools.{" "}
-                              <a href={browserDef.extensionUrl} target="_blank" rel="noopener noreferrer" className="text-primary underline">Install Chrome extension</a>
+                              <a href={browserDef.extensionUrl} target="_blank" rel="noopener noreferrer" className="text-brand-700 dark:text-brand-300 underline">Install Chrome extension</a>
                             </p>
                           </div>
                         </label>
@@ -457,7 +457,7 @@ export default function CoworkToolCard({
                     <span className="w-32 shrink-0 text-sm font-semibold text-text-main text-right pt-1">Local Plugins</span>
                     <span className="material-symbols-outlined text-text-muted text-[14px] mt-1.5">arrow_forward</span>
                     <div className="flex-1 flex flex-col gap-2">
-                      <div className="flex flex-col gap-1.5 px-2 py-1.5 bg-surface rounded border border-border">
+                      <div className="flex flex-col gap-1.5 px-2 py-1.5 bg-surface rounded border-2 border-ink">
                         {status.localStdioPlugins.filter((p) => p.name !== "browsermcp").map((p) => {
                           const enabled = localPlugins.includes(p.name);
                           return (
@@ -471,11 +471,11 @@ export default function CoworkToolCard({
                               <div className="flex-1 min-w-0">
                                 <div className="flex flex-wrap items-center gap-1.5">
                                   <span className="text-xs font-medium">{p.title}</span>
-                                  <span className="text-[8px] text-amber-600">stdio</span>
+                                  <span className="text-[8px] text-warning">stdio</span>
                                 </div>
                                 <p className="text-[10px] text-text-muted leading-snug">{p.description}</p>
                                 {p.extensionUrl && (
-                                  <a href={p.extensionUrl} target="_blank" rel="noopener noreferrer" className="text-[10px] text-primary underline">Install Chrome extension</a>
+                                  <a href={p.extensionUrl} target="_blank" rel="noopener noreferrer" className="text-[10px] text-brand-700 dark:text-brand-300 underline">Install Chrome extension</a>
                                 )}
                               </div>
                             </label>
@@ -491,7 +491,7 @@ export default function CoworkToolCard({
               </div>
 
               {message && (
-                <div className={`flex items-center gap-2 px-2 py-1.5 rounded text-xs ${message.type === "success" ? "bg-green-500/10 text-green-600" : "bg-red-500/10 text-red-600"}`}>
+                <div className={`flex items-center gap-2 px-2 py-1.5 rounded text-xs ${message.type === "success" ? "bg-success/10 text-success" : "bg-danger/10 text-danger"}`}>
                   <span className="material-symbols-outlined text-[14px]">{message.type === "success" ? "check_circle" : "error"}</span>
                   <span>{message.text}</span>
                 </div>
@@ -556,7 +556,7 @@ export default function CoworkToolCard({
       {/* Add Custom MCP modal */}
       {addMcpOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setAddMcpOpen(false)}>
-          <div className="bg-surface border border-border rounded-xl shadow-xl w-full max-w-sm mx-4 p-5 flex flex-col gap-4" onClick={(e) => e.stopPropagation()}>
+          <div className="bg-surface border-2 border-ink rounded-xl shadow-xl w-full max-w-sm mx-4 p-5 flex flex-col gap-4" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between">
               <h3 className="font-semibold text-sm">Add Custom MCP</h3>
               <button onClick={() => setAddMcpOpen(false)} className="text-text-muted hover:text-text-main">
@@ -572,7 +572,7 @@ export default function CoworkToolCard({
                   placeholder="my-mcp"
                   value={addMcpForm.name}
                   onChange={(e) => setAddMcpForm((f) => ({ ...f, name: e.target.value.replace(/\s+/g, "-").toLowerCase() }))}
-                  className="px-2 py-1.5 rounded border border-border bg-surface text-xs outline-none focus:border-primary"
+                  className="px-2 py-1.5 rounded border-2 border-ink bg-surface text-xs outline-none focus:border-brand-600 dark:border-brand-300/60"
                 />
               </div>
               <div className="flex flex-col gap-1">
@@ -582,13 +582,13 @@ export default function CoworkToolCard({
                   placeholder="https://your-mcp-server.com/sse"
                   value={addMcpForm.url}
                   onChange={(e) => setAddMcpForm((f) => ({ ...f, url: e.target.value }))}
-                  className="px-2 py-1.5 rounded border border-border bg-surface text-xs outline-none focus:border-primary"
+                  className="px-2 py-1.5 rounded border-2 border-ink bg-surface text-xs outline-none focus:border-brand-600 dark:border-brand-300/60"
                 />
               </div>
             </div>
 
             <div className="flex gap-2 justify-end">
-              <button onClick={() => setAddMcpOpen(false)} className="px-3 py-1.5 rounded border border-border text-xs text-text-muted hover:bg-surface cursor-pointer">Cancel</button>
+              <button onClick={() => setAddMcpOpen(false)} className="px-3 py-1.5 rounded border-2 border-ink text-xs text-text-muted hover:bg-surface cursor-pointer">Cancel</button>
               <button
                 onClick={() => {
                   const name = addMcpForm.name.trim();
@@ -596,7 +596,7 @@ export default function CoworkToolCard({
                   setCustomPlugins((prev) => [...prev.filter((x) => x.name !== name), { name, url: addMcpForm.url.trim(), transport: "sse", custom: true }]);
                   setAddMcpOpen(false);
                 }}
-                className="px-3 py-1.5 rounded bg-primary text-white text-xs font-medium hover:opacity-90 cursor-pointer"
+                className="px-3 py-1.5 rounded bg-ink text-[#FAF7F0] text-xs font-medium hover:opacity-90 cursor-pointer"
               >Add</button>
             </div>
           </div>

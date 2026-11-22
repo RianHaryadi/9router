@@ -9,7 +9,9 @@ import {
 import { APIKEY_PROVIDERS } from "@/shared/constants/config";
 import { AI_PROVIDERS, FREE_TIER_PROVIDERS, WEB_COOKIE_PROVIDERS, isOpenAICompatibleProvider, isAnthropicCompatibleProvider, isCustomEmbeddingProvider } from "@/shared/constants/providers";
 import { normalizeProviderId, normalizeProviderSpecificData } from "@/lib/providerNormalization";
-import { toProviderConnectionResponse } from "@/lib/providerConnectionResponse";
+import { toProviderConnectionResponse, toMemberConnectionResponse } from "@/lib/providerConnectionResponse";
+import { isMemberSession, getSession, liveAreasOf } from "@/dashboardGuard";
+import { getApiKeys } from "@/lib/localDb";
 
 export const dynamic = "force-dynamic";
 
@@ -47,8 +49,85 @@ async function normalizeProxyPoolId(proxyPoolId) {
   return { proxyPoolId: normalizedId };
 }
 
+/**
+ * The connections a key may reach.
+ *
+ * The key's allow-list is the same list that gates /v1 calls, so the model
+ * picker and the router agree: a member sees exactly what their key allows.
+ * A combo name expands to the providers of its members.
+ *
+ * @param {Array} connections
+ * @param {string|null} apiKey the raw key, or null when the member has none
+ * @param {boolean} keyUnknown true when the member's keyRef points at a key
+ *   that no longer exists: the key is gone, so it reaches nothing. Without
+ *   this flag an unknown key would read as "unrestricted" (the router's own
+ *   rule for a key it does not know) and show the whole setup.
+ */
+async function filterConnectionsForKey(connections, apiKey, keyUnknown = false) {
+  // No key of their own: the teammate chats on the owner's shared key, so
+  // they see the same setup the owner sees. Returning nothing here left the
+  // model picker empty for a teammate without an assigned key.
+  if (!apiKey) return keyUnknown ? [] : connections;
+  try {
+    const { accessContextForKey } = await import("@/sse/services/keyAccess.js");
+    const { getCombos } = await import("@/lib/localDb.js");
+    const { resolveProviderId } = await import("@/shared/constants/providers.js");
+    const ctx = await accessContextForKey(apiKey);
+    // An unrestricted key sees everything (same rule as the router).
+    if (!ctx) return connections;
+
+    const combos = await getCombos();
+    // Provider IDs the key may reach. An allow-list entry names a combo, a
+    // "provider/model" pair or a bare provider — and a combo's seats are
+    // written with the transport ALIAS ("oc/…"), while a connection row
+    // carries the provider ID ("opencode-go"). Both sides are resolved to the
+    // provider ID so the two meet.
+    const providers = new Set();
+    const addProvider = (name) => {
+      if (!name) return;
+      providers.add(String(resolveProviderId(name)).toLowerCase());
+      providers.add(String(name).toLowerCase());
+    };
+
+    for (const entry of ctx.allow) {
+      const lower = String(entry).toLowerCase();
+      // A combo name → its members' providers.
+      const combo = combos.find((c) => String(c.name).toLowerCase() === lower);
+      if (combo) {
+        for (const seat of combo.models || []) {
+          const slash = seat.indexOf("/");
+          if (slash > 0) addProvider(seat.slice(0, slash));
+        }
+        continue;
+      }
+      // "provider/model" → that provider.
+      const slash = entry.indexOf("/");
+      if (slash > 0) {
+        addProvider(entry.slice(0, slash));
+        continue;
+      }
+      // A bare provider id or alias.
+      addProvider(lower);
+    }
+
+    return connections.filter((c) => {
+      const provider = String(c.provider || "").toLowerCase();
+      return providers.has(provider) || providers.has(String(resolveProviderId(c.provider || "")).toLowerCase());
+    });
+  } catch {
+    return [];
+  }
+}
+
 // GET /api/providers - List all connections
-export async function GET() {
+//
+// scope=shared — the owner's whole setup, as it is. Used by the Providers
+// page: the connections are the owner's and shared (the teammate uses the
+// same accounts through their own key), so the page must show the real
+// counts. Default scope — only the connections the caller's key may reach:
+// the chat model picker uses this, so the picker and the router agree on
+// what may be called.
+export async function GET(request) {
   try {
     const connections = await getProviderConnections();
 
@@ -61,16 +140,80 @@ export async function GET() {
       }
     } catch { }
 
+    // A teammate member may read the connection list (the chat model picker
+    // needs it) but must not learn anything about the owner's accounts:
+    // no email, no account name, no error text.
+    //
+    // What a member never sees is the account identity: for OAuth providers
+    // the connection name IS the owner's email, and the error text can carry
+    // it too. So the name becomes the provider's display name. The STATUS
+    // stays — it is the provider's health, not an identity — so the page can
+    // count the shared connections.
+    const isMember = await isMemberSession(request);
+
+    // Two scopes:
+    //   default  — only the connections the caller's key may reach. The chat
+    //              model picker uses this, so the picker and the router agree
+    //              on what may be called.
+    //   shared   — the owner's whole setup, names only. The Providers page
+    //              uses this, so it must be the area that grants it: a
+    //              member without the "providers" area may not enumerate the
+    //              setup, whatever the query says.
+    const wantsShared = request.nextUrl?.searchParams?.get("scope") === "shared";
+    if (isMember && wantsShared) {
+      const areas = await liveAreasOf(request);
+      if (!areas.has("providers")) {
+        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      }
+    }
+
+    let memberKey = null;
+    let keyUnknown = false;
+    if (isMember && !wantsShared) {
+      const session = await getSession(request);
+      const ref = session?.keyRef || null;
+      if (ref) {
+        try {
+          const keys = await getApiKeys();
+          const match = keys.find((k) => k.keyRef === ref);
+          if (match) {
+            // A deactivated key reaches nothing — it does not fall back to
+            // the unrestricted reading.
+            memberKey = match.isActive !== false ? match.key : null;
+            keyUnknown = match.isActive === false;
+          } else {
+            // The key is gone entirely.
+            keyUnknown = true;
+          }
+        } catch { memberKey = null; keyUnknown = true; }
+      }
+    }
+
+    // A member only sees the providers their key may reach — unless the
+    // caller asked for the shared setup. The allow-list holds either
+    // "provider/model" entries or combo names; a combo expands to its
+    // members' providers.
+    let visibleConnections = connections;
+    if (isMember && !wantsShared) {
+      visibleConnections = await filterConnectionsForKey(connections, memberKey, keyUnknown);
+    }
+
     // Hide sensitive fields, enrich name for compatible providers
-    const safeConnections = connections.map(c => {
+    const safeConnections = visibleConnections.map(c => {
       const isCompatible = isOpenAICompatibleProvider(c.provider) || isAnthropicCompatibleProvider(c.provider);
       const name = isCompatible
         ? (c.name || nodeNameMap[c.provider] || c.providerSpecificData?.nodeName || c.provider)
         : c.name;
-      return {
+      const safe = {
         ...toProviderConnectionResponse(c),
         name,
       };
+      if (!isMember) return safe;
+      // A member must not learn anything about the owner's ACCOUNTS: no
+      // account name, no email, no error text (an error can carry the email
+      // too). The status DOES stay: it is the provider's health, not an
+      // identity, and without it the shared setup counts as empty.
+      return toMemberConnectionResponse(safe);
     });
 
     return NextResponse.json({ connections: safeConnections });

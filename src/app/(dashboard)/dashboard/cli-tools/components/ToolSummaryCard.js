@@ -6,18 +6,18 @@ import { Card } from "@/shared/components";
 
 // Derive simple connected/configured/not-installed status from API payload
 function getStatus(status, tool) {
-  if (tool?.configType === "guide") return { label: "Guide", cls: "bg-blue-500/10 text-blue-600 dark:text-blue-400" };
-  if (!status) return { label: "Unknown", cls: "bg-gray-500/10 text-gray-500" };
-  if (!status.installed) return { label: "Not installed", cls: "bg-gray-500/10 text-gray-500" };
-  if (status.has9Router) return { label: "Connected", cls: "bg-green-500/10 text-green-600 dark:text-green-400" };
-  return { label: "Not configured", cls: "bg-yellow-500/10 text-yellow-600 dark:text-yellow-400" };
+  if (tool?.configType === "guide") return { label: "Guide", cls: "bg-info/10 text-info dark:text-info" };
+  if (!status) return { label: "Unknown", cls: "bg-surface-2 text-text-muted border border-ink/40" };
+  if (!status.installed) return { label: "Not installed", cls: "bg-surface-2 text-text-muted border border-ink/40" };
+  if (status.has9Router) return { label: "Connected", cls: "bg-success/10 text-success dark:text-success" };
+  return { label: "Not configured", cls: "bg-warning/10 text-warning dark:text-warning" };
 }
 
 export default function ToolSummaryCard({ toolId, tool, status }) {
   const s = getStatus(status, tool);
   return (
     <Link href={`/dashboard/cli-tools/${toolId}`} className="block">
-      <Card padding="sm" className="h-full overflow-hidden hover:border-primary/50 transition-colors cursor-pointer">
+      <Card padding="sm" className="h-full overflow-hidden hover:border-brand-600/50 dark:border-brand-300/60 transition-colors cursor-pointer">
         <div className="flex h-full flex-col gap-2">
           <div className="flex items-center gap-3">
             <div className="size-8 flex items-center justify-center shrink-0">

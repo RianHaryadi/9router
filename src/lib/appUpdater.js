@@ -37,7 +37,7 @@ function killMitmByPidFile() {
   } catch { /* best effort */ }
 }
 
-// Collect PIDs of all 9router-related processes (excluding current)
+// Collect PIDs of all Ryo-related processes (excluding current)
 function collectAppPids() {
   const pids = [];
   const platform = process.platform;
@@ -49,7 +49,7 @@ function collectAppPids() {
       const lines = output.split("\n").slice(1).filter(l => l.trim());
       lines.forEach(line => {
         const lower = line.toLowerCase();
-        // Match anything running from 9router install dir or wrapper cli.js
+        // Match anything running from Ryo install dir or wrapper cli.js
         const isAppProcess = lower.includes("9router") ||
           lower.includes("next-server") ||
           lower.includes("\\bin\\app\\") ||
@@ -156,7 +156,7 @@ export async function killAppProcesses() {
   }
 }
 
-// Resolve npx/9router binary to relaunch after update (cross-platform)
+// Resolve npx/Ryo binary to relaunch after update (cross-platform)
 function resolveRelaunchCommand() {
   const isWin = process.platform === "win32";
   // Prefer `npx 9router` — works regardless of global bin path changes after npm i -g

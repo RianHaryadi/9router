@@ -210,12 +210,12 @@ export default function BulkImportGrokCliModal({ isOpen, onClose, onSuccess }) {
           onDrop={handleDrop}
           className={`relative rounded border transition-colors ${
             isDragging
-              ? "border-primary bg-primary/10 ring-2 ring-primary/30"
+              ? "border-brand-600 dark:border-brand-300/60 bg-brand-300/25 ring-2 ring-brand-600 dark:ring-brand-300/30"
               : "border-accent/30 bg-sidebar"
           }`}
         >
           <textarea
-            className="w-full rounded bg-transparent p-2.5 text-sm font-mono resize-y min-h-[240px] focus:outline-none focus:ring-1 focus:ring-primary"
+            className="w-full rounded bg-transparent p-2.5 text-sm font-mono resize-y min-h-[240px] focus:outline-none focus:ring-1 focus:ring-brand-600 dark:ring-brand-300"
             placeholder={PLACEHOLDER}
             value={jsonText}
             onChange={(e) => {
@@ -227,8 +227,8 @@ export default function BulkImportGrokCliModal({ isOpen, onClose, onSuccess }) {
 
           {isDragging && (
             <div className="absolute inset-0 flex flex-col items-center justify-center bg-sidebar/90 rounded pointer-events-none backdrop-blur-xs">
-              <span className="material-symbols-outlined text-3xl text-primary mb-1">upload_file</span>
-              <span className="text-sm font-medium text-primary">
+              <span className="material-symbols-outlined text-3xl text-brand-700 dark:text-brand-300 mb-1">upload_file</span>
+              <span className="text-sm font-medium text-brand-700 dark:text-brand-300">
                 {translate("Drop .json files here")}
               </span>
             </div>
@@ -236,7 +236,7 @@ export default function BulkImportGrokCliModal({ isOpen, onClose, onSuccess }) {
         </div>
 
         {fileCountInfo && (
-          <div className="flex items-center gap-1.5 text-xs text-green-400 font-medium bg-green-500/10 border border-green-500/20 px-2.5 py-1.5 rounded">
+          <div className="flex items-center gap-1.5 text-xs text-success font-medium bg-success/10 border border-success/20 px-2.5 py-1.5 rounded">
             <span className="material-symbols-outlined text-sm">check_circle</span>
             <span>
               {translate("Loaded")} {fileCountInfo.accountsCount} {translate("account(s) from")}{" "}
@@ -246,18 +246,18 @@ export default function BulkImportGrokCliModal({ isOpen, onClose, onSuccess }) {
         )}
 
         {parseError && (
-          <p className="text-xs text-red-500 break-words">{parseError}</p>
+          <p className="text-xs text-danger break-words">{parseError}</p>
         )}
 
         {result && result.failed > 0 && (
           <div className="flex flex-col gap-2">
-            <div className="text-sm font-medium text-yellow-400">
+            <div className="text-sm font-medium text-warning">
               ✗ {result.failed} {translate("failed")}
             </div>
             {failedItems.length > 0 && (
               <ul className="rounded border border-accent/20 bg-sidebar/50 p-2 text-xs font-mono max-h-40 overflow-y-auto">
                 {failedItems.map((item) => (
-                  <li key={item.index} className="text-red-400">
+                  <li key={item.index} className="text-danger">
                     [{item.index}] {item.error}
                   </li>
                 ))}

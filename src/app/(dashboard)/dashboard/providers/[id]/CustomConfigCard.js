@@ -94,7 +94,7 @@ export default function CustomConfigCard({ providerId }) {
         className="flex w-full items-center justify-between text-left"
       >
         <div className="flex items-center gap-2">
-          <span className="material-symbols-outlined text-primary text-[20px]">tune</span>
+          <span className="material-symbols-outlined text-brand-700 dark:text-brand-300 text-[20px]">tune</span>
           <span className="text-sm font-semibold">Custom Headers</span>
           {hasOverride && (
             <Badge variant="success" size="sm">Active</Badge>
@@ -106,7 +106,7 @@ export default function CustomConfigCard({ providerId }) {
       </button>
 
       {expanded && (
-        <div className="mt-3 border-t border-border pt-3">
+        <div className="mt-3 border-t-2 border-ink pt-3">
           <div className="flex flex-col gap-2">
             {rows.map((row, i) => {
               const overridden = row.name.trim() in builtin && row.value !== builtin[row.name.trim()];
@@ -117,7 +117,7 @@ export default function CustomConfigCard({ providerId }) {
                     onChange={(e) => setRow(i, "name", e.target.value)}
                     placeholder="Header-Name"
                     spellCheck={false}
-                    className="w-44 rounded-md border border-border bg-background px-2 py-1.5 text-sm focus:border-primary focus:outline-none"
+                    className="w-44 rounded-md border-2 border-ink bg-background px-2 py-1.5 text-sm focus:border-brand-600 dark:border-brand-300/60 focus:outline-none"
                   />
                   <input
                     value={row.value}
@@ -125,15 +125,15 @@ export default function CustomConfigCard({ providerId }) {
                     placeholder="Value"
                     spellCheck={false}
                     title={overridden ? "Overridden" : row.name.trim() in builtin ? "Registry default" : ""}
-                    className={`min-w-0 flex-1 rounded-md border bg-background px-2 py-1.5 text-sm focus:border-primary focus:outline-none ${
-                      overridden ? "border-amber-400/60" : "border-border"
+                    className={`min-w-0 flex-1 rounded-md border bg-background px-2 py-1.5 text-sm focus:border-brand-600 dark:border-brand-300/60 focus:outline-none ${
+                      overridden ? "border-warning/60" : "border-border"
                     }`}
                   />
                   <button
                     type="button"
                     title="Remove header"
                     onClick={() => setRows((prev) => (prev.length > 1 ? prev.filter((_, idx) => idx !== i) : [{ name: "", value: "" }]))}
-                    className="shrink-0 text-text-muted hover:text-red-500"
+                    className="shrink-0 text-text-muted hover:text-danger"
                   >
                     <span className="material-symbols-outlined text-[18px]">delete</span>
                   </button>
@@ -146,7 +146,7 @@ export default function CustomConfigCard({ providerId }) {
             <button
               type="button"
               onClick={() => setRows((prev) => [...prev, { name: "", value: "" }])}
-              className="flex items-center gap-1 text-xs text-primary hover:underline"
+              className="flex items-center gap-1 text-xs text-brand-700 dark:text-brand-300 hover:underline"
             >
               <span className="material-symbols-outlined text-[16px]">add</span>
               Add header
@@ -156,7 +156,7 @@ export default function CustomConfigCard({ providerId }) {
                 type="button"
                 disabled={saving}
                 onClick={resetToBuiltin}
-                className="rounded-md border border-border px-3 py-1.5 text-xs hover:bg-black/[0.03] dark:hover:bg-white/[0.03] disabled:opacity-50"
+                className="rounded-md border-2 border-ink px-3 py-1.5 text-xs hover:bg-black/[0.03] dark:hover:bg-white/[0.03] disabled:opacity-50"
               >
                 Reset
               </button>
@@ -164,7 +164,7 @@ export default function CustomConfigCard({ providerId }) {
                 type="button"
                 disabled={saving}
                 onClick={save}
-                className="rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-white hover:opacity-90 disabled:opacity-50"
+                className="rounded-md bg-surface-2 px-3 py-1.5 text-xs font-medium text-text-main border-2 border-ink hover:opacity-90 disabled:opacity-50"
               >
                 {saving ? "Saving..." : "Save"}
               </button>

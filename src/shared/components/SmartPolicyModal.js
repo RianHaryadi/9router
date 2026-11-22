@@ -100,9 +100,9 @@ export default function SmartPolicyModal({
               <div
                 key={p.id}
                 onClick={() => setSelectedPolicy(p.id)}
-                className={`relative flex flex-col rounded-xl border p-3 cursor-pointer transition-all ${
+                className={`relative flex flex-col rounded-[12px] border p-3 cursor-pointer transition-all ${
                   isSelected
-                    ? "border-primary bg-primary/[0.04] shadow-sm"
+                    ? "border-brand-600 dark:border-brand-300/60 bg-brand-300/[0.04] shadow-[3px_3px_0_0_var(--color-shadow)]"
                     : "border-border/60 hover:border-border hover:bg-black/[0.01] dark:hover:bg-white/[0.01]"
                 }`}
               >
@@ -111,7 +111,7 @@ export default function SmartPolicyModal({
                     <span
                       className={`size-4 rounded-full border flex items-center justify-center shrink-0 transition-all ${
                         isSelected
-                          ? "border-primary bg-primary text-white"
+                          ? "border-brand-600 dark:border-brand-300/60 bg-ink text-[#FAF7F0]"
                           : "border-border-subtle bg-surface"
                       }`}
                     >
@@ -126,7 +126,7 @@ export default function SmartPolicyModal({
                       {p.title}
                     </span>
                     {p.recommended && (
-                      <span className="text-[10px] uppercase tracking-wide font-semibold text-primary bg-primary/10 px-1.5 py-0.5 rounded">
+                      <span className="text-[10px] uppercase tracking-wide font-semibold text-brand-700 dark:text-brand-300 bg-brand-300/25 px-1.5 py-0.5 rounded">
                         Recommended
                       </span>
                     )}
@@ -143,12 +143,12 @@ export default function SmartPolicyModal({
                 {/* Custom Threshold Slider & Chips */}
                 {p.id === "custom" && isSelected && (
                   <div
-                    className="mt-3 pl-6 pt-3 border-t border-border/40 flex flex-col gap-2.5"
+                    className="mt-3 pl-6 pt-3 border-t-2 border-ink/40 flex flex-col gap-2.5"
                     onClick={(e) => e.stopPropagation()}
                   >
                     <div className="flex items-center justify-between text-xs">
                       <span className="font-medium text-text-muted">Switch Confidence Threshold:</span>
-                      <span className="font-mono font-semibold text-primary text-sm">{threshold}%</span>
+                      <span className="font-mono font-semibold text-brand-700 dark:text-brand-300 text-sm">{threshold}%</span>
                     </div>
 
                     <input
@@ -158,7 +158,7 @@ export default function SmartPolicyModal({
                       step="1"
                       value={threshold}
                       onChange={(e) => setThreshold(Number(e.target.value))}
-                      className="w-full accent-primary cursor-pointer h-1.5 bg-black/10 dark:bg-white/10 rounded-lg appearance-none"
+                      className="w-full accent-primary cursor-pointer h-1.5 bg-black/10 dark:bg-white/10 rounded-[12px] appearance-none"
                     />
 
                     <div className="flex items-center gap-1.5 pt-1">
@@ -170,7 +170,7 @@ export default function SmartPolicyModal({
                           onClick={() => setThreshold(pct)}
                           className={`px-2 py-0.5 rounded text-[11px] font-mono transition-colors ${
                             threshold === pct
-                              ? "bg-primary text-white font-semibold"
+                              ? "bg-ink text-[#FAF7F0] font-semibold"
                               : "bg-black/5 dark:bg-white/5 text-text-muted hover:text-text-main"
                           }`}
                         >
@@ -186,8 +186,8 @@ export default function SmartPolicyModal({
         </div>
 
         {/* Prompt Cache Benefit Callout */}
-        <div className="rounded-xl border border-primary/20 bg-primary/[0.03] p-3 text-xs flex items-start gap-2.5">
-          <span className="material-symbols-outlined text-primary text-[18px] shrink-0 mt-0.5">
+        <div className="rounded-[12px] border border-brand-600/30 dark:border-brand-300/40 bg-brand-300/[0.03] p-3 text-xs flex items-start gap-2.5">
+          <span className="material-symbols-outlined text-brand-700 dark:text-brand-300 text-[18px] shrink-0 mt-0.5">
             bolt
           </span>
           <div className="text-text-muted leading-relaxed">
@@ -198,7 +198,7 @@ export default function SmartPolicyModal({
           </div>
         </div>
 
-        <div className="flex items-center justify-end gap-2 pt-2 border-t border-border/40">
+        <div className="flex items-center justify-end gap-2 pt-2 border-t-2 border-ink/40">
           <Button variant="ghost" size="sm" onClick={onClose}>
             Cancel
           </Button>

@@ -2,7 +2,6 @@
 
 import { useState, useEffect } from "react";
 import { LOCALE_COOKIE, normalizeLocale } from "@/i18n/config";
-import { LOCALE_FLAGS } from "@/shared/constants/locales";
 import LanguageSwitcher from "./LanguageSwitcher";
 
 function getLocaleFromCookie() {
@@ -26,11 +25,15 @@ export default function HeaderLanguage() {
     <>
       <button
         onClick={() => setOpen(true)}
-        className="flex items-center justify-center p-2 rounded-lg text-text-muted hover:text-text-main hover:bg-black/5 dark:hover:bg-white/5 transition-all"
+        className="flex items-center justify-center p-2 rounded-[12px] text-text-muted hover:text-text-main hover:bg-black/5 dark:hover:bg-white/5 transition-all"
         title="Language"
         data-i18n-skip="true"
       >
-        <span className="text-lg leading-none">{LOCALE_FLAGS[locale] || "🌐"}</span>
+        {/* Monochrome globe instead of the country flag: the flag injects
+            saturated red/blue into an otherwise single-accent palette. */}
+        <span className="material-symbols-outlined text-[20px] leading-none">
+          language
+        </span>
       </button>
 
       <LanguageSwitcher

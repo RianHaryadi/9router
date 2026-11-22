@@ -41,7 +41,7 @@ function ensureRuntimeDir() {
       name: "9router-runtime",
       version: "1.0.0",
       private: true,
-      description: "User-writable runtime deps for 9router (better-sqlite3 native binary)",
+      description: "User-writable runtime deps for Ryo (better-sqlite3 native binary)",
     }, null, 2));
   }
   return dir;
@@ -96,7 +96,8 @@ function summarizeNpmError(stderr = "") {
 }
 
 function runNpmInstall({ cwd, pkgs, extraArgs = [], timeout = 180000 }) {
-  const args = ["install", ...pkgs, "--no-audit", "--no-fund", "--prefer-online", ...extraArgs];
+  // Global npm lifecycle hooks inherit npm_config_global=true; cwd alone cannot override it.
+  const args = ["install", ...pkgs, "--global=false", "--no-audit", "--no-fund", "--prefer-online", ...extraArgs];
   const npmCmd = process.platform === "win32" ? "npm.cmd" : "npm";
   const res = spawnSync(npmCmd, args, {
     cwd,

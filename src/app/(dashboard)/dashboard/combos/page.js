@@ -403,7 +403,7 @@ export default function CombosPage() {
             <li><span className="font-medium text-text-main">Fusion</span> — queries all models in parallel, then a judge synthesizes one answer. Best quality, but costs the most: every request bills all panel models + the judge (N+1 calls)</li>
           </ul>
           <p className="hidden text-xs text-text-muted mt-3 max-w-2xl">
-            <span className="font-medium text-text-main">Cursor / Claude Default</span> create combos named exactly like those clients&apos; model IDs (e.g. <code className="font-mono">composer-2.5</code>, <code className="font-mono">opus</code>), seeded with the matching <code className="font-mono">cu/…</code> or <code className="font-mono">cc/…</code> route so traffic can hit 9router without the prefix.
+            <span className="font-medium text-text-main">Cursor / Claude Default</span> create combos named exactly like those clients&apos; model IDs (e.g. <code className="font-mono">composer-2.5</code>, <code className="font-mono">opus</code>), seeded with the matching <code className="font-mono">cu/…</code> or <code className="font-mono">cc/…</code> route so traffic can hit Ryo without the prefix.
             {" "}Note: Cursor IDE itself often blocks built-in Composer / Grok from Override OpenAI Base URL (&quot;model does not support custom API&quot;); add them via Cursor&apos;s <span className="font-medium text-text-main">Add Custom Model</span> using the combo name, or pick a model Cursor allows through the custom endpoint.
           </p>
         </div>
@@ -418,7 +418,7 @@ export default function CombosPage() {
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Search combos…"
               aria-label="Search combos"
-              className="w-full rounded-[10px] border border-transparent bg-surface-2 py-2 pl-10 pr-9 text-sm text-text-main transition-all duration-150 ease-out placeholder-text-muted/70 focus:border-brand-500/40 focus:outline-none focus:ring-2 focus:ring-brand-500/30"
+              className="w-full rounded-[12px] border border-transparent bg-surface-2 py-2 pl-10 pr-9 text-sm text-text-main transition-all duration-150 ease-out placeholder-text-muted/70 focus:border-brand-500/40 focus:outline-none focus:ring-2 focus:ring-brand-500/30"
             />
             {searchQuery && (
               <button
@@ -465,7 +465,7 @@ export default function CombosPage() {
       {combos.length === 0 ? (
         <Card>
           <div className="text-center py-12">
-            <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-primary/10 text-primary mb-4">
+            <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-brand-300/25 text-brand-700 dark:text-brand-300 mb-4">
               <span className="material-symbols-outlined text-[32px]">layers</span>
             </div>
             <p className="text-text-main font-medium mb-1">No combos yet</p>
@@ -478,8 +478,8 @@ export default function CombosPage() {
       ) : (
         <div className="flex flex-col gap-3">
           {/* Selection toolbar */}
-          <div className="flex min-w-0 flex-col gap-2 rounded-lg border border-black/5 bg-black/[0.015] px-3 py-2 dark:border-white/5 dark:bg-white/[0.02] sm:flex-row sm:items-center sm:justify-between">
-            <label className="flex cursor-pointer items-center gap-2 text-xs text-text-muted hover:text-primary select-none">
+          <div className="flex min-w-0 flex-col gap-2 rounded-lg border border-ink/5 bg-black/[0.015] px-3 py-2 dark:border-white/5 dark:bg-white/[0.02] sm:flex-row sm:items-center sm:justify-between">
+            <label className="flex cursor-pointer items-center gap-2 text-xs text-text-muted hover:text-brand-700 dark:text-brand-300 select-none">
               <input
                 type="checkbox"
                 checked={allSelected}
@@ -487,7 +487,7 @@ export default function CombosPage() {
                   if (el) el.indeterminate = someSelected && !allSelected;
                 }}
                 onChange={toggleSelectAll}
-                className="h-3.5 w-3.5 rounded border-gray-300 text-primary focus:ring-primary"
+                className="h-3.5 w-3.5 rounded border-neutral text-brand-700 dark:text-brand-300 focus:ring-brand-600 dark:ring-brand-300"
               />
               <span>
                 {someSelected
@@ -670,7 +670,7 @@ function ComboCard({ combo, getCaps, comboByName = {}, activeProviders = [], cop
   const comboCaps = aggregateComboCapabilities(combo.models, comboByName, getCaps);
 
   return (
-    <Card padding="sm" className={`group ${selected ? "ring-1 ring-primary/40 bg-primary/[0.03]" : ""}`}>
+    <Card padding="sm" className={`group ${selected ? "ring-1 ring-brand-600 dark:ring-brand-300/40 bg-brand-300/[0.03]" : ""}`}>
       <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex min-w-0 flex-1 items-start gap-3 sm:items-center">
           <label className="flex shrink-0 items-center pt-1 sm:pt-0 cursor-pointer" title="Select combo">
@@ -679,12 +679,12 @@ function ComboCard({ combo, getCaps, comboByName = {}, activeProviders = [], cop
               checked={selected}
               onChange={onToggleSelect}
               onClick={(e) => e.stopPropagation()}
-              className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
+              className="h-4 w-4 rounded border-neutral text-brand-700 dark:text-brand-300 focus:ring-brand-600 dark:ring-brand-300"
               aria-label={`Select ${combo.name}`}
             />
           </label>
-          <div className="size-8 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
-            <span className="material-symbols-outlined text-primary text-[18px]">layers</span>
+          <div className="size-8 rounded-lg bg-brand-300/25 flex items-center justify-center shrink-0">
+            <span className="material-symbols-outlined text-brand-700 dark:text-brand-300 text-[18px]">layers</span>
           </div>
           <div className="min-w-0 flex-1">
             <code className="block truncate font-mono text-sm font-medium">{combo.name}</code>
@@ -720,7 +720,7 @@ function ComboCard({ combo, getCaps, comboByName = {}, activeProviders = [], cop
                 <span className="text-[11px] font-medium text-text-muted">Judge</span>
                 <button
                   onClick={() => setShowJudgeSelect(true)}
-                  className="inline-flex max-w-full items-center gap-1 rounded border border-dashed border-primary/40 px-1.5 py-0.5 font-mono text-[11px] text-primary hover:border-primary hover:bg-primary/5 transition-colors"
+                  className="inline-flex max-w-full items-center gap-1 rounded border border-dashed border-brand-600/40 dark:border-brand-300/50 px-1.5 py-0.5 font-mono text-[11px] text-brand-700 dark:text-brand-300 hover:border-brand-600 dark:border-brand-300/60 hover:bg-brand-300/15 transition-colors"
                   title="Pick the model that fuses panel answers"
                 >
                   <span className="material-symbols-outlined text-[13px]">gavel</span>
@@ -729,7 +729,7 @@ function ComboCard({ combo, getCaps, comboByName = {}, activeProviders = [], cop
                 {judge && (
                   <button
                     onClick={() => onSetStrategy({ judgeModel: "" })}
-                    className="p-0.5 rounded text-text-muted hover:text-red-500 hover:bg-red-500/10 transition-colors"
+                    className="p-0.5 rounded text-text-muted hover:text-danger hover:bg-danger/10 transition-colors"
                     title="Reset judge to Auto"
                   >
                     <span className="material-symbols-outlined text-[13px]">close</span>
@@ -746,7 +746,7 @@ function ComboCard({ combo, getCaps, comboByName = {}, activeProviders = [], cop
                   <span className="text-[11px] font-medium text-text-muted">Router</span>
                   <button
                     onClick={() => setShowRouterSelect(true)}
-                    className="inline-flex max-w-full items-center gap-1 rounded border border-dashed border-primary/40 px-1.5 py-0.5 font-mono text-[11px] text-primary hover:border-primary hover:bg-primary/5 transition-colors"
+                    className="inline-flex max-w-full items-center gap-1 rounded border border-dashed border-brand-600/40 dark:border-brand-300/50 px-1.5 py-0.5 font-mono text-[11px] text-brand-700 dark:text-brand-300 hover:border-brand-600 dark:border-brand-300/60 hover:bg-brand-300/15 transition-colors"
                     title="Pick the System One model that decides model routing"
                   >
                     <span className="material-symbols-outlined text-[13px]">psychology</span>
@@ -759,7 +759,7 @@ function ComboCard({ combo, getCaps, comboByName = {}, activeProviders = [], cop
                       <Badge variant="error" size="sm" dot>{routerStatus.label}</Badge>
                       <Link
                         href={`/dashboard/media-providers/systemone/${routerStatus.providerId}`}
-                        className="text-[10px] text-primary hover:underline font-medium"
+                        className="text-[10px] text-brand-700 dark:text-brand-300 hover:underline font-medium"
                         title="Configure in Media Providers"
                       >
                         Configure
@@ -768,7 +768,7 @@ function ComboCard({ combo, getCaps, comboByName = {}, activeProviders = [], cop
                   )}
                   <button
                     onClick={() => setShowPolicyModal(true)}
-                    className="inline-flex items-center gap-1 rounded border border-border/70 bg-black/[0.02] dark:bg-white/[0.02] px-2 py-0.5 text-[11px] text-text-main hover:border-primary/50 hover:bg-primary/5 transition-colors"
+                    className="inline-flex items-center gap-1 rounded border-2 border-ink/70 bg-black/[0.02] dark:bg-white/[0.02] px-2 py-0.5 text-[11px] text-text-main hover:border-brand-600/50 dark:border-brand-300/60 hover:bg-brand-300/15 transition-colors"
                     title="Configure routing policy and prompt cache retention"
                   >
                     <span className="material-symbols-outlined text-[13px] text-text-muted">tune</span>
@@ -777,7 +777,7 @@ function ComboCard({ combo, getCaps, comboByName = {}, activeProviders = [], cop
                   {routerModel && (
                     <button
                       onClick={() => onSetStrategy({ routerModel: "" })}
-                      className="p-0.5 rounded text-text-muted hover:text-red-500 hover:bg-red-500/10 transition-colors"
+                      className="p-0.5 rounded text-text-muted hover:text-danger hover:bg-danger/10 transition-colors"
                       title="Reset router to Auto"
                     >
                       <span className="material-symbols-outlined text-[13px]">close</span>
@@ -804,7 +804,7 @@ function ComboCard({ combo, getCaps, comboByName = {}, activeProviders = [], cop
           <div className="grid grid-cols-3 gap-1 sm:flex">
             <button
               onClick={(e) => { e.stopPropagation(); onCopy(combo.name, `combo-${combo.id}`); }}
-              className="flex flex-col items-center rounded px-2 py-1 text-text-muted transition-colors hover:bg-black/5 hover:text-primary dark:hover:bg-white/5"
+              className="flex flex-col items-center rounded px-2 py-1 text-text-muted transition-colors hover:bg-black/5 hover:text-brand-700 dark:text-brand-300 dark:hover:bg-white/5"
               title="Copy combo name"
             >
               <span className="material-symbols-outlined text-[18px]">
@@ -812,22 +812,26 @@ function ComboCard({ combo, getCaps, comboByName = {}, activeProviders = [], cop
               </span>
               <span className="text-[10px] leading-tight">Copy</span>
             </button>
-            <button
-              onClick={onEdit}
-              className="flex flex-col items-center rounded px-2 py-1 text-text-muted transition-colors hover:bg-black/5 hover:text-primary dark:hover:bg-white/5"
-              title="Edit"
-            >
-              <span className="material-symbols-outlined text-[18px]">edit</span>
-              <span className="text-[10px] leading-tight">Edit</span>
-            </button>
-            <button
-              onClick={onDelete}
-              className="flex flex-col items-center rounded px-2 py-1 text-red-500 transition-colors hover:bg-red-500/10"
-              title="Delete"
-            >
-              <span className="material-symbols-outlined text-[18px]">delete</span>
-              <span className="text-[10px] leading-tight">Delete</span>
-            </button>
+            {combo.canWrite !== false && (
+              <button
+                onClick={onEdit}
+                className="flex flex-col items-center rounded px-2 py-1 text-text-muted transition-colors hover:bg-black/5 hover:text-brand-700 dark:text-brand-300 dark:hover:bg-white/5"
+                title="Edit"
+              >
+                <span className="material-symbols-outlined text-[18px]">edit</span>
+                <span className="text-[10px] leading-tight">Edit</span>
+              </button>
+            )}
+            {combo.canWrite !== false && (
+              <button
+                onClick={onDelete}
+                className="flex flex-col items-center rounded px-2 py-1 text-danger transition-colors hover:bg-danger/10"
+                title="Delete"
+              >
+                <span className="material-symbols-outlined text-[18px]">delete</span>
+                <span className="text-[10px] leading-tight">Delete</span>
+              </button>
+            )}
           </div>
         </div>
       </div>
@@ -942,8 +946,8 @@ function CapacityAdapterCap({ cap, entry, onChange, activeProviders, getCaps }) 
             onChange={(v) => patch({ enabled: v })}
             aria-label={`Enable ${cap.label} adapter`}
           />
-          <div className="size-8 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
-            <span className="material-symbols-outlined text-primary text-[18px]">{cap.icon}</span>
+          <div className="size-8 rounded-lg bg-brand-300/25 flex items-center justify-center shrink-0">
+            <span className="material-symbols-outlined text-brand-700 dark:text-brand-300 text-[18px]">{cap.icon}</span>
           </div>
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-1.5">
@@ -983,10 +987,10 @@ function CapacityAdapterCap({ cap, entry, onChange, activeProviders, getCaps }) 
           No models in pool (will fallback to {DEFAULT_FALLBACK_MODEL})
         </div>
       ) : (
-        <div className="mt-3 overflow-hidden rounded-lg border border-border/50">
+        <div className="mt-3 overflow-hidden rounded-lg border-2 border-ink/50">
           <table className="w-full text-left text-xs">
             <thead>
-              <tr className="border-b border-border/40 bg-black/[0.02] text-text-muted dark:bg-white/[0.02]">
+              <tr className="border-b-2 border-ink/40 bg-black/[0.02] text-text-muted dark:bg-white/[0.02]">
                 <th className="w-12 px-3 py-1.5 font-medium text-center">#</th>
                 <th className="px-3 py-1.5 font-medium">Model</th>
                 <th className="w-24 px-3 py-1.5 font-medium text-center">Order</th>
@@ -1004,7 +1008,7 @@ function CapacityAdapterCap({ cap, entry, onChange, activeProviders, getCaps }) 
                       <span className="truncate">{model}</span>
                       <CapacityBadges caps={getCaps?.(model)} />
                       {model === DEFAULT_FALLBACK_MODEL && (
-                        <span className="rounded bg-emerald-500/10 px-1.5 py-0.5 font-sans text-[10px] font-medium text-emerald-600 dark:text-emerald-400">
+                        <span className="rounded bg-success/10 px-1.5 py-0.5 font-sans text-[10px] font-medium text-success dark:text-success">
                           free default
                         </span>
                       )}
@@ -1019,7 +1023,7 @@ function CapacityAdapterCap({ cap, entry, onChange, activeProviders, getCaps }) 
                         className={`p-1 rounded transition-colors ${
                           !enabled || index === 0
                             ? "text-text-muted/20 cursor-not-allowed"
-                            : "text-text-muted hover:text-primary hover:bg-black/5 dark:hover:bg-white/5"
+                            : "text-text-muted hover:text-brand-700 dark:text-brand-300 hover:bg-black/5 dark:hover:bg-white/5"
                         }`}
                         title="Move up"
                       >
@@ -1032,7 +1036,7 @@ function CapacityAdapterCap({ cap, entry, onChange, activeProviders, getCaps }) 
                         className={`p-1 rounded transition-colors ${
                           !enabled || index === models.length - 1
                             ? "text-text-muted/20 cursor-not-allowed"
-                            : "text-text-muted hover:text-primary hover:bg-black/5 dark:hover:bg-white/5"
+                            : "text-text-muted hover:text-brand-700 dark:text-brand-300 hover:bg-black/5 dark:hover:bg-white/5"
                         }`}
                         title="Move down"
                       >
@@ -1048,7 +1052,7 @@ function CapacityAdapterCap({ cap, entry, onChange, activeProviders, getCaps }) 
                       className={`p-1 rounded transition-colors ${
                         !enabled
                           ? "text-text-muted/20 cursor-not-allowed"
-                          : "text-text-muted hover:text-red-500 hover:bg-red-500/10"
+                          : "text-text-muted hover:text-danger hover:bg-danger/10"
                       }`}
                       title="Remove model"
                     >
@@ -1105,14 +1109,14 @@ function ModelItem({ id, index, model, isFirst, isLast, onEdit, onMoveUp, onMove
     <div
       ref={setNodeRef}
       style={style}
-      className={`group flex min-w-0 items-center gap-1.5 rounded-md px-2 py-1 bg-black/[0.02] hover:bg-black/[0.04] dark:bg-white/[0.02] dark:hover:bg-white/[0.04] transition-colors ${isDragging ? "shadow-md ring-1 ring-primary/30" : ""}`}
+      className={`group flex min-w-0 items-center gap-1.5 rounded-md px-2 py-1 bg-black/[0.02] hover:bg-black/[0.04] dark:bg-white/[0.02] dark:hover:bg-white/[0.04] transition-colors ${isDragging ? "shadow-md ring-1 ring-brand-600 dark:ring-brand-300/30" : ""}`}
     >
       {/* Drag handle */}
       <button
         {...attributes}
         {...listeners}
         type="button"
-        className="cursor-grab touch-none p-0.5 rounded text-text-muted hover:text-primary active:cursor-grabbing shrink-0"
+        className="cursor-grab touch-none p-0.5 rounded text-text-muted hover:text-brand-700 dark:text-brand-300 active:cursor-grabbing shrink-0"
         title="Drag to reorder"
       >
         <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
@@ -1133,7 +1137,7 @@ function ModelItem({ id, index, model, isFirst, isLast, onEdit, onMoveUp, onMove
           onChange={(e) => setDraft(e.target.value)}
           onBlur={commit}
           onKeyDown={handleKeyDown}
-          className="min-w-0 flex-1 rounded border border-primary/40 bg-white px-1.5 py-0.5 font-mono text-xs text-text-main outline-none dark:bg-black/20"
+          className="min-w-0 flex-1 rounded border border-brand-600/40 dark:border-brand-300/50 bg-white px-1.5 py-0.5 font-mono text-xs text-text-main outline-none dark:bg-black/20"
         />
       ) : (
         <div
@@ -1150,7 +1154,7 @@ function ModelItem({ id, index, model, isFirst, isLast, onEdit, onMoveUp, onMove
         <button
           onClick={onMoveUp}
           disabled={isFirst}
-          className={`p-0.5 rounded ${isFirst ? "text-text-muted/20 cursor-not-allowed" : "text-text-muted hover:text-primary hover:bg-black/5 dark:hover:bg-white/5"}`}
+          className={`p-0.5 rounded ${isFirst ? "text-text-muted/20 cursor-not-allowed" : "text-text-muted hover:text-brand-700 dark:text-brand-300 hover:bg-black/5 dark:hover:bg-white/5"}`}
           title="Move up"
         >
           <span className="material-symbols-outlined text-[12px]">arrow_upward</span>
@@ -1158,7 +1162,7 @@ function ModelItem({ id, index, model, isFirst, isLast, onEdit, onMoveUp, onMove
         <button
           onClick={onMoveDown}
           disabled={isLast}
-          className={`p-0.5 rounded ${isLast ? "text-text-muted/20 cursor-not-allowed" : "text-text-muted hover:text-primary hover:bg-black/5 dark:hover:bg-white/5"}`}
+          className={`p-0.5 rounded ${isLast ? "text-text-muted/20 cursor-not-allowed" : "text-text-muted hover:text-brand-700 dark:text-brand-300 hover:bg-black/5 dark:hover:bg-white/5"}`}
           title="Move down"
         >
           <span className="material-symbols-outlined text-[12px]">arrow_downward</span>
@@ -1168,7 +1172,7 @@ function ModelItem({ id, index, model, isFirst, isLast, onEdit, onMoveUp, onMove
       {/* Remove */}
       <button
         onClick={onRemove}
-        className="p-0.5 hover:bg-red-500/10 rounded text-text-muted hover:text-red-500 transition-all"
+        className="p-0.5 hover:bg-danger/10 rounded text-text-muted hover:text-danger transition-all"
         title="Remove"
       >
         <span className="material-symbols-outlined text-[12px]">close</span>
@@ -1304,7 +1308,7 @@ function ComboFormModal({ isOpen, combo, onClose, onSave, activeProviders, kindF
             <label className="text-sm font-medium mb-1.5 block">Models</label>
 
             {models.length === 0 ? (
-              <div className="text-center py-4 border border-dashed border-black/10 dark:border-white/10 rounded-lg bg-black/[0.01] dark:bg-white/[0.01]">
+              <div className="text-center py-4 border border-dashed border-ink/10 dark:border-white/10 rounded-lg bg-black/[0.01] dark:bg-white/[0.01]">
                 <span className="material-symbols-outlined text-text-muted text-xl mb-1">layers</span>
                 <p className="text-xs text-text-muted">No models added yet</p>
               </div>
@@ -1338,7 +1342,7 @@ function ComboFormModal({ isOpen, combo, onClose, onSave, activeProviders, kindF
             {/* Add Model button */}
             <button
               onClick={() => setShowModelSelect(true)}
-              className="w-full mt-2 py-2 border border-dashed border-black/10 dark:border-white/10 rounded-lg text-xs text-primary font-medium hover:text-primary hover:border-primary/50 transition-colors flex items-center justify-center gap-1"
+              className="w-full mt-2 py-2 border border-dashed border-ink/10 dark:border-white/10 rounded-lg text-xs text-brand-700 dark:text-brand-300 font-medium hover:text-brand-700 dark:text-brand-300 hover:border-brand-600/50 dark:border-brand-300/60 transition-colors flex items-center justify-center gap-1"
             >
               <span className="material-symbols-outlined text-[16px]">add</span>
               Add Model

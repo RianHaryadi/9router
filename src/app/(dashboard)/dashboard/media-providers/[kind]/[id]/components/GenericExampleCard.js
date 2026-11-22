@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { Card } from "@/shared/components";
-import { MEDIA_PROVIDER_KINDS, getProviderAlias, resolveProviderId } from "@/shared/constants/providers";
+import { AI_PROVIDERS, MEDIA_PROVIDER_KINDS, getProviderAlias, resolveProviderId } from "@/shared/constants/providers";
 import { getModelsByProviderId, getModelKind } from "@/shared/constants/models";
 import { useCopyToClipboard } from "@/shared/hooks/useCopyToClipboard";
 import { Row, KIND_EXAMPLE_CONFIG } from "./exampleShared";
@@ -41,6 +41,13 @@ export function GenericExampleCard({ providerId, kind }) {
   const kindConfig = MEDIA_PROVIDER_KINDS.find((k) => k.id === kind);
   const exConfig = KIND_EXAMPLE_CONFIG[kind];
   const safeExConfig = exConfig || {};
+  const formats = kind === "webFetch" ? AI_PROVIDERS[providerId]?.fetchConfig?.formats : null;
+  const hasFormats = Array.isArray(formats) && formats.length > 0;
+  const extraFields = (safeExConfig.extraFields || []).map((field) => (
+    field.key === "format" && hasFormats
+      ? { ...field, options: formats, default: formats.includes(field.default) ? field.default : formats[0] }
+      : field
+  ));
 
   // Get models for this kind (e.g., type="image")
   const kindModels = getModelsByProviderId(providerId).filter((m) => getModelKind(m) === kind);
@@ -58,7 +65,7 @@ export function GenericExampleCard({ providerId, kind }) {
   const [refImage, setRefImage] = useState("");
   const [maskImage, setMaskImage] = useState("");
   const [extraValues, setExtraValues] = useState(() =>
-    (safeExConfig.extraFields || []).reduce((acc, f) => { acc[f.key] = f.default ?? ""; return acc; }, {})
+    extraFields.reduce((acc, f) => { acc[f.key] = f.default ?? ""; return acc; }, {})
   );
   const [apiKey, setApiKey] = useState("");
   const [useTunnel, setUseTunnel] = useState(false);
@@ -112,7 +119,10 @@ export function GenericExampleCard({ providerId, kind }) {
   const maskImagePreviewSrc = toImagePreviewSrc(effectiveMaskImage);
 
   // Build request body with optional extra fields (only non-empty values)
-  const extraBodyFromFields = Object.entries(extraValues).reduce((acc, [k, v]) => {
+  const effectiveExtraValues = hasFormats && !formats.includes(extraValues.format)
+    ? { ...extraValues, format: extraFields.find((field) => field.key === "format")?.default }
+    : extraValues;
+  const extraBodyFromFields = Object.entries(effectiveExtraValues).reduce((acc, [k, v]) => {
     if (v === "" || v === null || v === undefined) return acc;
     if (typeof v === "number" && Number.isNaN(v)) return acc;
     acc[k] = v;
@@ -257,7 +267,7 @@ export function GenericExampleCard({ providerId, kind }) {
             <select
               value={selectedModel}
               onChange={(e) => setSelectedModel(e.target.value)}
-              className="w-full px-3 py-1.5 text-sm border border-border rounded-lg bg-background focus:outline-none focus:border-primary"
+              className="w-full px-3 py-1.5 text-sm border-2 border-ink rounded-lg bg-background focus:outline-none focus:border-brand-600 dark:border-brand-300/60"
             >
               {kindModels.map((m) => (
                 <option key={m.id} value={m.id}>{m.name || m.id}</option>
@@ -270,7 +280,7 @@ export function GenericExampleCard({ providerId, kind }) {
               value={selectedModel}
               onChange={(e) => setSelectedModel(e.target.value)}
               placeholder="Enter model id (provider-specific)"
-              className="w-full px-3 py-1.5 text-sm border border-border rounded-lg bg-background focus:outline-none focus:border-primary font-mono"
+              className="w-full px-3 py-1.5 text-sm border-2 border-ink rounded-lg bg-background focus:outline-none focus:border-brand-600 dark:border-brand-300/60 font-mono"
             />
           </Row>
         ) : null}
@@ -286,7 +296,7 @@ export function GenericExampleCard({ providerId, kind }) {
                 onClick={() => setUseTunnel((v) => !v)}
                 title={useTunnel ? "Using tunnel" : "Using local"}
                 className={`flex items-center gap-1 text-xs px-2 py-1.5 rounded-lg border shrink-0 transition-colors ${
-                  useTunnel ? "border-primary/40 bg-primary/10 text-primary" : "border-border text-text-muted hover:text-primary"
+                  useTunnel ? "border-brand-600/40 dark:border-brand-300/50 bg-brand-300/25 text-brand-700 dark:text-brand-300" : "border-border text-text-muted hover:text-brand-700 dark:text-brand-300"
                 }`}
               >
                 <span className="material-symbols-outlined text-[14px]">wifi_tethering</span>
@@ -309,7 +319,7 @@ export function GenericExampleCard({ providerId, kind }) {
             <select
               value={pinnedConnectionId}
               onChange={(e) => setPinnedConnectionId(e.target.value)}
-              className="w-full px-3 py-1.5 text-sm border border-border rounded-lg bg-background focus:outline-none focus:border-primary"
+              className="w-full px-3 py-1.5 text-sm border-2 border-ink rounded-lg bg-background focus:outline-none focus:border-brand-600 dark:border-brand-300/60"
             >
               <option value="">Auto (by priority)</option>
               {connections.map((c) => {
@@ -332,13 +342,13 @@ export function GenericExampleCard({ providerId, kind }) {
               value={input}
               onChange={(e) => setInput(e.target.value)}
               placeholder={exConfig.inputPlaceholder}
-              className="w-full px-3 py-1.5 pr-7 text-sm border border-border rounded-lg bg-background focus:outline-none focus:border-primary"
+              className="w-full px-3 py-1.5 pr-7 text-sm border-2 border-ink rounded-lg bg-background focus:outline-none focus:border-brand-600 dark:border-brand-300/60"
             />
             {input && (
               <button
                 type="button"
                 onClick={() => setInput("")}
-                className="absolute right-2 top-1/2 -translate-y-1/2 text-text-muted hover:text-primary transition-colors"
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-text-muted hover:text-brand-700 dark:text-brand-300 transition-colors"
               >
                 <span className="material-symbols-outlined text-[14px]">close</span>
               </button>
@@ -354,13 +364,13 @@ export function GenericExampleCard({ providerId, kind }) {
                 value={question}
                 onChange={(e) => setQuestion(e.target.value)}
                 placeholder="Enter evaluation question or criteria"
-                className="w-full px-3 py-1.5 pr-7 text-sm border border-border rounded-lg bg-background focus:outline-none focus:border-primary"
+                className="w-full px-3 py-1.5 pr-7 text-sm border-2 border-ink rounded-lg bg-background focus:outline-none focus:border-brand-600 dark:border-brand-300/60"
               />
               {question && (
                 <button
                   type="button"
                   onClick={() => setQuestion("")}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 text-text-muted hover:text-primary transition-colors"
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-text-muted hover:text-brand-700 dark:text-brand-300 transition-colors"
                 >
                   <span className="material-symbols-outlined text-[14px]">close</span>
                 </button>
@@ -378,13 +388,13 @@ export function GenericExampleCard({ providerId, kind }) {
                   value={refImage}
                   onChange={(e) => setRefImage(e.target.value)}
                   placeholder={imageEditDefaults.image || "https://example.com/source.png"}
-                  className="w-full px-3 py-1.5 pr-7 text-sm border border-border rounded-lg bg-background focus:outline-none focus:border-primary"
+                  className="w-full px-3 py-1.5 pr-7 text-sm border-2 border-ink rounded-lg bg-background focus:outline-none focus:border-brand-600 dark:border-brand-300/60"
                 />
                 {refImage && (
                   <button
                     type="button"
                     onClick={() => setRefImage("")}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 text-text-muted hover:text-primary transition-colors"
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-text-muted hover:text-brand-700 dark:text-brand-300 transition-colors"
                   >
                     <span className="material-symbols-outlined text-[14px]">close</span>
                   </button>
@@ -394,7 +404,7 @@ export function GenericExampleCard({ providerId, kind }) {
                 <img
                   src={refImagePreviewSrc}
                   alt="Reference"
-                  className="max-h-40 rounded-lg border border-border object-contain bg-sidebar"
+                  className="max-h-40 rounded-lg border-2 border-ink object-contain bg-sidebar"
                   onError={(e) => { e.currentTarget.style.display = "none"; }}
                   onLoad={(e) => { e.currentTarget.style.display = "block"; }}
                 loading="lazy"
@@ -413,13 +423,13 @@ export function GenericExampleCard({ providerId, kind }) {
                   value={maskImage}
                   onChange={(e) => setMaskImage(e.target.value)}
                   placeholder={imageEditDefaults.mask_image || "https://example.com/mask.png"}
-                  className="w-full px-3 py-1.5 pr-7 text-sm border border-border rounded-lg bg-background focus:outline-none focus:border-primary"
+                  className="w-full px-3 py-1.5 pr-7 text-sm border-2 border-ink rounded-lg bg-background focus:outline-none focus:border-brand-600 dark:border-brand-300/60"
                 />
                 {maskImage && (
                   <button
                     type="button"
                     onClick={() => setMaskImage("")}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 text-text-muted hover:text-primary transition-colors"
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-text-muted hover:text-brand-700 dark:text-brand-300 transition-colors"
                   >
                     <span className="material-symbols-outlined text-[14px]">close</span>
                   </button>
@@ -429,7 +439,7 @@ export function GenericExampleCard({ providerId, kind }) {
                 <img
                   src={maskImagePreviewSrc}
                   alt="Mask"
-                  className="max-h-40 rounded-lg border border-border object-contain bg-sidebar"
+                  className="max-h-40 rounded-lg border-2 border-ink object-contain bg-sidebar"
                   onError={(e) => { e.currentTarget.style.display = "none"; }}
                   onLoad={(e) => { e.currentTarget.style.display = "block"; }}
                 loading="lazy"
@@ -441,15 +451,15 @@ export function GenericExampleCard({ providerId, kind }) {
         )}
 
         {/* Extra fields — for kinds without model concept (webSearch/webFetch), show all; otherwise filter by model.params */}
-        {(exConfig.extraFields || [])
+        {extraFields
           .filter((f) => kindModels.length === 0 || (Array.isArray(selectedModelObj?.params) && selectedModelObj.params.includes(f.key)))
           .map((f) => (
           <Row key={f.key} label={f.label}>
             {f.type === "select" ? (
               <select
-                value={extraValues[f.key] ?? ""}
+                value={effectiveExtraValues[f.key] ?? ""}
                 onChange={(e) => setExtraValues((s) => ({ ...s, [f.key]: e.target.value }))}
-                className="w-full px-3 py-1.5 text-sm border border-border rounded-lg bg-background focus:outline-none focus:border-primary"
+                className="w-full px-3 py-1.5 text-sm border-2 border-ink rounded-lg bg-background focus:outline-none focus:border-brand-600 dark:border-brand-300/60"
               >
                 {(f.options || []).map((opt) => (
                   <option key={opt} value={opt}>{opt === "" ? "(default)" : opt}</option>
@@ -461,7 +471,7 @@ export function GenericExampleCard({ providerId, kind }) {
                 value={extraValues[f.key] ?? ""}
                 placeholder={f.placeholder}
                 onChange={(e) => setExtraValues((s) => ({ ...s, [f.key]: e.target.value }))}
-                className="w-full px-3 py-1.5 text-sm border border-border rounded-lg bg-background focus:outline-none focus:border-primary"
+                className="w-full px-3 py-1.5 text-sm border-2 border-ink rounded-lg bg-background focus:outline-none focus:border-brand-600 dark:border-brand-300/60"
               />
             ) : f.type === "image" ? (
               <div className="flex gap-2 items-center">
@@ -470,9 +480,9 @@ export function GenericExampleCard({ providerId, kind }) {
                   value={extraValues[f.key] ?? ""}
                   placeholder="https://… or click Upload"
                   onChange={(e) => setExtraValues((s) => ({ ...s, [f.key]: e.target.value }))}
-                  className="flex-1 min-w-0 px-3 py-1.5 text-sm border border-border rounded-lg bg-background focus:outline-none focus:border-primary"
+                  className="flex-1 min-w-0 px-3 py-1.5 text-sm border-2 border-ink rounded-lg bg-background focus:outline-none focus:border-brand-600 dark:border-brand-300/60"
                 />
-                <label className="shrink-0 inline-flex items-center gap-1 px-3 py-1.5 text-sm border border-border rounded-lg bg-background hover:bg-accent cursor-pointer transition-colors">
+                <label className="shrink-0 inline-flex items-center gap-1 px-3 py-1.5 text-sm border-2 border-ink rounded-lg bg-background hover:bg-accent cursor-pointer transition-colors">
                   <span className="material-symbols-outlined text-[16px]">upload</span>
                   Upload
                   <input
@@ -506,7 +516,7 @@ export function GenericExampleCard({ providerId, kind }) {
                 min={f.min}
                 max={f.max}
                 onChange={(e) => setExtraValues((s) => ({ ...s, [f.key]: e.target.value === "" ? "" : Number(e.target.value) }))}
-                className="w-full px-3 py-1.5 text-sm border border-border rounded-lg bg-background focus:outline-none focus:border-primary"
+                className="w-full px-3 py-1.5 text-sm border-2 border-ink rounded-lg bg-background focus:outline-none focus:border-brand-600 dark:border-brand-300/60"
               />
             )}
           </Row>
@@ -518,7 +528,7 @@ export function GenericExampleCard({ providerId, kind }) {
             <select
               value={imageOutputFormat}
               onChange={(e) => setImageOutputFormat(e.target.value)}
-              className="w-full px-3 py-1.5 text-sm border border-border rounded-lg bg-background focus:outline-none focus:border-primary"
+              className="w-full px-3 py-1.5 text-sm border-2 border-ink rounded-lg bg-background focus:outline-none focus:border-brand-600 dark:border-brand-300/60"
             >
               <option value="json">JSON (Base64)</option>
               <option value="binary">Binary File</option>
@@ -533,7 +543,7 @@ export function GenericExampleCard({ providerId, kind }) {
             <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
               <button
                 onClick={() => copyCurl(curlSnippet)}
-                className="inline-flex items-center gap-1 text-xs text-text-muted hover:text-primary transition-colors"
+                className="inline-flex items-center gap-1 text-xs text-text-muted hover:text-brand-700 dark:text-brand-300 transition-colors"
               >
                 <span className="material-symbols-outlined text-[14px]">{copiedCurl ? "check" : "content_copy"}</span>
                 {copiedCurl ? "Copied" : "Copy"}
@@ -541,7 +551,7 @@ export function GenericExampleCard({ providerId, kind }) {
             <button
               onClick={handleRun}
               disabled={running || !input.trim() || !modelFull}
-              className="flex w-full sm:w-auto items-center justify-center gap-1.5 px-3 py-1 rounded-lg bg-primary text-white text-xs font-medium hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              className="flex w-full sm:w-auto items-center justify-center gap-1.5 px-3 py-1 rounded-lg bg-ink text-[#FAF7F0] text-xs font-medium hover:bg-brand-300/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
                 <span className="material-symbols-outlined text-[14px]" style={running ? { animation: "spin 1s linear infinite" } : undefined}>
                   play_arrow
@@ -555,8 +565,8 @@ export function GenericExampleCard({ providerId, kind }) {
 
         {/* Streaming progress */}
         {(running || progress) && useStreaming && (
-          <div className="flex flex-col gap-2 px-3 py-2 rounded-lg bg-sidebar border border-border sm:flex-row sm:items-center sm:gap-3">
-            <span className="material-symbols-outlined text-[16px] text-primary" style={running ? { animation: "spin 1s linear infinite" } : undefined}>
+          <div className="flex flex-col gap-2 px-3 py-2 rounded-lg bg-sidebar border-2 border-ink sm:flex-row sm:items-center sm:gap-3">
+            <span className="material-symbols-outlined text-[16px] text-brand-700 dark:text-brand-300" style={running ? { animation: "spin 1s linear infinite" } : undefined}>
               {running ? "progress_activity" : "check_circle"}
             </span>
             <span className="text-xs text-text-muted">
@@ -573,7 +583,7 @@ export function GenericExampleCard({ providerId, kind }) {
             <img
               src={`data:image/png;base64,${partialImage.b64_json}`}
               alt="Partial"
-              className="max-w-full rounded-lg border border-border mt-1.5 opacity-80"
+              className="max-w-full rounded-lg border-2 border-ink mt-1.5 opacity-80"
             loading="lazy"
             decoding="async"
             />
@@ -581,7 +591,7 @@ export function GenericExampleCard({ providerId, kind }) {
         )}
 
         {/* Error */}
-        {error && <p className="text-xs text-red-500 break-words">{error}</p>}
+        {error && <p className="text-xs text-danger break-words">{error}</p>}
 
         {/* Response */}
         <div>
@@ -592,7 +602,7 @@ export function GenericExampleCard({ providerId, kind }) {
             {result && (
               <button
                 onClick={() => copyRes(resultJson)}
-                className="inline-flex items-center gap-1 text-xs text-text-muted hover:text-primary transition-colors"
+                className="inline-flex items-center gap-1 text-xs text-text-muted hover:text-brand-700 dark:text-brand-300 transition-colors"
               >
                 <span className="material-symbols-outlined text-[14px]">{copiedRes ? "check" : "content_copy"}</span>
                 {copiedRes ? "Copied" : "Copy"}
@@ -605,7 +615,7 @@ export function GenericExampleCard({ providerId, kind }) {
                 <a
                   href={binaryImageUrl || (result?.data?.data?.[0]?.b64_json ? `data:image/png;base64,${result.data.data[0].b64_json}` : result?.data?.data?.[0]?.url || "")}
                   download="image.png"
-                  className="inline-flex items-center gap-1 text-xs text-text-muted hover:text-primary transition-colors"
+                  className="inline-flex items-center gap-1 text-xs text-text-muted hover:text-brand-700 dark:text-brand-300 transition-colors"
                 >
                   <span className="material-symbols-outlined text-[14px]">download</span>
                   Download
@@ -614,7 +624,7 @@ export function GenericExampleCard({ providerId, kind }) {
               <img
                 src={binaryImageUrl || (result?.data?.data?.[0]?.b64_json ? `data:image/png;base64,${result.data.data[0].b64_json}` : result?.data?.data?.[0]?.url)}
                 alt="Generated"
-                className="max-w-full rounded-lg border border-border"
+                className="max-w-full rounded-lg border-2 border-ink"
               loading="lazy"
               decoding="async"
               />
@@ -626,7 +636,7 @@ export function GenericExampleCard({ providerId, kind }) {
                 <a
                   href={videoUrl}
                   download="video.mp4"
-                  className="inline-flex items-center gap-1 text-xs text-text-muted hover:text-primary transition-colors"
+                  className="inline-flex items-center gap-1 text-xs text-text-muted hover:text-brand-700 dark:text-brand-300 transition-colors"
                 >
                   <span className="material-symbols-outlined text-[14px]">download</span>
                   Download
@@ -635,7 +645,7 @@ export function GenericExampleCard({ providerId, kind }) {
               <video
                 controls
                 src={videoUrl}
-                className="max-w-full rounded-lg border border-border"
+                className="max-w-full rounded-lg border-2 border-ink"
               />
             </div>
           )}

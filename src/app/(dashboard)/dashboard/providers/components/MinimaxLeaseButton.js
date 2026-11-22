@@ -8,7 +8,7 @@ import { translate } from "@/i18n/runtime";
 // "Use Desktop App" for MiniMax Code: creates a lease connection that borrows
 // the signed-in MiniMax Code desktop app's credentials over its local
 // named-pipe broker. No browser login, no stored refresh token — the desktop
-// app keeps owning token refresh, so the official CLI and 9router can share
+// app keeps owning token refresh, so the official CLI and Ryo can share
 // the same subscription without their single-use refresh tokens fighting.
 export default function MinimaxLeaseButton({ providerId, onConnected, size = "sm" }) {
   const [busy, setBusy] = useState(false);
@@ -48,7 +48,7 @@ export default function MinimaxLeaseButton({ providerId, onConnected, size = "sm
       >
         {busy ? translate("Connecting...") : translate("Use Desktop App")}
       </Button>
-      {error && <p className="w-full text-xs text-red-500 break-words">{error}</p>}
+      {error && <p className="w-full text-xs text-danger break-words">{error}</p>}
     </>
   );
 }

@@ -26,13 +26,44 @@ const SPECIALIZED = new Set([
 // Per-process / per-request values: kimi's random device name, minimax's session UUID.
 const VOLATILE_HEADERS = new Set(["x-msh-device-name", "x-mavis-session-id"]);
 
+// Headers whose VALUE moves with the release or the runtime. The golden must
+// lock the header NAME and the header SET, not the exact version string: baking
+// the package version in meant every release broke the snapshot, and baking the
+// Node version in meant every runtime bump did.
+//
+//   X-CLIENT-VERSION    -> "<pkg version>"
+//   X-CORE-VERSION      -> "<pkg version>"
+//   X-PLATFORM-VERSION  -> "v<node version>"
+//   X-Msh-Version       -> "<pkg version>"
+const VERSION_HEADERS = new Set([
+  "x-client-version",
+  "x-core-version",
+  "x-platform-version",
+  "x-msh-version",
+]);
+
+// Per-request values: the UUIDs the header hooks mint per call, and the
+// timezone offset the minimax hook derives from the local clock.
+const RANDOM_HEADERS = new Set([
+  "x-request-id",
+  "x-conversation-id",
+  "x-conversation-request-id",
+  "x-conversation-message-id",
+  "x-mavis-session-id",
+]);
+
 // Sanitize header: khử token + field thời gian động (kimi X-Msh-Device-Id) để snapshot ổn định.
 function sanitize(headers) {
   const out = {};
   for (const [k, v] of Object.entries(headers)) {
     if (VOLATILE_HEADERS.has(k.toLowerCase())) { out[k] = "<VOLATILE>"; continue; }
+    if (VERSION_HEADERS.has(k.toLowerCase())) { out[k] = "<VERSION>"; continue; }
+    if (RANDOM_HEADERS.has(k.toLowerCase())) { out[k] = "<RANDOM>"; continue; }
+    // The timezone offset is the local clock: same shape, different number.
+    if (k.toLowerCase() === "x-mavis-timezone-offset") { out[k] = "<TZ>"; continue; }
     out[k] = typeof v === "string"
-      ? v.replace(/Bearer .+/, "Bearer <TOK>")
+      ? v.replace(/^9router\/\d+\.\d+\.\d+.*$/, "9router/<VERSION>")
+          .replace(/Bearer .+/, "Bearer <TOK>")
           .replace(/sk-test-APIKEY|tok-test-ACCESS/g, "<CRED>")
           .replace(/kimi-\d{10,}/g, "kimi-<TS>")
       : v;

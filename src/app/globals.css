@@ -8,112 +8,174 @@
 .fonts-loaded .material-symbols-outlined { opacity: 1; transition: opacity .12s ease-out; }
 
 /* ============================================================
-   9Router palette — adopted from 9remote_private/web
-   Brand orange (dark) / soft coral (light), neutral warm bases
+   9Router palette — Neubrutalism
+   Hard offset shadows, thick black borders, saturated primaries
    ============================================================ */
 :root {
-  /* Brand scale (light) - centered on #E56A4A */
-  --color-brand-50: #fdf1ed;
-  --color-brand-100: #fadccf;
-  --color-brand-200: #f4b59c;
-  --color-brand-300: #ee8d6a;
-  --color-brand-400: #ea7855;
-  --color-brand-500: #E56A4A;
-  --color-brand-600: #cc5236;
-  --color-brand-700: #a64027;
-  --color-brand-800: #7a2f1d;
-  --color-brand-900: #4d1e12;
+  /* Brand scale (light) - warm gold. Pure neon yellow on cream paper
+     vibrates and reads as a highlight, not as a brand colour, so the
+     light theme ramps through amber instead. */
+  --color-brand-50: #FFF9E6;
+  --color-brand-100: #FFF0C2;
+  --color-brand-200: #FFE38A;
+  --color-brand-300: #FFD230;
+  --color-brand-400: #E8B923;
+  --color-brand-500: #CE9F14;
+  --color-brand-600: #A8820D;
+  --color-brand-700: #836708;
+  --color-brand-800: #5C4905;
+  --color-brand-900: #332802;
 
-  /* Primary (legacy alias for backward compat with existing components) */
-  --color-primary: var(--color-brand-500);
-  --color-primary-hover: var(--color-brand-600);
+  /* Primary (legacy alias for backward compat with existing components).
+     Kept at a readable gold: it is used for body-size accent text and
+     borders, where pure #FFE600 would fail contrast on the cream paper.
+     The screamer yellow is brand-300 and is what the fills use. */
+  --color-primary: var(--color-brand-700);
+  --color-primary-hover: var(--color-brand-800);
+  --color-primary-50: #FFF9B0;
+  --color-primary-100: #FFF588;
+  --color-primary-200: #FFE600;
 
-  /* Surfaces & backgrounds (light) */
-  --color-bg: #FDFAF6;
-  --color-bg-alt: #F7F3EE;
-  --color-surface: #ffffff;
-  --color-surface-2: #f4f4f5;
-  --color-surface-3: #e7e7e9;
-  --color-sidebar: rgba(244, 241, 236, 0.85);
+  /* Secondaries - red screamer */
+  --color-accent: #FFE600;
+  --color-accent-hover: #E5C800;
+  --color-secondary: #8C7300;
+  --color-secondary-hover: #604D00;
+  --color-tertiary: #4A4A4A;
+  --color-tertiary-hover: #333333;
 
-  /* Borders */
-  --color-border: #e5e7eb;
-  --color-border-subtle: #f1f1f3;
+  /* Surfaces & backgrounds (light) - warm cream paper */
+  --color-bg: #FAF7F0;
+  --color-bg-alt: #F2EEE4;
+  --color-surface: #FFFFFF;
+  --color-surface-2: #F4F0E7;
+  --color-surface-3: #E9E3D6;
+  /* Dark sidebar is the product signature */
+  --color-sidebar: #14110D;
+  --color-sidebar-hover: #241F19;
+
+  /* Borders - thick black, neubrutalism signature */
+  --color-border: #000000;
+  --color-border-subtle: #333333;
 
   /* Text */
-  --color-text: #0a0a0a;
-  --color-text-main: #0a0a0a;
-  --color-text-muted: #6B7280;
-  --color-text-subtle: #9CA3AF;
+  --color-text: #14110D;
+  --color-text-main: #14110D;
+  --color-text-muted: #403A33;
+  --color-text-subtle: #645D54;
+  --color-text-on-accent: #1A1611;
 
-  /* Status */
-  --color-danger: #cf222e;
-  --color-success: #10B981;
-  --color-warning: #F59E0B;
-  --color-info: #3B82F6;
+  /* Status - muted on purpose. Fully saturated red/green/amber/blue next
+     to the brand yellow reads as four unrelated themes; desaturating them
+     and letting the brand colour carry the UI keeps one system. */
+  --color-danger: #C3352A;
+  --color-success: #2E7D4F;
+  --color-warning: #9A6108;
+  --color-info: #2F5FA8;
+  /* Aliases for classes upstream already referenced but never defined */
+  --color-error: #FF3B30;
+  --color-bg-hover: #F4F0E7;
+  --color-bg-subtle: #F2EEE4;
+  --color-bg-secondary: #F4F0E7;
+  --color-bg-tertiary: #E9E3D6;
+  --color-surface-secondary: #F4F0E7;
+  --color-border-hover: #000000;
+  /* Ink - the border colour. Black in light mode, near-white in dark mode so
+     the thick borders still read against a dark surface. */
+  --color-ink: #000000;
+  /* Hard offset shadow colour - black in light mode */
+  --color-shadow: #000000;
 
-  /* Radius */
-  --radius-brand: 10px;
-  --radius-brand-lg: 14px;
+  /* Chart series - one hue, ramped. A rainbow of 6 saturated colours reads
+     as unrelated colours, not as a theme; a single-hue ramp reads as one
+     system and still separates the series. */
+  --chart-1: #B89600;
+  --chart-2: #8C7300;
+  --chart-3: #D4AF00;
+  --chart-4: #604D00;
+  --chart-5: #342800;
+  --chart-6: #E5C800;
 
-  /* Shadows */
-  --shadow-soft: 0 1px 2px 0 rgba(0,0,0,0.04);
-  --shadow-warm: 0 2px 12px -2px rgba(229, 106, 74, 0.18);
-  --shadow-elevated: 0 12px 28px -4px rgba(60, 50, 45, 0.06);
-  --shadow-elev:
-    inset 0 1px 0 0 rgba(255,255,255,0.8),
-    0 1px 2px rgba(15,23,42,0.04),
-    0 12px 36px -8px rgba(15,23,42,0.10);
-  --shadow-focus: 0 0 0 3px rgba(229,106,74,0.18);
+  /* Radius - sharp and subtle */
+  --radius-brand: 6px;
+  --radius-brand-lg: 10px;
+
+  /* Shadows - hard offset, no blur */
+  --shadow-soft: 3px 3px 0 #000000;
+  --shadow-warm: 3px 3px 0 #000000;
+  --shadow-elevated: 3px 3px 0 #000000;
+  --shadow-elev: 3px 3px 0 #000000;
+  --shadow-focus: 0 0 0 2px #000000;
 
   color-scheme: light;
 }
 
 .dark {
-  /* Brand scale (dark) - centered on #E56A4A, same as light for consistency */
-  --color-brand-50: #fdf1ed;
-  --color-brand-100: #fadccf;
-  --color-brand-200: #f4b59c;
-  --color-brand-300: #ee8d6a;
-  --color-brand-400: #ea7855;
-  --color-brand-500: #E56A4A;
-  --color-brand-600: #cc5236;
-  --color-brand-700: #a64027;
-  --color-brand-800: #7a2f1d;
-  --color-brand-900: #4d1e12;
+  /* Brand scale (dark) - same screaming yellow; it has to stay bright so the
+     buttons and the active nav item read on a near-black panel. */
+  --color-brand-50: #333000;
+  --color-brand-100: #403C00;
+  --color-brand-200: #595200;
+  --color-brand-300: #FFE600;
+  --color-brand-400: #E5C800;
+  --color-brand-500: #D4AF00;
+  --color-brand-600: #B89600;
+  --color-brand-700: #8C7300;
+  --color-brand-800: #604D00;
+  --color-brand-900: #342800;
 
-  --color-primary: #E56A4A;
-  --color-primary-hover: #cc5236;
+  --color-primary: #FFE600;
+  --color-primary-hover: #E5C800;
 
-  /* Surfaces (dark - Claude-like neutral warm) */
-  --color-bg: #1a1a1a;
-  --color-bg-alt: #1F1F1E;
-  --color-surface: #262626;
-  --color-surface-2: #303030;
-  --color-surface-3: #3a3a3a;
-  --color-sidebar: rgba(30, 30, 30, 0.85);
+  /* Surfaces (dark) - dark paper */
+  --color-bg: #12100D;
+  --color-bg-alt: #191612;
+  --color-surface: #201C17;
+  --color-surface-2: #292419;
+  --color-surface-3: #332C20;
+  --color-sidebar: #12100D;
 
-  --color-border: #333333;
-  --color-border-subtle: #2a2a2a;
+  /* In dark mode the border is the light "ink" - a black border on a
+     near-black surface is invisible, which kills the whole look. */
+  --color-border: #6E675C;
+  --color-border-subtle: #3A342B;
 
-  --color-text: #ededed;
-  --color-text-main: #ededed;
-  --color-text-muted: #9ca3af;
-  --color-text-subtle: #6b7280;
+  --color-text: #EDE8DE;
+  --color-text-main: #F2EEE4;
+  --color-text-muted: #BFB7AA;
+  --color-text-subtle: #9A9286;
+  --color-text-on-accent: #1A1611;
 
-  --color-danger: #ef4444;
-  --color-success: #22c55e;
-  --color-warning: #fbbf24;
-  --color-info: #60a5fa;
+  --color-danger: #E5534A;
+  --color-success: #4FB37A;
+  --color-warning: #D9A03F;
+  --color-info: #5B8DD6;
+  --color-error: #FF3B30;
+  --color-bg-hover: #292419;
+  --color-bg-subtle: #191612;
+  --color-bg-secondary: #292419;
+  --color-bg-tertiary: #332C20;
+  --color-surface-secondary: #292419;
+  --color-border-hover: #EDE7DA;
+  /* Ink is the structural border colour. Kept dimmer than the accent so the
+     yellow controls stay the loudest thing on screen. */
+  --color-ink: #8F887B;
+  /* A black offset shadow is invisible on a #0A0A0A surface, so the dark
+     theme offsets with the ink colour instead. */
+  --color-shadow: #6E675C;
 
-  --shadow-soft: 0 1px 2px 0 rgba(0,0,0,0.3);
-  --shadow-warm: 0 2px 12px -2px rgba(229, 106, 74, 0.25);
-  --shadow-elevated: 0 12px 28px -4px rgba(0, 0, 0, 0.45);
-  --shadow-elev:
-    inset 0 1px 0 0 rgba(255,255,255,0.06),
-    0 1px 2px rgba(0,0,0,0.4),
-    0 16px 48px -8px rgba(0,0,0,0.55);
-  --shadow-focus: 0 0 0 3px rgba(229, 106, 74, 0.18);
+  --chart-1: #FFE600;
+  --chart-2: #E5C800;
+  --chart-3: #D4AF00;
+  --chart-4: #8C7300;
+  --chart-5: #FFF9B0;
+  --chart-6: #B89600;
+
+  --shadow-soft: 3px 3px 0 #6E675C;
+  --shadow-warm: 3px 3px 0 #6E675C;
+  --shadow-elevated: 3px 3px 0 #6E675C;
+  --shadow-elev: 3px 3px 0 #6E675C;
+  --shadow-focus: 0 0 0 2px #FFE600;
 
   color-scheme: dark;
 }
@@ -164,31 +226,60 @@ select {
   --color-text-main: var(--color-text-main);
   --color-text-muted: var(--color-text-muted);
   --color-text-subtle: var(--color-text-subtle);
-  --color-accent: var(--color-brand-500);
+  --color-text-on-accent: var(--color-text-on-accent);
+  --color-accent: var(--color-accent);
   --color-danger: var(--color-danger);
   --color-success: var(--color-success);
   --color-warning: var(--color-warning);
   --color-info: var(--color-info);
+  --color-error: var(--color-error);
+  --color-bg-hover: var(--color-bg-hover);
+  --color-bg-subtle: var(--color-bg-subtle);
+  --color-bg-secondary: var(--color-bg-secondary);
+  --color-bg-tertiary: var(--color-bg-tertiary);
+  --color-surface-secondary: var(--color-surface-secondary);
+  --color-border-hover: var(--color-border-hover);
+  --color-ink: var(--color-ink);
+  --color-shadow: var(--color-shadow);
+  --color-text-primary: var(--color-text-main);
+  --color-on-brand: var(--color-text-on-accent);
+
+  /* Chart series */
+  --chart-1: var(--chart-1);
+  --chart-2: var(--chart-2);
+  --chart-3: var(--chart-3);
+  --chart-4: var(--chart-4);
+  --chart-5: var(--chart-5);
+  --chart-6: var(--chart-6);
+
+  /* Neutral - a plain shade-less grey used by the landing page and a few
+     upstream components that expect a Tailwind palette name. */
+  --color-neutral: #6b7280;
+  --color-neutral-light: #9ca3af;
+  --color-neutral-dark: #4b5563;
 
   /* Static fallbacks (explicit per-mode usage if needed) */
-  --color-bg-light: #FCFBF9;
-  --color-bg-dark: #1a1a1a;
-  --color-surface-light: #ffffff;
-  --color-surface-dark: #262626;
-  --color-sidebar-light: #F4F1EC;
-  --color-sidebar-dark: #1F1F1E;
-  --color-border-light: #e5e7eb;
+  --color-bg-light: #FAF7F0;
+  --color-bg-dark: #0A0A0A;
+  --color-surface-light: #FFFFFF;
+  --color-surface-dark: #1A1A1A;
+  --color-sidebar-light: #14110D;
+  --color-sidebar-dark: #12100D;
+  --color-border-light: #000000;
   --color-border-dark: #333333;
-  --color-text-main-light: #0a0a0a;
-  --color-text-main-dark: #ededed;
-  --color-text-muted-light: #6B7280;
-  --color-text-muted-dark: #9ca3af;
+  --color-text-main-light: #0A0A0A;
+  --color-text-main-dark: #F5F5F5;
+  --color-text-muted-light: #4A4A4A;
+  --color-text-muted-dark: #A0A0A0;
 
   /* Radius */
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
   --radius-brand: var(--radius-brand);
   --radius-brand-lg: var(--radius-brand-lg);
 
-  /* Shadows */
+  /* Shadow - hard offset, neubrutalism */
   --shadow-soft: var(--shadow-soft);
   --shadow-warm: var(--shadow-warm);
   --shadow-elevated: var(--shadow-elevated);
@@ -199,7 +290,9 @@ select {
   --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', system-ui, sans-serif;
 }
 
-/* Base */
+/* ============================================================
+   Base
+   ============================================================ */
 body {
   background-color: var(--color-bg);
   color: var(--color-text-main);
@@ -210,12 +303,12 @@ body {
 
 /* Selection - brand-tinted */
 ::selection {
-  background-color: rgba(229, 106, 74, 0.25);
-  color: var(--color-primary);
+  background-color: rgba(255, 230, 0, 0.35);
+  color: var(--color-text-main);
 }
 .dark ::selection {
-  background-color: rgba(229, 106, 74, 0.3);
-  color: var(--color-brand-300);
+  background-color: rgba(255, 230, 0, 0.4);
+  color: var(--color-text-main);
 }
 
 /* iOS keyboard accent */
@@ -231,7 +324,7 @@ input, textarea {
   background: transparent;
 }
 .custom-scrollbar::-webkit-scrollbar-thumb {
-  background-color: rgba(156, 163, 175, 0.3);
+  background-color: rgba(120, 120, 120, 0.45);
   border-radius: 20px;
 }
 .custom-scrollbar::-webkit-scrollbar-thumb:hover {
@@ -241,19 +334,19 @@ input, textarea {
 /* Thin horizontal scrollbar - brand colored */
 .scroll-thin-x {
   scrollbar-width: thin;
-  scrollbar-color: rgba(229, 106, 74, 0.55) transparent;
+  scrollbar-color: rgba(255, 230, 0, 0.55) transparent;
 }
 .dark .scroll-thin-x {
-  scrollbar-color: rgba(229, 106, 74, 0.55) transparent;
+  scrollbar-color: rgba(255, 230, 0, 0.55) transparent;
 }
 .scroll-thin-x::-webkit-scrollbar { height: 3px; }
 .scroll-thin-x::-webkit-scrollbar-track { background: transparent; }
 .scroll-thin-x::-webkit-scrollbar-thumb {
-  background: rgba(229, 106, 74, 0.55);
+  background: rgba(255, 230, 0, 0.55);
   border-radius: 3px;
 }
 .dark .scroll-thin-x::-webkit-scrollbar-thumb {
-  background: rgba(229, 106, 74, 0.55);
+  background: rgba(255, 230, 0, 0.55);
 }
 
 /* Global thin mac-like scrollbars (overrides clunky Windows/Linux default) */
@@ -287,48 +380,9 @@ input, textarea {
   background-color: rgba(180, 180, 180, 0.5);
 }
 
-/* Reusable elevated card */
-.card-soft {
-  background-color: var(--color-surface);
-  box-shadow: var(--shadow-soft);
-  border-radius: var(--radius-brand-lg);
-}
-.card-elev {
-  background-color: var(--color-surface);
-  box-shadow: var(--shadow-elev);
-  border-radius: var(--radius-brand-lg);
-}
-
-/* Hero gradient (compat) */
-.bg-hero-gradient {
-  background: linear-gradient(180deg, var(--color-bg-alt) 0%, var(--color-bg) 100%);
-}
-
-/* macOS Vibrancy */
-.bg-vibrancy {
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  background: rgba(255, 255, 255, 0.72);
-}
-.dark .bg-vibrancy {
-  background: rgba(38, 38, 38, 0.72);
-}
-
-/* macOS Traffic Lights */
-.traffic-lights {
-  display: flex;
-  gap: 8px;
-}
-.traffic-light {
-  width: 12px;
-  height: 12px;
-  border-radius: 50%;
-}
-.traffic-light.red { background: #FF5F56; }
-.traffic-light.yellow { background: #FFBD2E; }
-.traffic-light.green { background: #27C93F; }
-
-/* Material Symbols */
+/* ============================================================
+   Material Symbols
+   ============================================================ */
 .material-symbols-outlined {
   font-family: 'Material Symbols Outlined', sans-serif;
   font-weight: normal;
@@ -387,12 +441,12 @@ button:disabled,
 
 @keyframes border-glow {
   0%, 100% {
-    box-shadow: 0 0 5px rgba(229, 106, 74, 0.3), 0 0 10px rgba(229, 106, 74, 0.2);
-    border-color: rgba(229, 106, 74, 0.5);
+    box-shadow: 3px 3px 0 0 var(--color-shadow);
+    border-color: var(--color-border);
   }
   50% {
-    box-shadow: 0 0 10px rgba(229, 106, 74, 0.5), 0 0 20px rgba(229, 106, 74, 0.3);
-    border-color: rgba(229, 106, 74, 0.8);
+    box-shadow: 6px 6px 0 0 #000000;
+    border-color: var(--color-brand-400);
   }
 }
 .animate-border-glow { animation: border-glow 2s ease-in-out infinite; }
@@ -419,61 +473,9 @@ button:disabled,
 }
 .animate-pulse-glow { animation: pulseGlow 3s ease-in-out infinite; }
 
-/* CTA shimmer + glow pulse */
-@keyframes ctaShimmer {
-  0% { transform: translateX(-120%) skewX(-20deg); }
-  100% { transform: translateX(220%) skewX(-20deg); }
-}
-@keyframes ctaGlowPulse {
-  0%, 100% { box-shadow: 0 8px 24px -8px rgba(229, 106, 74, 0.45), 0 0 0 0 rgba(229, 106, 74, 0.5); }
-  50% { box-shadow: 0 12px 32px -8px rgba(229, 106, 74, 0.6), 0 0 0 8px rgba(229, 106, 74, 0); }
-}
-.btn-cta {
-  position: relative;
-  overflow: hidden;
-  isolation: isolate;
-  animation: ctaGlowPulse 2.4s ease-in-out infinite;
-}
-.btn-cta::before {
-  content: "";
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 50%;
-  height: 100%;
-  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.35), transparent);
-  animation: ctaShimmer 2.8s ease-in-out infinite;
-  pointer-events: none;
-  z-index: 1;
-}
-.btn-cta > * { position: relative; z-index: 2; }
-
-/* Dot Grid Background Pattern */
-.dot-grid-bg {
-  background-color: var(--color-bg);
-  background-image:
-    radial-gradient(circle at 15% 20%, rgba(229, 106, 74, 0.10) 0%, transparent 40%),
-    radial-gradient(circle at 85% 80%, rgba(229, 106, 74, 0.06) 0%, transparent 40%);
-}
-.dark .dot-grid-bg {
-  background-image:
-    radial-gradient(circle at 15% 20%, rgba(229, 106, 74, 0.18) 0%, transparent 40%),
-    radial-gradient(circle at 85% 80%, rgba(229, 106, 74, 0.10) 0%, transparent 40%);
-}
-
-/* Landing-style faint grid overlay (use absolute pos inside relative parent) */
-.landing-grid {
-  background-image:
-    linear-gradient(to right, var(--color-accent) 1px, transparent 1px),
-    linear-gradient(to bottom, var(--color-accent) 1px, transparent 1px);
-  background-size: 40px 40px;
-  opacity: 0.08;
-}
-.dark .landing-grid {
-  opacity: 0.04;
-}
-
-/* Topology: router card pulse (no flying rings) + electric edge beam */
+/* ============================================================
+   Topology: router card pulse + electric edge beam
+   ============================================================ */
 @keyframes topology-router-pulse {
   0%, 100% {
     transform: scale(1);
@@ -538,8 +540,8 @@ button:disabled,
 /* React Flow controls: match app theme */
 .react-flow-controls-custom {
   background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: 10px;
+  border: 2px solid var(--color-border);
+  border-radius: 8px;
   box-shadow: var(--shadow-soft);
   overflow: hidden;
 }
@@ -559,13 +561,15 @@ button:disabled,
   background: var(--color-bg-alt);
 }
 
-/* Changelog markdown body */
+/* ============================================================
+   Changelog markdown body
+   ============================================================ */
 .changelog-body h1 {
   font-size: 1.4rem;
   font-weight: 700;
   margin: 1.5rem 0 0.75rem;
   padding-bottom: 0.5rem;
-  border-bottom: 1px solid var(--color-border);
+  border-bottom: 2px solid var(--color-border);
 }
 .changelog-body h1:first-child { margin-top: 0; }
 .changelog-body h2 {
@@ -599,6 +603,76 @@ button:disabled,
 }
 .changelog-body hr {
   border: none;
-  border-top: 1px solid var(--color-border);
+  border-top: 2px solid var(--color-border);
   margin: 1.5rem 0;
+}
+
+/* ============================================================
+   Neubrutalism global overrides
+   ============================================================ */
+/* NOTE: the base border colour lives in @layer base on purpose. An
+   unlayered `* { border-color }` rule beats EVERY Tailwind utility
+   (utilities live in @layer utilities), so `border-ink`/`border-danger`
+   would be silently overridden and all borders would collapse to one
+   colour. Keep it layered so the utilities win. */
+@layer base {
+  * {
+    border-color: var(--color-ink);
+  }
+}
+
+/* Thick black borders on all cards and panels */
+.card {
+  border-width: 2px;
+  border-style: solid;
+  border-color: var(--color-ink);
+}
+
+/* Hard offset shadows for all cards */
+.shadow-neubrutal {
+  box-shadow: 3px 3px 0 0 var(--color-shadow);
+}
+
+/* Font weight defaults for bold impact */
+.font-display {
+  font-weight: 800;
+}
+
+.font-bold-2 {
+  font-weight: 700;
+}
+
+/* Thick input borders */
+input, select, textarea {
+  border-width: 2px;
+}
+
+/* Table row borders */
+table {
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+th {
+  border-bottom: 2px solid var(--color-ink);
+}
+
+td {
+  border-bottom: 1px solid var(--color-border-subtle);
+}
+
+/* ============================================================
+   Faint paper grid behind the dashboard (Neubrutalism backdrop)
+   ============================================================ */
+.landing-grid {
+  background-image:
+    linear-gradient(to right, rgba(0, 0, 0, 0.045) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(0, 0, 0, 0.045) 1px, transparent 1px);
+  background-size: 32px 32px;
+}
+
+.dark .landing-grid {
+  background-image:
+    linear-gradient(to right, rgba(255, 255, 255, 0.04) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.04) 1px, transparent 1px);
 }

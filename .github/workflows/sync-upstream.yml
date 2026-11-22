@@ -1,0 +1,109 @@
+name: Sync upstream (decolua/9router)
+
+# Periodically sync this fork with upstream https://github.com/decolua/9router
+# by opening a pull request. No direct push to the default branch ever happens;
+# a human reviews and merges the PR (conflicts are resolved manually).
+on:
+  schedule:
+    # Every Monday at 04:17 UTC — quiet window, away from GitHub's busy hours.
+    - cron: "17 4 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: sync-upstream
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    name: Open sync PR from upstream/master
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GH_REPO: ${{ github.repository }}
+      UPSTREAM_REPO: https://github.com/decolua/9router.git
+
+    steps:
+      - name: Check out fork default branch
+        uses: actions/checkout@v7
+        with:
+          ref: master
+          fetch-depth: 0
+
+      - name: Add upstream remote and fetch upstream/master
+        run: |
+          set -euo pipefail
+          git remote add upstream "$UPSTREAM_REPO"
+          git fetch --no-tags upstream master:refs/remotes/upstream/master
+
+      - name: Create sync/upstream-YYYYMMDD from upstream/master
+        id: sync
+        run: |
+          set -euo pipefail
+          date_utc="$(date -u +%Y%m%d)"
+          branch="sync/upstream-${date_utc}"
+          short_sha="$(git rev-parse --short upstream/master)"
+
+          echo "branch=${branch}" >> "$GITHUB_OUTPUT"
+
+          open_prs="$(gh pr list --base master --head "${branch}" --state open --json number --jq 'length')"
+          if [ "${open_prs}" != "0" ]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "Open pull request for ${branch} already exists (${open_prs}); nothing to do."
+            exit 0
+          fi
+          echo "skip=false" >> "$GITHUB_OUTPUT"
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          # Branch straight from upstream/master, then record the sync point
+          # with an explicit commit message.
+          git checkout -B "${branch}" upstream/master
+          git commit --allow-empty \
+            -m "chore(sync): sync upstream decolua/9router@${short_sha} (${date_utc})"
+
+          if git diff --quiet master "${branch}"; then
+            echo "empty=true" >> "$GITHUB_OUTPUT"
+            echo "Tree of upstream/master is identical to master; no PR needed."
+          else
+            echo "empty=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Push sync branch to fork
+        if: steps.sync.outputs.skip == 'false' && steps.sync.outputs.empty == 'false'
+        run: |
+          set -euo pipefail
+          branch="${{ steps.sync.outputs.branch }}"
+          # Refresh the remote-tracking ref when the branch already exists so
+          # --force-with-lease keeps a re-run safe (first run: branch is absent).
+          git fetch origin "+refs/heads/${branch}:refs/remotes/origin/${branch}" || true
+          git push --force-with-lease origin "HEAD:refs/heads/${branch}"
+
+      - name: Open pull request into master
+        if: steps.sync.outputs.skip == 'false' && steps.sync.outputs.empty == 'false'
+        run: |
+          set -euo pipefail
+          branch="${{ steps.sync.outputs.branch }}"
+          upstream_sha="$(git rev-parse upstream/master)"
+
+          {
+            echo "Automated sync from upstream \`decolua/9router\`."
+            echo
+            echo "- Upstream commit: \`${upstream_sha}\`"
+            echo "- Branch \`${branch}\` was created from \`upstream/master\`."
+            echo "- Opened at: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+            echo
+            echo "This fork carries local changes, so merging may conflict."
+            echo "Review the diff and resolve conflicts manually before merging."
+          } > "$RUNNER_TEMP/pr-body.md"
+
+          gh pr create \
+            --base master \
+            --head "${branch}" \
+            --title "Sync upstream decolua/9router @ ${upstream_sha}" \
+            --body-file "$RUNNER_TEMP/pr-body.md"

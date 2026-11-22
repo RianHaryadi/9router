@@ -12,9 +12,9 @@ import { Button } from "@/shared/components";
 import { useNotificationStore } from "@/store/notificationStore";
 
 const STATUS_CONFIG = {
-  available: { icon: "check_circle", color: "#22c55e", label: "Available" },
-  cooldown: { icon: "schedule", color: "#f59e0b", label: "Cooldown" },
-  unavailable: { icon: "error", color: "#ef4444", label: "Unavailable" },
+  available: { icon: "check_circle", color: "var(--chart-3)", label: "Available" },
+  cooldown: { icon: "schedule", color: "var(--chart-4)", label: "Cooldown" },
+  unavailable: { icon: "error", color: "var(--chart-2)", label: "Unavailable" },
   unknown: { icon: "help", color: "#6b7280", label: "Unknown" },
 };
 
@@ -97,8 +97,8 @@ export default function ModelAvailabilityBadge() {
         onClick={() => setExpanded(!expanded)}
         className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition-all ${
           isHealthy
-            ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-500 hover:bg-emerald-500/15"
-            : "bg-amber-500/10 border-amber-500/20 text-amber-500 hover:bg-amber-500/15"
+            ? "bg-success/10 border-success/20 text-success hover:bg-success/15"
+            : "bg-warning/10 border-warning/20 text-warning hover:bg-warning/15"
         }`}
       >
         <span className="material-symbols-outlined text-[14px]">
@@ -110,12 +110,12 @@ export default function ModelAvailabilityBadge() {
       </button> */}
 
       {expanded && (
-        <div className="absolute top-full right-0 mt-2 w-80 bg-surface border border-border rounded-xl shadow-2xl z-50 overflow-hidden">
-          <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-bg">
+        <div className="absolute top-full right-0 mt-2 w-80 bg-surface border-2 border-ink rounded-xl shadow-2xl z-50 overflow-hidden">
+          <div className="flex items-center justify-between px-4 py-3 border-b-2 border-ink bg-bg">
             <div className="flex items-center gap-2">
               <span
                 className="material-symbols-outlined text-[16px]"
-                style={{ color: isHealthy ? "#22c55e" : "#f59e0b" }}
+                style={{ color: isHealthy ? "var(--chart-3)" : "var(--chart-4)" }}
               >
                 {isHealthy ? "verified" : "warning"}
               </span>

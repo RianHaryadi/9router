@@ -1,14 +1,28 @@
 import { NextResponse } from "next/server";
 import { deleteApiKey, getApiKeyById, updateApiKey } from "@/lib/localDb";
 import { validateKeyAccessInput } from "@/shared/utils/keyAccess.js";
+import { isLocalRequest, isMemberSession } from "@/dashboardGuard";
 
 // GET /api/keys/[id] - Get single key
+//
+// The key VALUE is a bearer secret: it must not travel with a plain read, or a
+// teammate holding the "Endpoint & Keys" area could read every key value one
+// by one. The value is served by POST /api/keys/[id]/reveal (password-gated),
+// so this route masks it like the list does.
 export async function GET(request, { params }) {
   try {
     const { id } = await params;
     const key = await getApiKeyById(id);
     if (!key) {
       return NextResponse.json({ error: "Key not found" }, { status: 404 });
+    }
+    if (!isLocalRequest(request) || (await isMemberSession(request))) {
+      const value = (key.key || "").trim();
+      const masked =
+        value.length <= 12
+          ? value.charAt(0) + "***"
+          : value.slice(0, 8) + "***" + value.slice(-4);
+      return NextResponse.json({ key: { ...key, key: masked } });
     }
     return NextResponse.json({ key });
   } catch (error) {
@@ -22,7 +36,7 @@ export async function PUT(request, { params }) {
   try {
     const { id } = await params;
     const body = await request.json();
-    const { isActive, access } = body;
+    const { isActive, access, budgetLimitCents, budgetPeriod, rpmLimit, tpmLimit } = body;
 
     const existing = await getApiKeyById(id);
     if (!existing) {
@@ -35,6 +49,35 @@ export async function PUT(request, { params }) {
       const checked = validateKeyAccessInput(access);
       if (!checked.ok) return NextResponse.json({ error: checked.error }, { status: 400 });
       updateData.access = checked.value;
+    }
+
+    // Per-key monthly budget. budgetLimitCents: number >= 0, or null (= unlimited).
+    if (budgetLimitCents !== undefined) {
+      if (budgetLimitCents === null) {
+        updateData.budgetLimitCents = null;
+      } else {
+        const cents = Number(budgetLimitCents);
+        if (!Number.isInteger(cents) || cents < 0) {
+          return NextResponse.json({ error: "budgetLimitCents must be a non-negative integer or null" }, { status: 400 });
+        }
+        updateData.budgetLimitCents = cents;
+      }
+    }
+    if (budgetPeriod !== undefined && budgetPeriod !== "monthly") {
+      return NextResponse.json({ error: "budgetPeriod must be 'monthly'" }, { status: 400 });
+    }
+    if (budgetPeriod !== undefined) updateData.budgetPeriod = budgetPeriod;
+    if (rpmLimit !== undefined) {
+      if (!Number.isInteger(rpmLimit) || rpmLimit < 0 || rpmLimit > 1_000_000) {
+        return NextResponse.json({ error: "rpmLimit must be an integer between 0 and 1000000" }, { status: 400 });
+      }
+      updateData.rpmLimit = rpmLimit;
+    }
+    if (tpmLimit !== undefined) {
+      if (!Number.isInteger(tpmLimit) || tpmLimit < 0 || tpmLimit > 1_000_000_000) {
+        return NextResponse.json({ error: "tpmLimit must be an integer between 0 and 1000000000" }, { status: 400 });
+      }
+      updateData.tpmLimit = tpmLimit;
     }
 
     const updated = await updateApiKey(id, updateData);

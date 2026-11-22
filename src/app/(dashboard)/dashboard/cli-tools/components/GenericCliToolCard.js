@@ -7,7 +7,7 @@ import BaseUrlSelect from "./BaseUrlSelect";
 import { rememberEndpoint } from "./cliEndpointPresets";
 import ApiKeySelect from "./ApiKeySelect";
 import { matchKnownEndpoint } from "./cliEndpointMatch";
-import { getModelsByProviderId, PROVIDER_ID_TO_ALIAS } from "@/shared/constants/models";
+import { buildModelGroups, collectModelValues, LIVE_CATALOG_PROVIDERS } from "@/shared/utils/selectableModels";
 
 const PI_CONTEXT_WINDOWS = [200000, 400000, 600000, 1000000];
 const PI_MAX_TOKENS = [16000, 32000, 64000, 128000];
@@ -69,6 +69,7 @@ export default function GenericCliToolCard({
   const initialPi = readPiModels(initialStatus?.config);
   const [selectedModels, setSelectedModels] = useState(() => initialPi?.ids || []);
   const [modelCaps, setModelCaps] = useState(() => initialPi?.caps || {});
+  const [addingAll, setAddingAll] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
   const [showManualConfigModal, setShowManualConfigModal] = useState(false);
   const [customBaseUrl, setCustomBaseUrl] = useState("");
@@ -232,23 +233,74 @@ export default function GenericCliToolCard({
     setModalOpen(false);
   };
 
-  const handleAddAllActiveModels = () => {
-    const allModels = [];
-    activeProviders.forEach((conn) => {
-      const alias = PROVIDER_ID_TO_ALIAS[conn.provider] || conn.provider;
-      const providerModels = getModelsByProviderId(conn.provider);
-      providerModels.forEach((m) => {
-        const val = `${alias}/${m.id}`;
-        if (!allModels.includes(val)) allModels.push(val);
-      });
-    });
-    if (allModels.length > 0) {
+  // Resolve every model a user can currently route to, using the same rules as the
+  // model picker (shared builder). Walking the static registry alone missed
+  // anything the picker knows from other sources: no-auth free providers never own
+  // a connection row (OpenCode Free), models registered through /api/models/custom
+  // live outside PROVIDER_MODELS, user aliases and live per-account catalogs are
+  // runtime data, and disabled models must not be re-added.
+  const loadActiveModelValues = async () => {
+    const readJson = async (url) => {
+      try {
+        const res = await fetch(url, { cache: "no-store" });
+        return res.ok ? await res.json() : null;
+      } catch {
+        return null;
+      }
+    };
+
+    const [providersData, aliasData, customData, disabledData] = await Promise.all([
+      readJson("/api/providers"),
+      readJson("/api/models/alias"),
+      readJson("/api/models/custom"),
+      readJson("/api/models/disabled"),
+    ]);
+
+    const allConnections = providersData?.connections ?? activeProviders ?? [];
+    const connections = allConnections.filter((conn) => conn && conn.isActive !== false);
+
+    // Live per-account catalogs (cursor/cline/clinepass/zed) are not in the registry.
+    const liveModels = {};
+    await Promise.all(
+      LIVE_CATALOG_PROVIDERS.map(async (providerId) => {
+        const connectionIds = connections.filter((conn) => conn.provider === providerId).map((conn) => conn.id);
+        if (connectionIds.length === 0) return;
+        const lists = await Promise.all(connectionIds.map((id) => readJson(`/api/providers/${id}/models`)));
+        liveModels[providerId] = lists.flatMap((data) => (Array.isArray(data?.models) ? data.models : []));
+      })
+    );
+
+    return collectModelValues(
+      buildModelGroups({
+        connections,
+        allConnections,
+        modelAliases: aliasData?.aliases || {},
+        customModels: customData?.models || [],
+        disabledModels: disabledData?.disabled || {},
+        liveModels,
+      })
+    );
+  };
+
+  const handleAddAllActiveModels = async () => {
+    setAddingAll(true);
+    setMessage(null);
+    try {
+      const allModels = await loadActiveModelValues();
+      if (allModels.length === 0) {
+        setMessage({ type: "error", text: "No active models found to add." });
+        return;
+      }
       setSelectedModels((prev) => Array.from(new Set([...prev, ...allModels])));
       setModelCaps((prev) => {
         const next = { ...prev };
         allModels.forEach((id) => { next[id] ||= { ...PI_DEFAULT_CAPS }; });
         return next;
       });
+    } catch (error) {
+      setMessage({ type: "error", text: error.message });
+    } finally {
+      setAddingAll(false);
     }
   };
 
@@ -355,7 +407,7 @@ export default function GenericCliToolCard({
         return [
           {
             filename: "~/.forge/config.toml",
-            content: `# Forge config — managed by 9Router\n\n[openai]\napi_key = "${key}"\nbase_url = "${effectiveUrl}"\nmodel = "${mod}"`,
+            content: `# Forge config — managed by 9router\n\n[openai]\napi_key = "${key}"\nbase_url = "${effectiveUrl}"\nmodel = "${mod}"`,
           },
         ];
       case "smelt":
@@ -369,7 +421,7 @@ export default function GenericCliToolCard({
         return [
           {
             filename: "~/.codewhale/config.toml",
-            content: `# CodeWhale config — managed by 9Router\n\n[openai]\nbase_url = "${effectiveUrl}"\napi_key = "${key}"\nmodel = "${mod}"`,
+            content: `# CodeWhale config — managed by 9router\n\n[openai]\nbase_url = "${effectiveUrl}"\napi_key = "${key}"\nmodel = "${mod}"`,
           },
         ];
       default:
@@ -400,24 +452,24 @@ export default function GenericCliToolCard({
                 {tool.icon}
               </span>
             ) : (
-              <span className="material-symbols-outlined text-[28px] text-primary">terminal</span>
+              <span className="material-symbols-outlined text-[28px] text-brand-700 dark:text-brand-300">terminal</span>
             )}
           </div>
           <div className="min-w-0">
             <div className="flex min-w-0 flex-wrap items-center gap-2">
               <h3 className="font-medium text-sm">{tool.name}</h3>
               {configStatus === "configured" && (
-                <span className="px-1.5 py-0.5 text-[10px] font-medium bg-green-500/10 text-green-600 dark:text-green-400 rounded-full">
+                <span className="px-1.5 py-0.5 text-[10px] font-medium bg-success/10 text-success rounded-full">
                   Connected
                 </span>
               )}
               {configStatus === "not_configured" && (
-                <span className="px-1.5 py-0.5 text-[10px] font-medium bg-yellow-500/10 text-yellow-600 dark:text-yellow-400 rounded-full">
+                <span className="px-1.5 py-0.5 text-[10px] font-medium bg-warning/10 text-warning rounded-full">
                   Not configured
                 </span>
               )}
               {configStatus === "other" && (
-                <span className="px-1.5 py-0.5 text-[10px] font-medium bg-blue-500/10 text-blue-600 dark:text-blue-400 rounded-full">
+                <span className="px-1.5 py-0.5 text-[10px] font-medium bg-info/10 text-info rounded-full">
                   Other
                 </span>
               )}
@@ -431,7 +483,7 @@ export default function GenericCliToolCard({
       </div>
 
       {isExpanded && (
-        <div className="mt-4 pt-4 border-t border-border flex flex-col gap-4">
+        <div className="mt-4 pt-4 border-t-2 border-ink flex flex-col gap-4">
           {checking && (
             <div className="flex items-center gap-2 text-text-muted">
               <span className="material-symbols-outlined animate-spin">progress_activity</span>
@@ -441,12 +493,12 @@ export default function GenericCliToolCard({
 
           {!checking && status && !status.installed && (
             <div className="flex flex-col gap-4">
-              <div className="flex flex-col gap-3 p-4 bg-yellow-500/10 border border-yellow-500/30 rounded-lg">
+              <div className="flex flex-col gap-3 p-4 bg-warning/10 border border-warning/30 rounded-lg">
                 <div className="flex items-start gap-3">
-                  <span className="material-symbols-outlined text-yellow-500">warning</span>
+                  <span className="material-symbols-outlined text-warning">warning</span>
                   <div className="flex-1">
-                    <p className="font-medium text-yellow-600 dark:text-yellow-400">{tool.name} not detected locally</p>
-                    <p className="text-sm text-text-muted">Manual configuration is still available if 9router is deployed on a remote server.</p>
+                    <p className="font-medium text-warning dark:text-warning">{tool.name} not detected locally</p>
+                    <p className="text-sm text-text-muted">Manual configuration is still available if Ryo is deployed on a remote server.</p>
                   </div>
                 </div>
                 <div className="flex items-center gap-2 pl-9">
@@ -454,7 +506,7 @@ export default function GenericCliToolCard({
                     variant="secondary"
                     size="sm"
                     onClick={() => setShowManualConfigModal(true)}
-                    className="!bg-yellow-500/20 !border-yellow-500/40 !text-yellow-700 dark:!text-yellow-300 hover:!bg-yellow-500/30"
+                    className="!bg-warning/20 !border-warning/40 !text-warning dark:!text-warning hover:!bg-warning/30"
                   >
                     <span className="material-symbols-outlined text-[18px] mr-1">content_copy</span>
                     Manual Config
@@ -466,7 +518,7 @@ export default function GenericCliToolCard({
                 </div>
               </div>
               {showInstallGuide && (
-                <div className="p-4 bg-surface border border-border rounded-lg">
+                <div className="p-4 bg-surface border-2 border-ink rounded-lg">
                   <h4 className="font-medium mb-3">Installation Guide</h4>
                   <div className="space-y-3 text-sm">
                     <div>
@@ -475,7 +527,7 @@ export default function GenericCliToolCard({
                     </div>
                     {tool.docsUrl && (
                       <p className="text-xs text-text-muted">
-                        Docs: <a href={tool.docsUrl} target="_blank" rel="noreferrer" className="text-primary hover:underline">{tool.docsUrl}</a>
+                        Docs: <a href={tool.docsUrl} target="_blank" rel="noreferrer" className="text-brand-700 dark:text-brand-300 hover:underline">{tool.docsUrl}</a>
                       </p>
                     )}
                   </div>
@@ -527,7 +579,7 @@ export default function GenericCliToolCard({
                     <span className="text-xs font-semibold text-text-main sm:text-right sm:text-sm mt-1">Models</span>
                     <span className="material-symbols-outlined hidden text-text-muted text-[14px] sm:inline mt-1.5">arrow_forward</span>
                     <div className="flex-1 flex flex-col gap-2">
-                      <div className="flex flex-wrap gap-1.5 min-h-[36px] p-2 bg-surface rounded border border-border">
+                      <div className="flex flex-wrap gap-1.5 min-h-[36px] p-2 bg-surface rounded border-2 border-ink">
                         {selectedModels.length === 0 ? (
                           <span className="text-xs text-text-muted italic">No models selected. Add models to use in Pi.</span>
                         ) : (
@@ -536,14 +588,14 @@ export default function GenericCliToolCard({
                             return (
                               <div
                                 key={modelId}
-                                className="flex w-full flex-wrap items-center gap-1.5 rounded border border-border bg-bg-secondary px-2 py-1 text-xs text-text-main"
+                                className="flex w-full flex-wrap items-center gap-1.5 rounded border-2 border-ink bg-bg-secondary px-2 py-1 text-xs text-text-main"
                               >
                                 <span className="min-w-0 flex-1 basis-40 truncate">{modelId}</span>
                                 <select
                                   value={caps.contextWindow}
                                   onChange={(e) => setModelCap(modelId, "contextWindow", e.target.value)}
                                   title="Context window"
-                                  className="shrink-0 rounded border border-border bg-surface px-1 py-0.5 text-[11px] focus:outline-none focus:ring-1 focus:ring-primary/50"
+                                  className="shrink-0 rounded border-2 border-ink bg-surface px-1 py-0.5 text-[11px] focus:outline-none focus:ring-1 focus:ring-brand-600 dark:ring-brand-300/50"
                                 >
                                   {capOptions(PI_CONTEXT_WINDOWS, caps.contextWindow).map((n) => (
                                     <option key={n} value={n}>{formatTokens(n)} ctx</option>
@@ -553,7 +605,7 @@ export default function GenericCliToolCard({
                                   value={caps.maxTokens}
                                   onChange={(e) => setModelCap(modelId, "maxTokens", e.target.value)}
                                   title="Max output tokens"
-                                  className="rounded border border-border bg-surface px-1 py-0.5 text-[11px] focus:outline-none focus:ring-1 focus:ring-primary/50"
+                                  className="rounded border-2 border-ink bg-surface px-1 py-0.5 text-[11px] focus:outline-none focus:ring-1 focus:ring-brand-600 dark:ring-brand-300/50"
                                 >
                                   {capOptions(PI_MAX_TOKENS, caps.maxTokens).map((n) => (
                                     <option key={n} value={n}>{formatTokens(n)} out</option>
@@ -562,7 +614,7 @@ export default function GenericCliToolCard({
                                 <button
                                   type="button"
                                   onClick={() => handleRemoveModel(modelId)}
-                                  className="text-text-muted hover:text-red-500 rounded p-0.5"
+                                  className="text-text-muted hover:text-danger rounded p-0.5"
                                 >
                                   <span className="material-symbols-outlined text-[12px]">close</span>
                                 </button>
@@ -582,22 +634,21 @@ export default function GenericCliToolCard({
                           <span className="material-symbols-outlined text-[14px] mr-1">add</span>
                           Add Model
                         </Button>
-                        {activeProviders?.length > 0 && (
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="ghost"
-                            onClick={handleAddAllActiveModels}
-                            className="text-xs text-primary hover:text-primary-hover"
-                          >
-                            + Add All Active Models
-                          </Button>
-                        )}
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="ghost"
+                          onClick={handleAddAllActiveModels}
+                          disabled={addingAll}
+                          className="text-xs text-brand-700 dark:text-brand-300 hover:text-brand-700 dark:text-brand-400"
+                        >
+                          {addingAll ? "Adding..." : "+ Add All Active Models"}
+                        </Button>
                         {selectedModels.length > 0 && (
                           <button
                             type="button"
                             onClick={() => setSelectedModels([])}
-                            className="text-xs text-text-muted hover:text-red-500 ml-auto"
+                            className="text-xs text-text-muted hover:text-danger ml-auto"
                           >
                             Clear all
                           </button>
@@ -618,12 +669,12 @@ export default function GenericCliToolCard({
                         value={selectedModel}
                         onChange={(e) => setSelectedModel(e.target.value)}
                         placeholder="provider/model-id"
-                        className="w-full min-w-0 pl-2 pr-7 py-2 bg-surface rounded border border-border text-xs focus:outline-none focus:ring-1 focus:ring-primary/50 sm:py-1.5"
+                        className="w-full min-w-0 pl-2 pr-7 py-2 bg-surface rounded border-2 border-ink text-xs focus:outline-none focus:ring-1 focus:ring-brand-600 dark:ring-brand-300/50 sm:py-1.5"
                       />
                       {selectedModel && (
                         <button
                           onClick={() => setSelectedModel("")}
-                          className="absolute right-1 top-1/2 -translate-y-1/2 p-0.5 text-text-muted hover:text-red-500 rounded transition-colors"
+                          className="absolute right-1 top-1/2 -translate-y-1/2 p-0.5 text-text-muted hover:text-danger rounded transition-colors"
                           title="Clear"
                         >
                           <span className="material-symbols-outlined text-[14px]">close</span>
@@ -635,7 +686,7 @@ export default function GenericCliToolCard({
                       disabled={!activeProviders?.length}
                       className={`w-full sm:w-auto rounded border px-2 py-2 text-xs transition-colors sm:py-1.5 whitespace-nowrap sm:shrink-0 ${
                         activeProviders?.length
-                          ? "bg-surface border-border text-text-main hover:border-primary cursor-pointer"
+                          ? "bg-surface border-border text-text-main hover:border-brand-600 dark:border-brand-300/60 cursor-pointer"
                           : "opacity-50 cursor-not-allowed border-border"
                       }`}
                     >
@@ -650,8 +701,8 @@ export default function GenericCliToolCard({
                 <div
                   className={`p-3 rounded-lg text-sm ${
                     message.type === "success"
-                      ? "bg-green-500/10 text-green-600 dark:text-green-400 border border-green-500/20"
-                      : "bg-red-500/10 text-red-600 dark:text-red-400 border border-red-500/20"
+                      ? "bg-success/10 text-success border border-success/20"
+                      : "bg-danger/10 text-danger border border-danger/20"
                   }`}
                 >
                   {message.text}
@@ -675,7 +726,7 @@ export default function GenericCliToolCard({
                       size="sm"
                       onClick={handleRestore}
                       disabled={restoring || checking}
-                      className="text-red-500 hover:text-red-600 hover:border-red-500/50"
+                      className="text-danger hover:text-danger hover:border-danger/50"
                     >
                       {restoring ? "Removing..." : "Remove from Tool"}
                     </Button>

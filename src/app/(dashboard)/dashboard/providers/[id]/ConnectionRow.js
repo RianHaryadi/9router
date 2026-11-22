@@ -7,7 +7,7 @@ import PropTypes from "prop-types";
 import { Badge, Toggle, Tooltip } from "@/shared/components";
 import CooldownTimer from "./CooldownTimer";
 
-export default function ConnectionRow({ connection, proxyPools, isOAuth, isFirst, isLast, onMoveUp, onMoveDown, onToggleActive, onUpdateProxy, onEdit, onDelete, oneByOneStatus = null, autoPing = null }) {
+export default function ConnectionRow({ connection, proxyPools, isOAuth, isFirst, isLast, onMoveUp, onMoveDown, onToggleActive, onUpdateProxy, onEdit, onDelete, oneByOneStatus = null, autoPing = null, readOnly = false }) {
   const [showProxyDropdown, setShowProxyDropdown] = useState(false);
   const [updatingProxy, setUpdatingProxy] = useState(false);
   const proxyDropdownRef = useRef(null);
@@ -186,22 +186,22 @@ export default function ConnectionRow({ connection, proxyPools, isOAuth, isFirst
     <div className={`group flex min-w-0 flex-col gap-3 rounded-lg p-2 transition-colors hover:bg-black/[0.02] dark:hover:bg-white/[0.02] sm:flex-row sm:items-center sm:justify-between ${connection.isActive === false ? "opacity-60" : ""}`}>
       <div className="flex min-w-0 flex-1 items-start gap-2 sm:items-center sm:gap-3">
         {/* Priority arrows */}
-        <div className="flex shrink-0 flex-col">
+        {!readOnly && <div className="flex shrink-0 flex-col">
           <button
             onClick={onMoveUp}
             disabled={isFirst}
-            className={`p-0.5 rounded ${isFirst ? "text-text-muted/30 cursor-not-allowed" : "hover:bg-sidebar text-text-muted hover:text-primary"}`}
+            className={`p-0.5 rounded ${isFirst ? "text-text-muted/30 cursor-not-allowed" : "hover:bg-sidebar text-text-muted hover:text-brand-700 dark:text-brand-300"}`}
           >
             <span className="material-symbols-outlined text-sm">keyboard_arrow_up</span>
           </button>
           <button
             onClick={onMoveDown}
             disabled={isLast}
-            className={`p-0.5 rounded ${isLast ? "text-text-muted/30 cursor-not-allowed" : "hover:bg-sidebar text-text-muted hover:text-primary"}`}
+            className={`p-0.5 rounded ${isLast ? "text-text-muted/30 cursor-not-allowed" : "hover:bg-sidebar text-text-muted hover:text-brand-700 dark:text-brand-300"}`}
           >
             <span className="material-symbols-outlined text-sm">keyboard_arrow_down</span>
           </button>
-        </div>
+        </div>}
         <span className="material-symbols-outlined shrink-0 text-base text-text-muted">
           {authIcon}
         </span>
@@ -224,7 +224,7 @@ export default function ConnectionRow({ connection, proxyPools, isOAuth, isFirst
             )}
             {isCooldown && connection.isActive !== false && <CooldownTimer until={modelLockUntil} />}
             {connection.lastError && connection.isActive !== false && (
-              <span className="max-w-full truncate text-xs text-red-500 sm:max-w-[300px]" title={connection.lastError}>
+              <span className="max-w-full truncate text-xs text-danger sm:max-w-[300px]" title={connection.lastError}>
                 {connection.lastError}
               </span>
             )}
@@ -260,12 +260,12 @@ export default function ConnectionRow({ connection, proxyPools, isOAuth, isFirst
       <div className="flex w-full items-center justify-between gap-2 sm:w-auto sm:justify-end">
         <div className="grid flex-1 grid-cols-3 gap-1 sm:flex sm:flex-none">
           {/* Proxy button with inline dropdown */}
-          {(proxyPools || []).length > 0 && (
+          {!readOnly && (proxyPools || []).length > 0 && (
             <div>
               <button
                 ref={proxyBtnRef}
                 onClick={toggleProxyDropdown}
-                className={`flex w-full flex-col items-center rounded px-2 py-1 transition-colors hover:bg-black/5 dark:hover:bg-white/5 ${hasAnyProxy ? "text-primary" : "text-text-muted hover:text-primary"}`}
+                className={`flex w-full flex-col items-center rounded px-2 py-1 transition-colors hover:bg-black/5 dark:hover:bg-white/5 ${hasAnyProxy ? "text-brand-700 dark:text-brand-300" : "text-text-muted hover:text-brand-700 dark:text-brand-300"}`}
                 disabled={updatingProxy}
               >
                 <span className="material-symbols-outlined text-[18px]">
@@ -277,11 +277,11 @@ export default function ConnectionRow({ connection, proxyPools, isOAuth, isFirst
                 <div
                   ref={proxyDropdownRef}
                   style={proxyDropdownStyle}
-                  className="z-50 max-w-[78vw] min-w-[160px] overflow-y-auto rounded-lg border border-border bg-bg py-1 shadow-lg"
+                  className="z-50 max-w-[78vw] min-w-[160px] overflow-y-auto rounded-lg border-2 border-ink bg-bg py-1 shadow-lg"
                 >
                   <button
                     onClick={() => handleSelectProxy("__none__")}
-                    className={`w-full text-left px-3 py-1.5 text-sm hover:bg-black/5 dark:hover:bg-white/5 ${!boundProxyPoolId ? "text-primary font-medium" : "text-text-main"}`}
+                    className={`w-full text-left px-3 py-1.5 text-sm hover:bg-black/5 dark:hover:bg-white/5 ${!boundProxyPoolId ? "text-brand-700 dark:text-brand-300 font-medium" : "text-text-main"}`}
                   >
                     None
                   </button>
@@ -289,7 +289,7 @@ export default function ConnectionRow({ connection, proxyPools, isOAuth, isFirst
                     <button
                       key={pool.id}
                       onClick={() => handleSelectProxy(pool.id)}
-                      className={`w-full text-left px-3 py-1.5 text-sm hover:bg-black/5 dark:hover:bg-white/5 ${boundProxyPoolId === pool.id ? "text-primary font-medium" : "text-text-main"}`}
+                      className={`w-full text-left px-3 py-1.5 text-sm hover:bg-black/5 dark:hover:bg-white/5 ${boundProxyPoolId === pool.id ? "text-brand-700 dark:text-brand-300 font-medium" : "text-text-main"}`}
                     >
                       {pool.name}
                     </button>
@@ -303,28 +303,34 @@ export default function ConnectionRow({ connection, proxyPools, isOAuth, isFirst
             <Tooltip text={autoPingTooltip}>
               <button
                 onClick={autoPing.onConfigure}
-                className={`flex w-full flex-col items-center rounded px-2 py-1 transition-colors hover:bg-black/5 dark:hover:bg-white/5 ${autoPing.isActive ? "text-primary" : "text-text-muted hover:text-primary"}`}
+                className={`flex w-full flex-col items-center rounded px-2 py-1 transition-colors hover:bg-black/5 dark:hover:bg-white/5 ${autoPing.isActive ? "text-brand-700 dark:text-brand-300" : "text-text-muted hover:text-brand-700 dark:text-brand-300"}`}
               >
                 <span className="material-symbols-outlined text-[18px]">bolt</span>
                 <span className="text-[10px] leading-tight">Auto-ping</span>
               </button>
             </Tooltip>
           )}
-          <button onClick={onEdit} className="flex flex-col items-center rounded px-2 py-1 text-text-muted hover:bg-black/5 hover:text-primary dark:hover:bg-white/5">
-            <span className="material-symbols-outlined text-[18px]">edit</span>
-            <span className="text-[10px] leading-tight">Edit</span>
-          </button>
-          <button onClick={onDelete} className="flex flex-col items-center rounded px-2 py-1 text-red-500 hover:bg-red-500/10">
-            <span className="material-symbols-outlined text-[18px]">delete</span>
-            <span className="text-[10px] leading-tight">Delete</span>
-          </button>
+          {!readOnly && (
+            <>
+              <button onClick={onEdit} className="flex flex-col items-center rounded px-2 py-1 text-text-muted hover:bg-black/5 hover:text-brand-700 dark:text-brand-300 dark:hover:bg-white/5">
+                <span className="material-symbols-outlined text-[18px]">edit</span>
+                <span className="text-[10px] leading-tight">Edit</span>
+              </button>
+              <button onClick={onDelete} className="flex flex-col items-center rounded px-2 py-1 text-danger hover:bg-danger/10">
+                <span className="material-symbols-outlined text-[18px]">delete</span>
+                <span className="text-[10px] leading-tight">Delete</span>
+              </button>
+            </>
+          )}
         </div>
-        <Toggle
-          size="sm"
-          checked={connection.isActive ?? true}
-          onChange={onToggleActive}
-          title={(connection.isActive ?? true) ? "Disable connection" : "Enable connection"}
-        />
+        {!readOnly && (
+          <Toggle
+            size="sm"
+            checked={connection.isActive ?? true}
+            onChange={onToggleActive}
+            title={(connection.isActive ?? true) ? "Disable connection" : "Enable connection"}
+          />
+        )}
       </div>
     </div>
   );
@@ -363,6 +369,7 @@ ConnectionRow.propTypes = {
     state: PropTypes.string,
     error: PropTypes.string,
   }),
+  readOnly: PropTypes.bool,
   autoPing: PropTypes.shape({
     isActive: PropTypes.bool,
     provider: PropTypes.string,

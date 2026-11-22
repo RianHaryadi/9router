@@ -25,6 +25,10 @@ const DEFAULT_SETTINGS = {
   },
   requireLogin: true,
   requireApiKey: true,
+  // Owner opt-in: allow reading stored request/response content (prompts)
+  // in the dashboard. Off by default because the content is every user's
+  // conversation history. Requires an authenticated dashboard session.
+  promptInspectionEnabled: false,
   tunnelDashboardAccess: true,
   authMode: "password",
   ssoType: "oidc",
@@ -40,6 +44,7 @@ const DEFAULT_SETTINGS = {
   samlAttributeEmail: "email",
   samlAttributeName: "name",
   enableObservability: false,
+  piiRedactionEnabled: false,
   observabilityMaxRecords: 1000,
   observabilityBatchSize: 20,
   observabilityFlushIntervalMs: 5000,
@@ -49,6 +54,26 @@ const DEFAULT_SETTINGS = {
   outboundNoProxy: "",
   mitmRouterBaseUrl: DEFAULT_MITM_ROUTER_BASE,
   dnsToolEnabled: {},
+  // Fork: semantic response cache (serves cached SSE/JSON on identical bodies)
+  semanticCacheEnabled: false,
+  // Fork: near-duplicate cache (serves a cached answer for an ~identical body)
+  similarityCacheEnabled: false,
+  similarityThreshold: 0.85,
+  // Fork: shadow / A-B routing (a sampled share also runs on a shadow target)
+  shadowRoutingEnabled: false,
+  shadowRoutingRatio: 0,
+  shadowRoutingTargets: [],
+  // Fork: inbound guardrails (prompt-injection firewall + agent loop guard).
+  // Off by default: an existing agent setup must not change behaviour until
+  // the owner turns the master switch on.
+  guardrailsEnabled: false,
+  injectionFirewallEnabled: true,
+  loopGuardEnabled: true,
+  // Fork: complexity routing. A tier names the model a request of that
+  // complexity should use ("provider/model" or a registered alias). Off by
+  // default: without tiers there is nothing to route to.
+  complexityRoutingEnabled: false,
+  complexityRoutingTiers: { simple: "", medium: "", complex: "" },
   rtkEnabled: true,
   headroomEnabled: false,
   headroomUrl: DEFAULT_HEADROOM_URL,

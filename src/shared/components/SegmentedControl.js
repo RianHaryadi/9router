@@ -10,16 +10,16 @@ export default function SegmentedControl({
   className,
 }) {
   const sizes = {
-    sm: "h-7 text-xs",
-    md: "h-9 text-sm",
-    lg: "h-11 text-base",
+    sm: "h-7 text-[11px]",
+    md: "h-9 text-[12px]",
+    lg: "h-11 text-[13px]",
   };
 
   return (
     <div
       className={cn(
-        "inline-flex items-center p-1 rounded-[10px] overflow-x-auto",
-        "bg-surface-2",
+        "inline-flex items-center p-0.5 rounded-[12px] overflow-x-auto",
+        "bg-surface-2 border-2 border-ink",
         className
       )}
     >
@@ -27,16 +27,17 @@ export default function SegmentedControl({
         <button
           key={option.value}
           onClick={() => onChange(option.value)}
+          aria-pressed={value === option.value}
           className={cn(
-            "shrink-0 px-4 rounded-[8px] font-medium transition-all",
+            "shrink-0 px-3 rounded-[3px] font-bold transition-all",
             sizes[size],
             value === option.value
-              ? "bg-surface text-text-main shadow-sm"
-              : "text-text-muted hover:text-text-main"
+              ? "bg-ink text-[#FAF7F0] border-2 border-ink"
+              : "text-text-muted hover:text-text-main border-2 border-transparent"
           )}
         >
           {option.icon && (
-            <span className="material-symbols-outlined text-[16px] mr-1.5">
+            <span className="material-symbols-outlined text-[15px] mr-1.5">
               {option.icon}
             </span>
           )}

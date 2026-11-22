@@ -46,7 +46,7 @@ export default function RequestLogger() {
             <span>Auto Refresh (3s)</span>
             <div
               onClick={() => setAutoRefresh(!autoRefresh)}
-              className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none ${autoRefresh ? "bg-primary" : "bg-bg-subtle border border-border"
+              className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none ${autoRefresh ? "bg-brand-400" : "bg-bg-subtle border-2 border-ink"
                 }`}
             >
               <span
@@ -66,14 +66,14 @@ export default function RequestLogger() {
             <div className="p-8 text-center text-text-muted">No logs recorded yet.</div>
           ) : (
             <table className="w-full text-left border-collapse whitespace-nowrap">
-              <thead className="sticky top-0 bg-bg-subtle border-b border-border z-10">
+              <thead className="sticky top-0 bg-bg-subtle border-b-2 border-ink z-10">
                 <tr>
-                  <th className="px-3 py-2 border-r border-border">DateTime</th>
-                  <th className="px-3 py-2 border-r border-border">Model</th>
-                  <th className="px-3 py-2 border-r border-border">Provider</th>
-                  <th className="px-3 py-2 border-r border-border">Account</th>
-                  <th className="px-3 py-2 border-r border-border">In</th>
-                  <th className="px-3 py-2 border-r border-border">Out</th>
+                  <th className="px-3 py-2 border-r-2 border-ink">DateTime</th>
+                  <th className="px-3 py-2 border-r-2 border-ink">Model</th>
+                  <th className="px-3 py-2 border-r-2 border-ink">Provider</th>
+                  <th className="px-3 py-2 border-r-2 border-ink">Account</th>
+                  <th className="px-3 py-2 border-r-2 border-ink">In</th>
+                  <th className="px-3 py-2 border-r-2 border-ink">Out</th>
                   <th className="px-3 py-2">Status</th>
                 </tr>
               </thead>
@@ -88,20 +88,20 @@ export default function RequestLogger() {
                   const isSuccess = status.includes("OK");
 
                   return (
-                    <tr key={i} className={`hover:bg-primary/5 transition-colors ${isPending ? 'bg-primary/5' : ''}`}>
-                      <td className="px-3 py-1.5 border-r border-border text-text-muted">{parts[0]}</td>
-                      <td className="px-3 py-1.5 border-r border-border font-medium">{parts[1]}</td>
-                      <td className="px-3 py-1.5 border-r border-border">
-                        <span className="px-1.5 py-0.5 rounded bg-bg-subtle border border-border text-[10px] uppercase font-bold">
+                    <tr key={i} className={`hover:bg-brand-300/15 transition-colors ${isPending ? 'bg-brand-300/15' : ''}`}>
+                      <td className="px-3 py-1.5 border-r-2 border-ink text-text-muted">{parts[0]}</td>
+                      <td className="px-3 py-1.5 border-r-2 border-ink font-medium">{parts[1]}</td>
+                      <td className="px-3 py-1.5 border-r-2 border-ink">
+                        <span className="px-1.5 py-0.5 rounded bg-bg-subtle border-2 border-ink text-[10px] uppercase font-bold">
                           {parts[2]}
                         </span>
                       </td>
-                      <td className="px-3 py-1.5 border-r border-border truncate max-w-[150px]" title={parts[3]}>{parts[3]}</td>
-                      <td className="px-3 py-1.5 border-r border-border text-right text-primary">{parts[4]}</td>
-                      <td className="px-3 py-1.5 border-r border-border text-right text-success">{parts[5]}</td>
+                      <td className="px-3 py-1.5 border-r-2 border-ink truncate max-w-[150px]" title={parts[3]}>{parts[3]}</td>
+                      <td className="px-3 py-1.5 border-r-2 border-ink text-right text-brand-700 dark:text-brand-300">{parts[4]}</td>
+                      <td className="px-3 py-1.5 border-r-2 border-ink text-right text-success">{parts[5]}</td>
                       <td className={`px-3 py-1.5 font-bold ${isSuccess ? 'text-success' :
                           isFailed ? 'text-error' :
-                            'text-primary animate-pulse'
+                            'text-brand-700 dark:text-brand-300 animate-pulse'
                         }`}>
                         {status}
                       </td>

@@ -6,7 +6,7 @@ import { PROVIDERS } from "../../config/providers.js";
 import { HTTP_STATUS, STREAM_STALL_TIMEOUT_MS } from "../../config/runtimeConfig.js";
 import { buildAbortedResponsesTerminalBytes } from "../../utils/responsesStreamHelpers.js";
 import { buildStreamErrorBytes } from "../../utils/streamHelpers.js";
-import { buildRequestDetail, extractRequestConfig, saveUsageStats, formatDoneLine } from "./requestDetail.js";
+import { buildRequestDetail, extractRequestConfig, saveUsageStats, formatDoneLine, requestObservability } from "./requestDetail.js";
 import { saveRequestDetail } from "@/lib/usageDb.js";
 import { SSE_HEADERS_CORS as SSE_HEADERS } from "../../utils/sseConstants.js";
 import { upstreamResponseHeaders } from "../../utils/upstreamHeaders.js";
@@ -98,7 +98,7 @@ export async function handleStreamingResponse({ providerResponse, provider, mode
   const transformedBody = pipeWithDisconnect(providerResponse, transformStream, streamController, onAbortTerminal, stallTimeoutMs);
 
   saveRequestDetail(buildRequestDetail({
-    provider, model, connectionId,
+    provider, model, connectionId, clientRawRequest,
     latency: { ttft: 0, total: Date.now() - requestStartTime },
     tokens: { prompt_tokens: 0, completion_tokens: 0 },
     request: extractRequestConfig(body, stream),
@@ -132,7 +132,7 @@ export function buildOnStreamComplete({ provider, model, connectionId, apiKey, r
     const safeThinking = contentObj?.thinking || null;
 
     saveRequestDetail(buildRequestDetail({
-      provider, model, connectionId,
+      provider, model, connectionId, clientRawRequest,
       latency,
       tokens: usage || { prompt_tokens: 0, completion_tokens: 0 },
       request: extractRequestConfig(body, stream),
@@ -146,7 +146,12 @@ export function buildOnStreamComplete({ provider, model, connectionId, apiKey, r
     });
 
     // Persist stream usage to DB (no console line; the "📊 done" line below is authoritative)
-    saveUsageStats({ provider, model, tokens: usage, connectionId, apiKey, endpoint: clientRawRequest?.endpoint, label: "STREAM USAGE", silent: true });
+    saveUsageStats({
+      provider, model, tokens: usage, connectionId, apiKey,
+      endpoint: clientRawRequest?.endpoint, label: "STREAM USAGE", silent: true,
+      latency,
+      ...requestObservability(clientRawRequest),
+    });
     if (log?.line) log.line(reqTag, "📊", formatDoneLine({ usage, latency }));
   };
 

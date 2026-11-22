@@ -18,9 +18,11 @@ import { resolveClinepassModels, resolveClineModels } from "open-sse/services/cl
 import { resolveGrokCliModels } from "open-sse/services/grokCliModels.js";
 import { resolveCursorModels } from "open-sse/services/cursorModels.js";
 import { resolveZedModels } from "open-sse/shared/zedAuth.js";
+import { resolveCommandCodeModels } from "open-sse/services/commandcodeModels.js";
 import { updateProviderCredentials } from "@/sse/services/tokenRefresh";
 import { resolveConnectionProxyConfig } from "@/lib/network/connectionProxy";
 import { capabilitiesFromServiceKind, getCapabilitiesForModel, aggregateComboCapabilities } from "open-sse/providers/capabilities.js";
+import { getThinkingLevels } from "open-sse/providers/thinkingLevels.js";
 
 // Qoder shares one live resolver across intl (qoder) and CN (qoder-cn); the
 // credentials carry the provider id so qoderModels picks the right region's
@@ -158,6 +160,13 @@ const LIVE_MODEL_RESOLVERS = {
         })),
     };
   },
+  // CommandCode's catalog is public and account-independent, so no per-connection
+  // credentials are needed — the connection only has to exist and be active.
+  commandcode: async () => {
+    const result = await resolveCommandCodeModels();
+    if (!result?.models?.length) return null;
+    return { models: result.models.map(({ id, name }) => ({ id, name })) };
+  },
 };
 
 const parseOpenAIStyleModels = (data) => {
@@ -166,7 +175,7 @@ const parseOpenAIStyleModels = (data) => {
 };
 
 // Header sent by fetchCompatibleModelIds to detect cross-instance /models fetches
-// and break recursive loops between 9router instances connected to each other.
+// and break recursive loops between Ryo instances connected to each other.
 const INTERNAL_MODELS_FETCH_HEADER = "x-9r-internal-models-fetch";
 
 // LLM kind sentinel — combos/models with no explicit kind default to LLM
@@ -320,7 +329,7 @@ function comboSeatLimits(combo, combosByName, visiting = new Set()) {
  */
 export async function buildModelsList(kindFilter, options = {}) {
   // When this header is present, the /v1/models request came from another
-  // 9router instance's fetchCompatibleModelIds — skip dynamic fetch to break
+  // Ryo instance's fetchCompatibleModelIds — skip dynamic fetch to break
   // cross-instance recursive loops.
   const skipDynamicFetch = options.skipDynamicFetch === true;
   let connections = [];
@@ -607,6 +616,11 @@ export async function buildModelsList(kindFilter, options = {}) {
           }
           if (Number.isFinite(contextWindow)) model.context_length = contextWindow;
           if (Number.isFinite(maxOutput)) model.max_completion_tokens = maxOutput;
+          // Selectable reasoning levels (the set the dashboard picker shows) so clients
+          // can build their effort selector from the gateway instead of keeping a
+          // per-model table. Omitted when the model has no reasoning.
+          const thinkingLevels = getThinkingLevels(providerId, modelId);
+          if (Array.isArray(thinkingLevels) && thinkingLevels.length > 0) model.thinking_levels = thinkingLevels;
         }
         models.push(model);
       }
@@ -662,7 +676,7 @@ export async function OPTIONS() {
  */
 export async function GET(request) {
   try {
-    // Detect cross-instance recursive /models fetch (another 9router fetching our /models)
+    // Detect cross-instance recursive /models fetch (another Ryo fetching our /models)
     const skipDynamicFetch = request?.headers?.get(INTERNAL_MODELS_FETCH_HEADER) === "1";
     const data = await filterModelsListForKey(
       await getKeyAccessContext(request),

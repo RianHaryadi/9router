@@ -14,11 +14,82 @@ import {
 } from "./endpointConstants";
 import { clientPingUrl, clientPingAny } from "./endpointPing";
 import useSettingsStore from "@/store/settingsStore";
+import useSessionStore from "@/store/sessionStore";
 import EndpointRow from "./components/EndpointRow";
 import StatusAlert from "./components/StatusAlert";
 import Tooltip from "./components/Tooltip";
 import SecurityWarning from "./components/SecurityWarning";
 import KeyAccessControls from "./components/KeyAccessControls";
+
+// >>> MASK HELPERS (pure; mirrored by .loop/scratch/c-keys-check.mjs)
+const MEMBER_KEY_NOTE = "Key values are never shown to a teammate. Ask the owner for the key.";
+const REVEAL_KEY_NOTE = "Enter the dashboard password to reveal this key.";
+const MASK_BULLETS = "•".repeat(8);
+const KEY_DATE_OPTIONS = { month: "short", day: "numeric", year: "numeric" };
+
+function maskKey(fullKey) {
+  if (!fullKey || typeof fullKey !== "string") return "";
+  const value = fullKey.trim();
+  if (value.length <= 10) return value.slice(0, 2) + MASK_BULLETS;
+  return value.slice(0, 6) + MASK_BULLETS + value.slice(-4);
+}
+
+// The view of one key value.
+//
+// The server never sends a raw value to a remote caller: the list comes
+// masked. The OWNER can still get the value, by re-entering the dashboard
+// password (POST /api/keys/[id]/reveal); a teammate never can.
+//
+//   revealed — the raw value was fetched: show it when isVisible, copy it always.
+//   canReveal — the owner on a remote host: the eye/copy buttons ask for the
+//               password instead of being disabled.
+//   otherwise — a teammate: the buttons are off.
+function keyMaskView(keyValue, { serverMasked, canReveal, revealed, isVisible }) {
+  if (revealed) {
+    return {
+      value: isVisible ? revealed : maskKey(revealed),
+      copyValue: revealed,
+      actionsDisabled: false,
+      note: null,
+    };
+  }
+  if (serverMasked) {
+    const value = (keyValue || "").trim();
+    const stars = value.indexOf("***");
+    const prefix = stars >= 0 ? value.slice(0, Math.min(6, stars)) : value.slice(0, 6);
+    const suffix = stars >= 0 && value.length > 12 ? value.slice(-4) : "";
+    if (!canReveal) {
+      return {
+        value: prefix + MASK_BULLETS + suffix,
+        copyValue: null,
+        actionsDisabled: true,
+        note: MEMBER_KEY_NOTE,
+      };
+    }
+    return {
+      value: prefix + MASK_BULLETS + suffix,
+      copyValue: null,
+      actionsDisabled: false,
+      note: REVEAL_KEY_NOTE,
+    };
+  }
+  return {
+    value: isVisible ? keyValue : maskKey(keyValue),
+    copyValue: keyValue,
+    actionsDisabled: false,
+    note: null,
+  };
+}
+
+function formatKeyDate(value) {
+  return new Date(value).toLocaleDateString("en-US", KEY_DATE_OPTIONS);
+}
+// <<< MASK HELPERS
+
+function SectionLabel({ children }) {
+  return <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-text-muted">{children}</h4>;
+}
+
 export default function APIPageClient({ machineId }) {
   const [keys, setKeys] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -78,9 +149,24 @@ export default function APIPageClient({ machineId }) {
 
   // API key visibility toggle state
   const [visibleKeys, setVisibleKeys] = useState(new Set());
+  const [keysMasked, setKeysMasked] = useState(false);
+  // The raw values the owner revealed (password-gated), by key id.
+  const [revealedKeys, setRevealedKeys] = useState({});
+  // The password prompt: { keyId, purpose: "reveal" | "copy" }
+  const [revealPrompt, setRevealPrompt] = useState(null);
+  const [revealPassword, setRevealPassword] = useState("");
+  const [revealError, setRevealError] = useState("");
 
   // Client-side local/remote detection (UI hint only, not a security gate)
   const [isRemoteHost, setIsRemoteHost] = useState(false);
+  // The session role decides who may reveal a key value: the owner may (with
+  // the dashboard password), a teammate never can.
+  const role = useSessionStore((s) => s.role);
+  const fetchSession = useSessionStore((s) => s.fetchSession);
+  const isMember = role === "member";
+  useEffect(() => {
+    fetchSession();
+  }, [fetchSession]);
   useEffect(() => {
     if (typeof window !== "undefined")
       setIsRemoteHost(!["localhost", "127.0.0.1", "::1"].includes(window.location.hostname));
@@ -250,12 +336,13 @@ export default function APIPageClient({ machineId }) {
     try {
       const fetchKeys = async () => {
         const res = await fetch("/api/keys");
-        if (!res.ok) return [];
+        if (!res.ok) return { keys: [], masked: false };
         const data = await res.json();
-        return data.keys || [];
+        return { keys: data.keys || [], masked: data.masked === true };
       };
 
-      let existing = await fetchKeys();
+      let { keys: existing, masked } = await fetchKeys();
+      setKeysMasked(masked);
       // Auto-provision a default key for first-time users so the endpoint works out of the box.
       if (existing.length === 0) {
         try {
@@ -264,7 +351,11 @@ export default function APIPageClient({ machineId }) {
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ name: "Default Key" }),
           });
-          if (createRes.ok) existing = await fetchKeys();
+          if (createRes.ok) {
+            const next = await fetchKeys();
+            existing = next.keys;
+            setKeysMasked(next.masked);
+          }
         } catch { /* fall through to empty render */ }
       }
       setKeys(existing);
@@ -675,6 +766,119 @@ export default function APIPageClient({ machineId }) {
     }
   };
 
+  // Per-key monthly budget (dollars in UI, cents in DB)
+  const [budgetDrafts, setBudgetDrafts] = useState({});
+  const [savingBudgetId, setSavingBudgetId] = useState(null);
+  const [rpmDrafts, setRpmDrafts] = useState({});
+  const [tpmDrafts, setTpmDrafts] = useState({});
+
+  const handleSaveRpm = async (key) => {
+    const raw = rpmDrafts[key.id] ?? String(key.rpmLimit || 0);
+    const rpmLimit = Number(raw);
+    if (!Number.isInteger(rpmLimit) || rpmLimit < 0 || rpmLimit > 1_000_000) return;
+    setSavingBudgetId(key.id);
+    try {
+      const res = await fetch(`/api/keys/${key.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ rpmLimit }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.key) {
+        setKeys((prev) => prev.map((k) => (k.id === key.id ? { ...k, ...data.key } : k)));
+        setRpmDrafts((prev) => ({ ...prev, [key.id]: String(rpmLimit) }));
+      } else {
+        console.log("Error saving RPM limit:", data.error || res.status);
+      }
+    } catch (error) {
+      console.log("Error saving RPM limit:", error);
+    } finally {
+      setSavingBudgetId(null);
+    }
+  };
+
+  const handleSaveTpm = async (key) => {
+    const raw = tpmDrafts[key.id] ?? String(key.tpmLimit || 0);
+    const tpmLimit = Number(raw);
+    if (!Number.isInteger(tpmLimit) || tpmLimit < 0 || tpmLimit > 1_000_000_000) return;
+    setSavingBudgetId(key.id);
+    try {
+      const res = await fetch(`/api/keys/${key.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tpmLimit }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.key) {
+        setKeys((prev) => prev.map((k) => (k.id === key.id ? { ...k, ...data.key } : k)));
+        setTpmDrafts((prev) => ({ ...prev, [key.id]: String(tpmLimit) }));
+      } else {
+        console.log("Error saving TPM limit:", data.error || res.status);
+      }
+    } catch (error) {
+      console.log("Error saving TPM limit:", error);
+    } finally {
+      setSavingBudgetId(null);
+    }
+  };
+
+  const budgetDraftOf = (key) => {
+    const d = budgetDrafts[key.id] || {};
+    return {
+      unlimited: d.unlimited ?? (key.budgetLimitCents == null),
+      dollars: d.dollars !== undefined ? d.dollars : (key.budgetLimitCents == null ? "" : (key.budgetLimitCents / 100).toFixed(2)),
+    };
+  };
+
+  const setBudgetDraft = (id, patch) =>
+    setBudgetDrafts((prev) => ({ ...prev, [id]: { ...(prev[id] || {}), ...patch } }));
+
+  const handleSaveBudget = async (key) => {
+    const draft = budgetDraftOf(key);
+    let budgetLimitCents = null;
+    if (!draft.unlimited) {
+      const dollars = Number(draft.dollars);
+      if (draft.dollars === "" || Number.isNaN(dollars) || dollars < 0) return;
+      budgetLimitCents = Math.round(dollars * 100);
+    }
+    setSavingBudgetId(key.id);
+    try {
+      const res = await fetch(`/api/keys/${key.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ budgetLimitCents, budgetPeriod: "monthly" }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.key) {
+        setKeys((prev) => prev.map((k) => (k.id === key.id ? { ...k, ...data.key } : k)));
+      } else {
+        console.log("Error saving budget:", data.error || res.status);
+      }
+    } catch (error) {
+      console.log("Error saving budget:", error);
+    } finally {
+      setSavingBudgetId(null);
+    }
+  };
+
+  const handleResetBudget = async (key) => {
+    setSavingBudgetId(key.id);
+    try {
+      const res = await fetch(`/api/keys/${key.id}/reset-budget`, { method: "POST" });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.key) {
+        setKeys((prev) => prev.map((k) => (k.id === key.id ? { ...k, ...data.key } : k)));
+        setBudgetDrafts((prev) => ({ ...prev, [key.id]: { unlimited: true, dollars: "" } }));
+      } else {
+        console.log("Error resetting budget:", data.error || res.status);
+      }
+    } catch (error) {
+      console.log("Error resetting budget:", error);
+    } finally {
+      setSavingBudgetId(null);
+    }
+  };
+
   // Save a key's access (restricted flag + allow list).
   const handleUpdateKeyAccess = async (id, access) => {
     try {
@@ -694,11 +898,6 @@ export default function APIPageClient({ machineId }) {
     }
   };
 
-  const maskKey = (fullKey) => {
-    if (!fullKey || fullKey.length <= 10) return fullKey || "";
-    return fullKey.slice(0, 6) + "•".repeat(fullKey.length - 10) + fullKey.slice(-4);
-  };
-
   const toggleKeyVisibility = (keyId) => {
     setVisibleKeys(prev => {
       const next = new Set(prev);
@@ -706,6 +905,63 @@ export default function APIPageClient({ machineId }) {
       else next.add(keyId);
       return next;
     });
+  };
+
+  // Fetch the raw value of one key (owner only, password-gated server-side).
+  const revealKey = async (keyId, password) => {
+    const res = await fetch(`/api/keys/${keyId}/reveal`, {
+      method: "POST",
+      headers: password ? { "x-9r-password": password } : {},
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.error || "Failed to reveal key");
+    }
+    const data = await res.json();
+    return data.key;
+  };
+
+  // The eye button: reveal (ask the password) or hide.
+  const handleToggleKeyVisibility = (key) => {
+    if (revealedKeys[key.id]) {
+      toggleKeyVisibility(key.id);
+      return;
+    }
+    if (keysMasked) {
+      setRevealPrompt({ keyId: key.id, purpose: "reveal" });
+      return;
+    }
+    toggleKeyVisibility(key.id);
+  };
+
+  // The copy button: copy the raw value, asking the password when needed.
+  const handleCopyKey = async (key) => {
+    const raw = revealedKeys[key.id] || (keysMasked ? null : key.key);
+    if (raw) {
+      copy(raw, key.id);
+      return;
+    }
+    setRevealPrompt({ keyId: key.id, purpose: "copy" });
+  };
+
+  const submitRevealPrompt = async (password) => {
+    if (!revealPrompt) return;
+    try {
+      const raw = await revealKey(revealPrompt.keyId, password);
+      setRevealedKeys((prev) => ({ ...prev, [revealPrompt.keyId]: raw }));
+      if (revealPrompt.purpose === "copy") copy(raw, revealPrompt.keyId);
+      else
+        setVisibleKeys((prev) => {
+          const next = new Set(prev);
+          next.add(revealPrompt.keyId);
+          return next;
+        });
+      setRevealPrompt(null);
+      setRevealPassword("");
+      setRevealError("");
+    } catch (error) {
+      setRevealError(error.message || "Failed to reveal key");
+    }
   };
 
   const [baseUrl, setBaseUrl] = useState("/v1");
@@ -733,7 +989,7 @@ export default function APIPageClient({ machineId }) {
       {/* Endpoint Card */}
       <Card>
         <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
-          <span className="material-symbols-outlined text-primary">api</span>
+          <span className="material-symbols-outlined text-brand-700 dark:text-brand-300">api</span>
           API Endpoint
         </h2>
 
@@ -750,20 +1006,20 @@ export default function APIPageClient({ machineId }) {
           {/* Cloudflare Tunnel */}
           <div className="flex items-center gap-2">
             <span className={`text-xs font-mono px-1.5 py-0.5 rounded shrink-0 min-w-[88px] text-center ${
-              tunnelEnabled ? "bg-primary/10 text-primary" : "bg-surface-2 text-text-muted"
+              tunnelEnabled ? "bg-brand-300/25 text-brand-700 dark:text-brand-300" : "bg-surface-2 text-text-muted border border-ink/40"
             }`}>Tunnel</span>
             {tunnelEnabled && !tunnelLoading && tunnelReachable ? (
               <>
                 <Input value={`${tunnelPublicUrl || tunnelUrl}/v1`} readOnly className="flex-1 font-mono text-sm" />
                 <button
                   onClick={() => copy(`${tunnelPublicUrl || tunnelUrl}/v1`, "tunnel_url")}
-                  className="p-2 hover:bg-black/5 dark:hover:bg-white/5 rounded text-text-muted hover:text-primary transition-colors shrink-0"
+                  className="p-2 hover:bg-black/5 dark:hover:bg-white/5 rounded text-text-muted hover:text-brand-700 dark:text-brand-300 transition-colors shrink-0"
                 >
                   <span className="material-symbols-outlined text-[18px]">{copied === "tunnel_url" ? "check" : "content_copy"}</span>
                 </button>
                 <button
                   onClick={() => setShowDisableTunnelModal(true)}
-                  className="p-2 hover:bg-red-500/10 rounded text-red-500 transition-colors shrink-0"
+                  className="p-2 hover:bg-danger/10 rounded text-danger transition-colors shrink-0"
                   title="Disable Tunnel"
                 >
                   <span className="material-symbols-outlined text-[18px]">power_settings_new</span>
@@ -771,13 +1027,13 @@ export default function APIPageClient({ machineId }) {
               </>
             ) : tunnelEnabled && !tunnelLoading && !tunnelReachable ? (
               <>
-                <div className="flex-1 flex items-center gap-2 px-3 py-1.5 rounded border border-amber-300 dark:border-amber-800 bg-amber-500/5 text-sm text-amber-600 dark:text-amber-400">
+                <div className="flex-1 flex items-center gap-2 px-3 py-1.5 rounded border border-warning bg-warning/5 text-sm text-warning dark:text-warning">
                   <span className="material-symbols-outlined animate-spin text-sm">progress_activity</span>
                   {tunnelEverReachable ? "Tunnel reconnecting..." : "Tunnel checking..."}
                 </div>
                 <button
                   onClick={() => setShowDisableTunnelModal(true)}
-                  className="p-2 hover:bg-red-500/10 rounded text-red-500 transition-colors shrink-0"
+                  className="p-2 hover:bg-danger/10 rounded text-danger transition-colors shrink-0"
                   title="Disable Tunnel"
                 >
                   <span className="material-symbols-outlined text-[18px]">power_settings_new</span>
@@ -785,13 +1041,13 @@ export default function APIPageClient({ machineId }) {
               </>
             ) : tunnelLoading ? (
               <>
-                <div className="flex-1 flex items-center gap-2 px-3 py-1.5 rounded border border-border bg-input text-sm text-text-muted">
+                <div className="flex-1 flex items-center gap-2 px-3 py-1.5 rounded border-2 border-ink bg-input text-sm text-text-muted">
                   <span className="material-symbols-outlined animate-spin text-sm">progress_activity</span>
                   {tunnelProgress || "Creating tunnel..."}
                 </div>
                 <button
                   onClick={() => { setTunnelLoading(false); setTunnelProgress(""); }}
-                  className="p-2 hover:bg-red-500/10 rounded text-red-500 transition-colors shrink-0"
+                  className="p-2 hover:bg-danger/10 rounded text-danger transition-colors shrink-0"
                   title="Stop"
                 >
                   <span className="material-symbols-outlined text-[18px]">power_settings_new</span>
@@ -799,7 +1055,7 @@ export default function APIPageClient({ machineId }) {
               </>
             ) : tunnelStatus?.type === "error" ? (
               <>
-                <div className="flex-1 flex items-center gap-2 px-3 py-1.5 rounded border border-red-300 dark:border-red-800 bg-red-500/5 text-sm text-red-600 dark:text-red-400">
+                <div className="flex-1 flex items-center gap-2 px-3 py-1.5 rounded border border-danger bg-danger/5 text-sm text-danger dark:text-danger">
                   <span className="material-symbols-outlined text-sm">error</span>
                   {tunnelStatus.message}
                 </div>
@@ -807,13 +1063,13 @@ export default function APIPageClient({ machineId }) {
               </>
             ) : tunnelChecking ? (
               <>
-                <div className="flex-1 flex items-center gap-2 px-3 py-1.5 rounded border border-border bg-input text-sm text-text-muted">
+                <div className="flex-1 flex items-center gap-2 px-3 py-1.5 rounded border-2 border-ink bg-input text-sm text-text-muted">
                   <span className="material-symbols-outlined animate-spin text-sm">progress_activity</span>
                   Checking...
                 </div>
                 <button
                   onClick={() => setTunnelChecking(false)}
-                  className="p-2 hover:bg-red-500/10 rounded text-red-500 transition-colors shrink-0"
+                  className="p-2 hover:bg-danger/10 rounded text-danger transition-colors shrink-0"
                   title="Stop"
                 >
                   <span className="material-symbols-outlined text-[18px]">power_settings_new</span>
@@ -842,20 +1098,20 @@ export default function APIPageClient({ machineId }) {
           {/* Tailscale */}
           <div className="flex items-center gap-2">
             <span className={`text-xs font-mono px-1.5 py-0.5 rounded shrink-0 min-w-[88px] text-center ${
-              tsEnabled ? "bg-primary/10 text-primary" : "bg-surface-2 text-text-muted"
+              tsEnabled ? "bg-brand-300/25 text-brand-700 dark:text-brand-300" : "bg-surface-2 text-text-muted border border-ink/40"
             }`}>Tailscale</span>
             {tsEnabled && !tsLoading && tsReachable ? (
               <>
                 <Input value={`${tsUrl}/v1`} readOnly className="flex-1 font-mono text-sm" />
                 <button
                   onClick={() => copy(`${tsUrl}/v1`, "ts_url")}
-                  className="p-2 hover:bg-black/5 dark:hover:bg-white/5 rounded text-text-muted hover:text-primary transition-colors shrink-0"
+                  className="p-2 hover:bg-black/5 dark:hover:bg-white/5 rounded text-text-muted hover:text-brand-700 dark:text-brand-300 transition-colors shrink-0"
                 >
                   <span className="material-symbols-outlined text-[18px]">{copied === "ts_url" ? "check" : "content_copy"}</span>
                 </button>
                 <button
                   onClick={() => setShowDisableTsModal(true)}
-                  className="p-2 hover:bg-red-500/10 rounded text-red-500 transition-colors shrink-0"
+                  className="p-2 hover:bg-danger/10 rounded text-danger transition-colors shrink-0"
                   title="Disable Tailscale"
                 >
                   <span className="material-symbols-outlined text-[18px]">power_settings_new</span>
@@ -863,13 +1119,13 @@ export default function APIPageClient({ machineId }) {
               </>
             ) : tsEnabled && !tsLoading && !tsReachable ? (
               <>
-                <div className="flex-1 flex items-center gap-2 px-3 py-1.5 rounded border border-amber-300 dark:border-amber-800 bg-amber-500/5 text-sm text-amber-600 dark:text-amber-400">
+                <div className="flex-1 flex items-center gap-2 px-3 py-1.5 rounded border border-warning bg-warning/5 text-sm text-warning dark:text-warning">
                   <span className="material-symbols-outlined animate-spin text-sm">progress_activity</span>
                   {tsEverReachable ? "Tailscale reconnecting..." : "Tailscale checking..."}
                 </div>
                 <button
                   onClick={() => setShowDisableTsModal(true)}
-                  className="p-2 hover:bg-red-500/10 rounded text-red-500 transition-colors shrink-0"
+                  className="p-2 hover:bg-danger/10 rounded text-danger transition-colors shrink-0"
                   title="Disable Tailscale"
                 >
                   <span className="material-symbols-outlined text-[18px]">power_settings_new</span>
@@ -877,7 +1133,7 @@ export default function APIPageClient({ machineId }) {
               </>
             ) : (tsLoading || tsConnecting) ? (
               <>
-                <div className="flex-1 flex items-center gap-2 px-3 py-1.5 rounded border border-border bg-input text-sm text-text-muted">
+                <div className="flex-1 flex items-center gap-2 px-3 py-1.5 rounded border-2 border-ink bg-input text-sm text-text-muted">
                   <span className="material-symbols-outlined animate-spin text-sm">progress_activity</span>
                   {tsProgress || "Connecting..."}
                 </div>
@@ -892,7 +1148,7 @@ export default function APIPageClient({ machineId }) {
                 )}
                 <button
                   onClick={() => { setTsLoading(false); setTsConnecting(false); setTsProgress(""); clearUserAuth(); }}
-                  className="p-2 hover:bg-red-500/10 rounded text-red-500 transition-colors shrink-0"
+                  className="p-2 hover:bg-danger/10 rounded text-danger transition-colors shrink-0"
                   title="Stop"
                 >
                   <span className="material-symbols-outlined text-[18px]">power_settings_new</span>
@@ -900,7 +1156,7 @@ export default function APIPageClient({ machineId }) {
               </>
             ) : tsStatus?.type === "error" ? (
               <>
-                <div className="flex-1 flex items-center gap-2 px-3 py-1.5 rounded border border-red-300 dark:border-red-800 bg-red-500/5 text-sm text-red-600 dark:text-red-400">
+                <div className="flex-1 flex items-center gap-2 px-3 py-1.5 rounded border border-danger bg-danger/5 text-sm text-danger dark:text-danger">
                   <span className="material-symbols-outlined text-sm">error</span>
                   {tsStatus.message}
                 </div>
@@ -917,7 +1173,7 @@ export default function APIPageClient({ machineId }) {
                   }
                   handleOpenTsModal();
                 }}
-                className="bg-linear-to-r from-indigo-500 to-purple-500 hover:from-indigo-600 hover:to-purple-600 text-white!"
+                className="bg-linear-to-r from-brand-500 to-brand-600 hover:from-brand-600 hover:to-brand-700 text-white!"
               >
                 Enable
               </Button>
@@ -962,7 +1218,7 @@ export default function APIPageClient({ machineId }) {
 
         {/* Tunnel dashboard access option */}
         {(tunnelEnabled || tsEnabled) && (
-          <div className="mt-4 pt-4 border-t border-border flex items-center gap-3">
+          <div className="mt-4 pt-4 border-t-2 border-ink flex items-center gap-3">
             <Toggle
               checked={tunnelDashboardAccess}
               onChange={() => handleTunnelDashboardAccess(!tunnelDashboardAccess)}
@@ -979,7 +1235,7 @@ export default function APIPageClient({ machineId }) {
       <Card id="require-api-key">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-lg font-semibold flex items-center gap-2">
-            <span className="material-symbols-outlined text-primary">vpn_key</span>
+            <span className="material-symbols-outlined text-brand-700 dark:text-brand-300">vpn_key</span>
             API Keys
           </h2>
           <Button icon="add" onClick={() => setShowAddModal(true)}>
@@ -987,7 +1243,7 @@ export default function APIPageClient({ machineId }) {
           </Button>
         </div>
 
-        <div className="flex items-center justify-between pb-4 mb-4 border-b border-border">
+        <div className="flex items-center justify-between pb-4 mb-4 border-b-2 border-ink">
           <div>
             <p className="font-medium">Require API key</p>
             <p className="text-sm text-text-muted">
@@ -1008,7 +1264,7 @@ export default function APIPageClient({ machineId }) {
 
         {keys.length === 0 ? (
           <div className="text-center py-12">
-            <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-primary/10 text-primary mb-4">
+            <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-brand-300/25 text-brand-700 dark:text-brand-300 mb-4">
               <span className="material-symbols-outlined text-[32px]">vpn_key</span>
             </div>
             <p className="text-text-main font-medium mb-1">No API keys yet</p>
@@ -1019,88 +1275,294 @@ export default function APIPageClient({ machineId }) {
           </div>
         ) : (
           <div className="flex flex-col">
-            {keys.map((key) => (
-              <div
+            {keys.map((key) => {
+              const keyView = keyMaskView(key.key, {
+                serverMasked: keysMasked,
+                canReveal: !isMember,
+                revealed: revealedKeys[key.id] || null,
+                isVisible: visibleKeys.has(key.id),
+              });
+              const isPaused = key.isActive === false;
+              return (
+              <section
                 key={key.id}
-                className={`group flex items-start justify-between gap-3 py-3 border-b border-black/[0.03] dark:border-white/[0.03] last:border-b-0 ${key.isActive === false ? "opacity-60" : ""}`}
+                className={`rounded-xl border-2 border-ink bg-surface-2 p-4 ${isPaused ? "opacity-80" : ""}`}
               >
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium">{key.name}</p>
-                  <div className="flex items-center gap-2 mt-1 min-w-0 flex-wrap">
-                    <code className="text-xs text-text-muted font-mono break-all min-w-0">
-                      {visibleKeys.has(key.id) ? key.key : maskKey(key.key)}
-                    </code>
-                    <div className="flex items-center gap-1 shrink-0">
-                      <button
-                        onClick={() => toggleKeyVisibility(key.id)}
-                        className="p-1 hover:bg-black/5 dark:hover:bg-white/5 rounded text-text-muted hover:text-primary transition-all"
-                        title={visibleKeys.has(key.id) ? "Hide key" : "Show key"}
-                      >
-                        <span className="material-symbols-outlined text-[14px]">
-                          {visibleKeys.has(key.id) ? "visibility_off" : "visibility"}
-                        </span>
-                      </button>
-                      <button
-                        onClick={() => copy(key.key, key.id)}
-                        className="p-1 hover:bg-black/5 dark:hover:bg-white/5 rounded text-text-muted hover:text-primary transition-all"
-                      >
-                        <span className="material-symbols-outlined text-[14px]">
-                          {copied === key.id ? "check" : "content_copy"}
-                        </span>
-                      </button>
-                    </div>
+                <header className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <SectionLabel>Credential</SectionLabel>
+                    <h3 className="text-sm font-semibold text-text-main break-words">{key.name}</h3>
+                    <p className="mt-1 text-xs text-text-muted">Created {formatKeyDate(key.createdAt)}</p>
                   </div>
-                  <p className="text-xs text-text-muted mt-1">
-                    Created {new Date(key.createdAt).toLocaleDateString()}
-                  </p>
-                  {key.isActive === false && (
-                    <p className="text-xs text-orange-500 mt-1">Paused</p>
-                  )}
-                  <KeyAccessControls
-                    apiKey={key}
-                    onChange={(access) => handleUpdateKeyAccess(key.id, access)}
-                    onRequestRestrict={() => setConfirmState({
-                      title: "Restrict API Key",
-                      message: `Restrict API key "${key.name}"?\n\nIt will only be able to call the combos and models you add. Until you add one, it can call nothing.`,
-                      onConfirm: async () => {
-                        setConfirmState(null);
-                        handleUpdateKeyAccess(key.id, { restricted: true, allow: key.access?.allow || [] });
-                      }
-                    })}
-                  />
-                </div>
-                <div className="flex items-center gap-2 shrink-0 pt-0.5">
-                  <Toggle
-                    size="sm"
-                    checked={key.isActive ?? true}
-                    onChange={(checked) => {
-                      if (key.isActive && !checked) {
-                        setConfirmState({
-                          title: "Pause API Key",
-                          message: `Pause API key "${key.name}"?\n\nThis key will stop working immediately but can be resumed later.`,
-                          onConfirm: async () => {
-                            setConfirmState(null);
+                  <div className="flex shrink-0 items-center gap-2">
+                    <div className="flex h-9 items-center gap-2">
+                      <Toggle
+                        size="md"
+                        checked={key.isActive ?? true}
+                        onChange={(checked) => {
+                          if (key.isActive && !checked) {
+                            setConfirmState({
+                              title: "Pause API Key",
+                              message: `Pause API key "${key.name}"?\n\nThis key will stop working immediately but can be resumed later.`,
+                              onConfirm: async () => {
+                                setConfirmState(null);
+                                handleToggleKey(key.id, checked);
+                              }
+                            });
+                          } else {
                             handleToggleKey(key.id, checked);
                           }
-                        });
-                      } else {
-                        handleToggleKey(key.id, checked);
-                      }
-                    }}
-                    title={key.isActive ? "Pause key" : "Resume key"}
-                  />
-                  <button
-                    onClick={() => handleDeleteKey(key.id)}
-                    className="p-2 hover:bg-red-500/10 rounded text-red-500 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-all"
-                  >
-                    <span className="material-symbols-outlined text-[18px]">delete</span>
-                  </button>
+                        }}
+                        title={key.isActive ? "Pause key" : "Resume key"}
+                      />
+                      <span
+                        className={`inline-flex h-9 items-center rounded-md border px-2 text-xs font-medium ${
+                          isPaused
+                            ? "border-warning/40 bg-warning/10 text-warning"
+                            : "border-success/40 bg-success/10 text-success"
+                        }`}
+                      >
+                        {isPaused ? "Paused" : "Enabled"}
+                      </span>
+                    </div>
+                    <button
+                      onClick={() => handleDeleteKey(key.id)}
+                      title="Delete key"
+                      aria-label={`Delete API key ${key.name}`}
+                      className="flex h-9 w-9 items-center justify-center rounded-md border-2 border-ink bg-bg text-danger transition-all hover:bg-danger/10"
+                    >
+                      <span className="material-symbols-outlined text-[18px]">delete</span>
+                    </button>
+                  </div>
+                </header>
+
+                <div className="mt-4">
+                  <SectionLabel>Key value</SectionLabel>
+                  <div className="flex items-center gap-2 min-w-0">
+                    <code className="min-w-0 flex-1 select-all overflow-x-auto whitespace-nowrap rounded-md border-2 border-ink bg-bg px-3 py-2 font-mono text-sm leading-6 text-brand-700 dark:text-brand-300">
+                      {keyView.value}
+                    </code>
+                    <button
+                      onClick={() => handleToggleKeyVisibility(key)}
+                      disabled={keyView.actionsDisabled}
+                      className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border-2 border-ink bg-bg text-text-muted transition-all hover:bg-surface hover:text-brand-700 dark:text-brand-300 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-bg"
+                      title={keyView.actionsDisabled ? MEMBER_KEY_NOTE : visibleKeys.has(key.id) ? "Hide key" : "Show key"}
+                      aria-label={keyView.actionsDisabled ? MEMBER_KEY_NOTE : visibleKeys.has(key.id) ? "Hide key" : "Show key"}
+                    >
+                      <span className="material-symbols-outlined text-[18px]">
+                        {visibleKeys.has(key.id) ? "visibility_off" : "visibility"}
+                      </span>
+                    </button>
+                    <button
+                      onClick={() => handleCopyKey(key)}
+                      disabled={keyView.actionsDisabled}
+                      className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border-2 border-ink bg-bg text-text-muted transition-all hover:bg-surface hover:text-brand-700 dark:text-brand-300 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-bg"
+                      title={keyView.actionsDisabled ? MEMBER_KEY_NOTE : "Copy key"}
+                      aria-label={keyView.actionsDisabled ? MEMBER_KEY_NOTE : "Copy key"}
+                    >
+                      <span className="material-symbols-outlined text-[18px]">
+                        {copied === key.id ? "check" : "content_copy"}
+                      </span>
+                    </button>
+                  </div>
+                  {keyView.note && <p className="mt-2 text-xs text-warning">{keyView.note}</p>}
                 </div>
-              </div>
-            ))}
+
+                <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                  <section className="min-w-0">
+                    <SectionLabel>Access</SectionLabel>
+                    <KeyAccessControls
+                      apiKey={key}
+                      onChange={(access) => handleUpdateKeyAccess(key.id, access)}
+                      onRequestRestrict={() => setConfirmState({
+                        title: "Restrict API Key",
+                        message: `Restrict API key "${key.name}"?\n\nIt will only be able to call the combos and models you add. Until you add one, it can call nothing.`,
+                        onConfirm: async () => {
+                          setConfirmState(null);
+                          handleUpdateKeyAccess(key.id, { restricted: true, allow: key.access?.allow || [] });
+                        }
+                      })}
+                    />
+                  </section>
+
+                  <div className="min-w-0 space-y-4">
+                    <section>
+                      <SectionLabel>Rate limits</SectionLabel>
+                      <div className="space-y-3">
+                        <div className="min-w-0">
+                          <label htmlFor={`rpm-${key.id}`} className="block text-xs text-text-muted">Requests/min:</label>
+                          <div className="mt-1 flex items-center gap-2">
+                            <input
+                              id={`rpm-${key.id}`}
+                              aria-label={`Requests per minute for ${key.name}`}
+                              type="number"
+                              min="0"
+                              max="1000000"
+                              step="1"
+                              value={rpmDrafts[key.id] ?? String(key.rpmLimit || 0)}
+                              disabled={savingBudgetId === key.id}
+                              onChange={(e) => setRpmDrafts((prev) => ({ ...prev, [key.id]: e.target.value }))}
+                              className="h-9 min-w-0 w-28 rounded-md border-2 border-ink bg-bg px-2 text-sm"
+                            />
+                            <span className="text-xs text-text-muted">0 = unlimited</span>
+                            <button
+                              onClick={() => handleSaveRpm(key)}
+                              disabled={savingBudgetId === key.id}
+                              className="flex h-9 items-center rounded-md bg-surface-2 px-3 text-xs text-text-main border-2 border-ink disabled:opacity-50"
+                            >Save</button>
+                          </div>
+                        </div>
+                        <div className="min-w-0">
+                          <label htmlFor={`tpm-${key.id}`} className="block text-xs text-text-muted">Tokens/min:</label>
+                          <div className="mt-1 flex items-center gap-2">
+                            <input
+                              id={`tpm-${key.id}`}
+                              aria-label={`Tokens per minute for ${key.name}`}
+                              type="number"
+                              min="0"
+                              max="100000000000"
+                              step="1"
+                              value={tpmDrafts[key.id] ?? String(key.tpmLimit || 0)}
+                              disabled={savingBudgetId === key.id}
+                              onChange={(e) => setTpmDrafts((prev) => ({ ...prev, [key.id]: e.target.value }))}
+                              className="h-9 min-w-0 w-28 rounded-md border-2 border-ink bg-bg px-2 text-sm"
+                            />
+                            <span className="text-xs text-text-muted">0 = unlimited</span>
+                            <button
+                              onClick={() => handleSaveTpm(key)}
+                              disabled={savingBudgetId === key.id}
+                              className="flex h-9 items-center rounded-md bg-surface-2 px-3 text-xs text-text-main border-2 border-ink disabled:opacity-50"
+                            >Save</button>
+                          </div>
+                        </div>
+                      </div>
+                    </section>
+
+                    {/* Per-key monthly budget */}
+                    <section>
+                      <SectionLabel>Budget</SectionLabel>
+                      {(() => {
+                        const draft = budgetDraftOf(key);
+                        const usedPct = key.budgetLimitCents == null ? null : (key.budgetLimitCents > 0 ? Math.min(100, Math.round(((key.budgetSpentCents || 0) / key.budgetLimitCents) * 100)) : 100);
+                        return (
+                          <>
+                            {key.budgetLimitCents != null && (
+                              <>
+                                <p className="text-xs text-text-muted">
+                                  ${(key.budgetSpentCents || 0) / 100} / ${key.budgetLimitCents / 100} used ({usedPct}%)
+                                </p>
+                                <div className="mt-1 h-1.5 w-full max-w-xs rounded-full bg-surface overflow-hidden">
+                                  <div
+                                    className={`h-full ${usedPct >= 80 ? "bg-danger" : usedPct >= 50 ? "bg-warning" : "bg-success"}`}
+                                    style={{ width: `${usedPct}%` }}
+                                  />
+                                </div>
+                              </>
+                            )}
+                            <div className="mt-2 flex flex-wrap items-center gap-2">
+                              <label className="flex h-9 items-center rounded-md border-2 border-ink bg-bg pl-2 text-sm text-text-muted">
+                                <span aria-hidden="true">$</span>
+                                <input
+                                  aria-label="Monthly budget in USD"
+                                  type="number"
+                                  min="0"
+                                  step="0.01"
+                                  disabled={draft.unlimited || savingBudgetId === key.id}
+                                  value={draft.unlimited ? "" : draft.dollars}
+                                  onChange={(e) => setBudgetDraft(key.id, { dollars: e.target.value })}
+                                  placeholder="0.00"
+                                  className="h-9 w-20 min-w-0 bg-transparent px-1 text-sm text-text-main focus:outline-none"
+                                />
+                              </label>
+                              <label className="flex h-9 items-center gap-1 text-xs text-text-muted cursor-pointer">
+                                <input
+                                  type="checkbox"
+                                  checked={draft.unlimited}
+                                  disabled={savingBudgetId === key.id}
+                                  onChange={(e) => setBudgetDraft(key.id, { unlimited: e.target.checked })}
+                                  className="accent-brand-500"
+                                />
+                                Unlimited budget
+                              </label>
+                              <button
+                                onClick={() => handleSaveBudget(key)}
+                                disabled={savingBudgetId === key.id}
+                                className="flex h-9 items-center rounded-md bg-surface-2 px-3 text-xs text-text-main border-2 border-ink disabled:opacity-50"
+                              >
+                                {savingBudgetId === key.id ? "Saving..." : "Save"}
+                              </button>
+                              {(key.budgetSpentCents || 0) > 0 && (
+                                <button
+                                  onClick={() => handleResetBudget(key)}
+                                  disabled={savingBudgetId === key.id}
+                                  title="Reset this month's spend to zero"
+                                  aria-label={`Reset spend for ${key.name}`}
+                                  className="flex h-9 items-center rounded-md px-2 text-xs text-danger border border-danger/30 hover:bg-danger/10 disabled:opacity-50"
+                                >
+                                  Reset spend
+                                </button>
+                              )}
+                            </div>
+                          </>
+                        );
+                      })()}
+                    </section>
+                  </div>
+                </div>
+              </section>
+              );
+            })}
           </div>
         )}
       </Card>
+
+      {/* Reveal Key Modal — the owner re-enters the dashboard password */}
+      <Modal
+        isOpen={!!revealPrompt}
+        title="Reveal API Key"
+        onClose={() => {
+          setRevealPrompt(null);
+          setRevealPassword("");
+          setRevealError("");
+        }}
+      >
+        <div className="flex flex-col gap-4">
+          <p className="text-sm text-text-muted">
+            Enter the dashboard password to show this key value. The value is
+            only sent to this browser.
+          </p>
+          <Input
+            label="Dashboard password"
+            type="password"
+            value={revealPassword}
+            error={revealError || undefined}
+            onChange={(e) => {
+              setRevealPassword(e.target.value);
+              setRevealError("");
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && revealPassword) submitRevealPrompt(revealPassword);
+            }}
+            autoFocus
+          />
+          <div className="flex gap-2">
+            <Button onClick={() => submitRevealPrompt(revealPassword)} fullWidth disabled={!revealPassword}>
+              {revealPrompt?.purpose === "copy" ? "Copy key" : "Show key"}
+            </Button>
+            <Button
+              onClick={() => {
+                setRevealPrompt(null);
+                setRevealPassword("");
+                setRevealError("");
+              }}
+              variant="ghost"
+              fullWidth
+            >
+              Cancel
+            </Button>
+          </div>
+        </div>
+      </Modal>
 
       {/* Add Key Modal */}
       <Modal
@@ -1143,11 +1605,11 @@ export default function APIPageClient({ machineId }) {
         onClose={() => setCreatedKey(null)}
       >
         <div className="flex flex-col gap-4">
-          <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-4">
-            <p className="text-sm text-yellow-800 dark:text-yellow-200 mb-2 font-medium">
+          <div className="bg-warning border border-warning rounded-lg p-4">
+            <p className="text-sm text-warning mb-2 font-medium">
               Save this key now!
             </p>
-            <p className="text-sm text-yellow-700 dark:text-yellow-300">
+            <p className="text-sm text-warning dark:text-warning">
               Store this key securely. You can view or copy it later from the API Keys list.
             </p>
           </div>
@@ -1178,15 +1640,15 @@ export default function APIPageClient({ machineId }) {
         onClose={() => setShowEnableTunnelModal(false)}
       >
         <div className="flex flex-col gap-4">
-          <div className="bg-surface-2 border border-border-subtle rounded-lg p-4">
+          <div className="bg-surface-2 border-2 border-ink/15 rounded-lg p-4">
             <div className="flex items-start gap-3">
-              <span className="material-symbols-outlined text-primary">cloud_upload</span>
+              <span className="material-symbols-outlined text-brand-700 dark:text-brand-300">cloud_upload</span>
               <div>
                 <p className="text-sm text-text-main font-medium mb-1">
                   Cloudflare Tunnel
                 </p>
                 <p className="text-sm text-text-muted">
-                  Expose your local 9Router to the internet. No port forwarding, no static IP needed. Share endpoint URL with your team or use it in Cursor, Cline, and other AI tools from anywhere.
+                  Expose your local Ryo to the internet. No port forwarding, no static IP needed. Share endpoint URL with your team or use it in Cursor, Cline, and other AI tools from anywhere.
                 </p>
               </div>
             </div>
@@ -1195,7 +1657,7 @@ export default function APIPageClient({ machineId }) {
           <div className="grid grid-cols-2 gap-3">
             {TUNNEL_BENEFITS.map((benefit) => (
               <div key={benefit.title} className="flex flex-col items-center text-center p-3 rounded-lg bg-sidebar/50">
-                <span className="material-symbols-outlined text-xl text-primary mb-1">{benefit.icon}</span>
+                <span className="material-symbols-outlined text-xl text-brand-700 dark:text-brand-300 mb-1">{benefit.icon}</span>
                 <p className="text-xs font-semibold">{benefit.title}</p>
                 <p className="text-xs text-text-muted">{benefit.desc}</p>
               </div>
@@ -1280,7 +1742,7 @@ export default function APIPageClient({ machineId }) {
           {/* Installed: show Connect button */}
           {tsInstalled === true && !tsInstalling && (
             <div className="flex flex-col gap-3">
-              <div className="flex items-center gap-2 text-sm text-green-600 dark:text-green-400">
+              <div className="flex items-center gap-2 text-sm text-success dark:text-success">
                 <span className="material-symbols-outlined text-[16px]">check_circle</span>
                 Tailscale installed
               </div>

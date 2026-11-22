@@ -34,11 +34,27 @@ export {
   getApiKeys, getApiKeyById, getApiKeyByKey, createApiKey, updateApiKey, deleteApiKey, validateApiKey,
 } from "./repos/apiKeysRepo.js";
 
+// Team members (teammates who sign in with an owner-chosen password)
+export {
+  getTeamMembers, getTeamMemberById,
+  createTeamMember, updateTeamMember, deleteTeamMember,
+  verifyTeamMemberPassword, getTeamMemberApiKey,
+  getTeamMembersWithUsage,
+} from "./repos/teamMembersRepo.js";
+
 // Combos
 export {
   getCombos, getComboById, getComboByName,
   createCombo, updateCombo, deleteCombo,
+  updateComboOwnedBy, deleteComboOwnedBy,
 } from "./repos/combosRepo.js";
+
+// Prompt templates
+export {
+  getPromptTemplates, getPromptTemplateById, getPromptTemplateVersions,
+  createPromptTemplate, updatePromptTemplate, deletePromptTemplate,
+  updatePromptTemplateOwnedBy, deletePromptTemplateOwnedBy,
+} from "./repos/promptTemplatesRepo.js";
 
 // Aliases (model + custom + mitm)
 export {
@@ -61,6 +77,7 @@ export {
 export {
   statsEmitter, trackPendingRequest, getActiveRequests,
   saveRequestUsage, getUsageHistory, getUsageStats, getChartData,
+  getUsageByKeyValue,
   appendRequestLog, getRecentLogs,
 } from "./repos/usageRepo.js";
 
@@ -68,6 +85,16 @@ export {
 export {
   saveRequestDetail, getRequestDetails, getRequestDetailById, getDistinctProviders,
 } from "./repos/requestDetailsRepo.js";
+
+// Fallback events (chain log)
+export {
+  saveFallbackEvent, getFallbackEvents, getFallbackSummary, pruneFallbackEvents,
+} from "./repos/fallbackRepo.js";
+
+// Metrics (latency percentiles, spend per project, provider health)
+export {
+  getLatencyPercentiles, getSpendByProject, getSpendByTask, getProviderHealthSnapshot,
+} from "./repos/metricsRepo.js";
 
 // Export/import full DB
 export async function exportDb() {

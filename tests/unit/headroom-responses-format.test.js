@@ -48,11 +48,14 @@ describe("compressWithHeadroom openai-responses format (#1998)", () => {
     expect(typeof body.input[0].content).not.toBe("string");
   });
 
-  it("skips Responses tool/reasoning history instead of collapsing it into a message (#2132)", async () => {
+  it("compresses the native Responses tool output and keeps tool/reasoning history intact (#2132, #1998)", async () => {
+    // Since a440ef43 the unsafe Responses input is no longer refused outright:
+    // headroom projects the native function_call_output leaves, compresses those
+    // and writes them back — the function_call / reasoning items stay untouched.
     global.fetch = vi.fn(async () => ({
       ok: true,
       json: async () => ({
-        messages: [{ role: "user", content: "compressed tool history" }],
+        messages: [{ role: "tool", tool_call_id: "headroom-tool-0", content: "k" }],
         tokens_saved: 10,
       }),
     }));
@@ -99,9 +102,23 @@ describe("compressWithHeadroom openai-responses format (#1998)", () => {
       diagnostics,
     });
 
-    expect(data).toBeNull();
-    expect(global.fetch).not.toHaveBeenCalled();
-    expect(body.input).toEqual(input);
-    expect(diagnostics.reason).toBe("skipped: openai-responses tool/reasoning input is not safe to compress");
+    expect(data).not.toBeNull();
+    // The proxy saw the tool output as an OpenAI tool message, not a Responses item.
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+    const payload = JSON.parse(global.fetch.mock.calls[0][1].body);
+    expect(payload.messages).toEqual([
+      { role: "tool", tool_call_id: "headroom-tool-0", content: "ok" },
+    ]);
+
+    // The compressed tool output was written back in place.
+    const outputItem = body.input.find((item) => item.type === "function_call_output");
+    expect(outputItem.output).toBe("k");
+
+    // The function_call / reasoning history was NOT collapsed into a message.
+    expect(body.input.filter((item) => item.type === "function_call")).toHaveLength(1);
+    expect(body.input.filter((item) => item.type === "reasoning")).toHaveLength(1);
+    expect(body.input.find((item) => item.type === "function_call")).toEqual(input[1]);
+    expect(body.input.find((item) => item.type === "reasoning")).toEqual(input[3]);
+    expect(body.input.find((item) => item.type === "message")).toEqual(input[0]);
   });
 });

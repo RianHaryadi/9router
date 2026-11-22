@@ -277,7 +277,7 @@ async function buildDroidHeader() {
     ].join("\n");
   }
 
-  // Extract 9Router custom model config
+  // Extract Ryo custom model config
   const custom = settings?.customModels?.find(m => m.id === "custom:9Router-0");
   const lines = [`Status:   ${COLORS.green}✓ Configured${COLORS.reset}`];
   if (custom?.baseUrl) lines.push(`Endpoint: ${COLORS.cyan}${custom.baseUrl}${COLORS.reset}`);
@@ -360,7 +360,7 @@ async function buildOpenClawHeader() {
     ].join("\n");
   }
 
-  // Extract 9Router provider config
+  // Extract Ryo provider config
   const provider = settings?.models?.providers?.["9router"];
   const primary = settings?.agents?.defaults?.model?.primary || "";
   const model = primary.startsWith("9router/") ? primary.replace("9router/", "") : (provider?.models?.[0]?.id || "");
@@ -528,7 +528,7 @@ async function fetchHermesProfiles() {
 const hermesProfileLine = (p) => {
   const name = p.displayName && !p.isDefault ? `${p.name} (${p.displayName})` : p.name;
   const state = p.has9Router
-    ? `${COLORS.green}✓ 9router${COLORS.reset}`
+    ? `${COLORS.green}✓ Ryo${COLORS.reset}`
     : p.baseUrl
       ? `${COLORS.red}other: ${p.baseUrl}${COLORS.reset}`
       : `${COLORS.red}✗ not configured${COLORS.reset}`;
@@ -607,7 +607,7 @@ async function hermesQuickSetup(port) {
 }
 
 // Endpoint + API key across every profile. Each profile keeps its own model — profiles
-// already routed through 9router are refreshed, anything else is reported as skipped.
+// already routed through Ryo are refreshed, anything else is reported as skipped.
 async function hermesApplyAll(port) {
   const { endpoint } = await getEndpoint(port);
   const apiKey = await getFirstApiKey();
@@ -684,7 +684,7 @@ async function showCliToolsMenu(port, breadcrumb = []) {
   await showMenuWithBack({
     title: "🔧 CLI Tools",
     breadcrumb,
-    headerContent: `Configure CLI tools to use 9Router\nEndpoint: ${endpoint}`,
+    headerContent: `Configure CLI tools to use Ryo\nEndpoint: ${endpoint}`,
     items: [
       {
         label: "Claude Code",

@@ -5,7 +5,7 @@ import { HTTP_STATUS } from "../../config/runtimeConfig.js";
 import { FORMATS } from "../../translator/formats.js";
 import { openAICompletionToClaudeMessage } from "../../translator/concerns/claudeMessage.js";
 import { PROVIDERS } from "../../config/providers.js";
-import { buildRequestDetail, extractRequestConfig, saveUsageStats, formatDoneLine } from "./requestDetail.js";
+import { buildRequestDetail, extractRequestConfig, saveUsageStats, formatDoneLine, requestObservability } from "./requestDetail.js";
 import { ROLE, RESPONSES_ITEM } from "../../translator/schema/index.js";
 import { extractReasoningText } from "../../translator/concerns/reasoning.js";
 
@@ -194,7 +194,7 @@ export async function handleForcedSSEToJson({ providerResponse, sourceFormat, ta
   trackDone();
 
   const ctx = {
-    provider, model, connectionId,
+    provider, model, connectionId, clientRawRequest,
     request: extractRequestConfig(body, stream),
     providerRequest: finalBody || translatedBody || null
   };
@@ -211,8 +211,16 @@ export async function handleForcedSSEToJson({ providerResponse, sourceFormat, ta
 
       const usage = jsonResponse.usage || {};
       appendLog({ tokens: usage, status: "200 OK" });
-      saveUsageStats({ provider, model, tokens: usage, connectionId, apiKey, endpoint: clientRawRequest?.endpoint, silent: true });
-      if (log?.line) log.line(reqTag, "📊", formatDoneLine({ usage, latency: { total: Date.now() - requestStartTime } }));
+      // Forced non-streaming: the whole converted stream IS the first byte, so
+      // ttft equals total here.
+      const totalLatency = Date.now() - requestStartTime;
+      saveUsageStats({
+        provider, model, tokens: usage, connectionId, apiKey,
+        endpoint: clientRawRequest?.endpoint, silent: true,
+        latency: { ttft: totalLatency, total: totalLatency },
+        ...requestObservability(clientRawRequest),
+      });
+      if (log?.line) log.line(reqTag, "📊", formatDoneLine({ usage, latency: { total: totalLatency } }));
 
       // Same cache-inclusive total for the recorded detail, so the DB and the
       // client-facing usage can never disagree.
@@ -220,7 +228,6 @@ export async function handleForcedSSEToJson({ providerResponse, sourceFormat, ta
         + (usage.cache_read_input_tokens || usage.cached_tokens || 0)
         + (usage.cache_creation_input_tokens || 0);
       const { msgItem, textContent } = pickAssistantMessageForChatCompletion(jsonResponse.output);
-      const totalLatency = Date.now() - requestStartTime;
 
       saveRequestDetail(buildRequestDetail({
         ...ctx,
@@ -323,10 +330,16 @@ export async function handleForcedSSEToJson({ providerResponse, sourceFormat, ta
 
     const usage = parsed.usage || {};
     appendLog({ tokens: usage, status: "200 OK" });
-    saveUsageStats({ provider, model, tokens: usage, connectionId, apiKey, endpoint: clientRawRequest?.endpoint, silent: true });
-    if (log?.line) log.line(reqTag, "📊", formatDoneLine({ usage, latency: { total: Date.now() - requestStartTime } }));
-
+    // Forced non-streaming: ttft equals total (no client-visible first chunk).
     const totalLatency = Date.now() - requestStartTime;
+    saveUsageStats({
+      provider, model, tokens: usage, connectionId, apiKey,
+      endpoint: clientRawRequest?.endpoint, silent: true,
+      latency: { ttft: totalLatency, total: totalLatency },
+      ...requestObservability(clientRawRequest),
+    });
+    if (log?.line) log.line(reqTag, "📊", formatDoneLine({ usage, latency: { total: totalLatency } }));
+
     saveRequestDetail(buildRequestDetail({
       ...ctx,
       latency: { ttft: totalLatency, total: totalLatency },

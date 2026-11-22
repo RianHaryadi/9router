@@ -2,6 +2,9 @@
 
 import { NextResponse } from "next/server";
 import { resolveCliApiKey } from "../resolveApiKey.js";
+import { ALIAS_TO_ID } from "@/shared/constants/providers";
+import { PROVIDER_ID_TO_ALIAS } from "@/shared/constants/models";
+import { getThinkingLevels } from "open-sse/providers/thinkingLevels.js";
 import { exec } from "child_process";
 import { promisify } from "util";
 import fs from "fs/promises";
@@ -12,6 +15,23 @@ const execAsync = promisify(exec);
 
 const getConfigDir = () => path.join(os.homedir(), ".config", "opencode");
 const getConfigPath = () => path.join(getConfigDir(), "opencode.json");
+
+const ALIAS_TO_PROVIDER_ID = {
+  ...Object.fromEntries(Object.entries(PROVIDER_ID_TO_ALIAS).map(([id, alias]) => [alias, id])),
+  ...ALIAS_TO_ID,
+};
+
+// opencode "variants" built from the levels Ryo itself offers for a model
+// ("alias/model" → same set as the dashboard picker). Returns null when the
+// model has no reasoning levels, so nothing is written for it.
+const buildEffortVariants = (fullModelId) => {
+  const slash = fullModelId.indexOf("/");
+  if (slash <= 0) return null;
+  const alias = fullModelId.slice(0, slash);
+  const levels = getThinkingLevels(ALIAS_TO_PROVIDER_ID[alias] || alias, fullModelId.slice(slash + 1));
+  if (!Array.isArray(levels) || levels.length === 0) return null;
+  return Object.fromEntries(levels.map((level) => [level, { reasoningEffort: level }]));
+};
 
 // Check if opencode CLI is installed (via which/where or config file exists)
 const checkOpenCodeInstalled = async () => {
@@ -88,7 +108,7 @@ export async function GET() {
   }
 }
 
-// POST - Apply 9Router as openai-compatible provider (multi-model support)
+// POST - Apply Ryo as openai-compatible provider (multi-model support)
 export async function POST(request) {
   try {
     const { baseUrl, apiKey, model, models, activeModel, subagentModel } = await request.json();
@@ -119,7 +139,7 @@ export async function POST(request) {
     // Ensure provider object
     if (!config.provider) config.provider = {};
 
-    // Preserve any existing 9router provider entry and its models
+    // Preserve any existing Ryo provider entry and its models
     const existingProvider = config.provider["9router"] || { npm: "@ai-sdk/openai-compatible", options: {}, models: {} };
 
     // Merge options (overwrite baseURL/apiKey)
@@ -135,7 +155,11 @@ export async function POST(request) {
     // Add or update entries for all requested models
     for (const m of modelsArray) {
       if (!m || typeof m !== "string") continue;
-      existingProvider.models[m] = { name: m, modalities: { input: ["text", "image"], output: ["text"] } };
+      const entry = { name: m, modalities: { input: ["text", "image"], output: ["text"] } };
+      // Keep variants the user already tuned; only generate them when absent.
+      const variants = existingProvider.models[m]?.variants || buildEffortVariants(m);
+      if (variants) entry.variants = variants;
+      existingProvider.models[m] = entry;
     }
 
     // Save merged provider back
@@ -209,7 +233,7 @@ export async function PATCH(request) {
   }
 }
 
-// DELETE - Remove 9Router provider or specific models from config
+// DELETE - Remove Ryo provider or specific models from config
 export async function DELETE(request) {
   try {
     const { searchParams } = new URL(request.url);
@@ -241,7 +265,7 @@ export async function DELETE(request) {
         config.model = `9router/${remainingModels[0]}`;
       }
     } else {
-      // No specific model - remove entire 9router provider
+      // No specific model - remove entire Ryo provider
       if (config.provider) delete config.provider["9router"];
       if (config.model?.startsWith("9router/")) delete config.model;
     }
@@ -257,7 +281,7 @@ export async function DELETE(request) {
 
     return NextResponse.json({
       success: true,
-      message: modelToRemove ? `Model "${modelToRemove}" removed` : "9Router settings removed from OpenCode",
+      message: modelToRemove ? `Model "${modelToRemove}" removed` : "Ryo settings removed from OpenCode",
     });
   } catch (error) {
     console.log("Error resetting opencode settings:", error);

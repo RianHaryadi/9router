@@ -44,7 +44,7 @@ export default function HermesToolCard({
   const [activeProfile, setActiveProfile] = useState("default");
   const [applyingAll, setApplyingAll] = useState(false);
   const [copiedCommand, setCopiedCommand] = useState("");
-  // Audio transcription via 9router: stt.provider "openai" + base_url override points
+  // Audio transcription via Ryo: stt.provider "openai" + base_url override points
   // Hermes' speech-to-text at /v1/audio/transcriptions (per-profile, saved with Apply).
   const [audioEnabled, setAudioEnabled] = useState(false);
   const [sttModel, setSttModel] = useState("");
@@ -70,9 +70,9 @@ export default function HermesToolCard({
   };
 
   const STATUS_DOT = {
-    configured: "bg-green-500",
-    other: "bg-blue-500",
-    not_configured: "bg-yellow-500",
+    configured: "bg-success",
+    other: "bg-info",
+    not_configured: "bg-warning",
   };
   const STATUS_LABEL = {
     configured: "Connected",
@@ -238,7 +238,7 @@ export default function HermesToolCard({
   };
 
   // Endpoint + API key across every profile. Each profile keeps its own model — only
-  // profiles already routed through 9router are refreshed, the rest are reported.
+  // profiles already routed through Ryo are refreshed, the rest are reported.
   // The endpoint field mirrors whatever the active profile currently points at, so it can
   // hold a foreign provider URL (openrouter, ...) — propagating that to every profile would
   // be a mistake, hence the known-endpoint guard.
@@ -250,7 +250,7 @@ export default function HermesToolCard({
     if (!isKnown) {
       setMessage({
         type: "error",
-        text: `"${endpoint}" is not a 9router endpoint. Select the local, tunnel, Tailscale or a saved 9router endpoint before applying to all profiles.`,
+        text: `"${endpoint}" is not a Ryo endpoint. Select the local, tunnel, Tailscale or a saved Ryo endpoint before applying to all profiles.`,
       });
       return;
     }
@@ -376,11 +376,11 @@ export default function HermesToolCard({
           <div className="min-w-0">
             <div className="flex min-w-0 flex-wrap items-center gap-2">
               <h3 className="font-medium text-sm">{tool.name}</h3>
-              {configStatus === "configured" && <span className="px-1.5 py-0.5 text-[10px] font-medium bg-green-500/10 text-green-600 dark:text-green-400 rounded-full">Connected</span>}
-              {configStatus === "not_configured" && <span className="px-1.5 py-0.5 text-[10px] font-medium bg-yellow-500/10 text-yellow-600 dark:text-yellow-400 rounded-full">Not configured</span>}
-              {configStatus === "other" && <span className="px-1.5 py-0.5 text-[10px] font-medium bg-blue-500/10 text-blue-600 dark:text-blue-400 rounded-full">Other</span>}
+              {configStatus === "configured" && <span className="px-1.5 py-0.5 text-[10px] font-medium bg-success/10 text-success rounded-full">Connected</span>}
+              {configStatus === "not_configured" && <span className="px-1.5 py-0.5 text-[10px] font-medium bg-warning/10 text-warning rounded-full">Not configured</span>}
+              {configStatus === "other" && <span className="px-1.5 py-0.5 text-[10px] font-medium bg-info/10 text-info rounded-full">Other</span>}
               {activeProfile !== "default" && (
-                <span className="px-1.5 py-0.5 text-[10px] font-medium bg-primary/10 text-primary rounded-full font-mono" title="Hermes profile shown below">{activeProfile}</span>
+                <span className="px-1.5 py-0.5 text-[10px] font-medium bg-brand-300/25 text-brand-700 dark:text-brand-300 rounded-full font-mono" title="Hermes profile shown below">{activeProfile}</span>
               )}
             </div>
             <p className="text-xs text-text-muted truncate">{tool.description}</p>
@@ -390,7 +390,7 @@ export default function HermesToolCard({
       </div>
 
       {isExpanded && (
-        <div className="mt-4 pt-4 border-t border-border flex flex-col gap-4">
+        <div className="mt-4 pt-4 border-t-2 border-ink flex flex-col gap-4">
           {checking && (
             <div className="flex items-center gap-2 text-text-muted">
               <span className="material-symbols-outlined animate-spin">progress_activity</span>
@@ -400,16 +400,16 @@ export default function HermesToolCard({
 
           {!checking && hermesStatus && !hermesStatus.installed && (
             <div className="flex flex-col gap-4">
-              <div className="flex flex-col gap-3 p-4 bg-yellow-500/10 border border-yellow-500/30 rounded-lg">
+              <div className="flex flex-col gap-3 p-4 bg-warning/10 border border-warning/30 rounded-lg">
                 <div className="flex items-start gap-3">
-                  <span className="material-symbols-outlined text-yellow-500">warning</span>
+                  <span className="material-symbols-outlined text-warning">warning</span>
                   <div className="flex-1">
-                    <p className="font-medium text-yellow-600 dark:text-yellow-400">Hermes Agent not detected locally</p>
+                    <p className="font-medium text-warning dark:text-warning">Hermes Agent not detected locally</p>
                     <p className="text-sm text-text-muted">Install: curl -fsSL https://raw.githubusercontent.com/NousResearch/hermes-agent/main/scripts/install.sh | bash</p>
                   </div>
                 </div>
                 <div className="flex flex-col sm:flex-row sm:items-center gap-2 pl-0 sm:pl-9">
-                  <Button variant="secondary" size="sm" onClick={() => setShowManualConfigModal(true)} className="w-full sm:w-auto !bg-yellow-500/20 !border-yellow-500/40 !text-yellow-700 dark:!text-yellow-300 hover:!bg-yellow-500/30">
+                  <Button variant="secondary" size="sm" onClick={() => setShowManualConfigModal(true)} className="w-full sm:w-auto !bg-warning/20 !border-warning/40 !text-warning dark:!text-warning hover:!bg-warning/30">
                     <span className="material-symbols-outlined text-[18px] mr-1">content_copy</span>
                     Manual Config
                   </Button>
@@ -434,7 +434,7 @@ export default function HermesToolCard({
                           title={p.isDefault ? `Default profile — ${STATUS_LABEL[status]}` : `${p.command} — ${STATUS_LABEL[status]}`}
                           className={`flex items-center gap-1.5 px-2 py-1 rounded border text-xs transition-colors ${
                             active
-                              ? "border-primary bg-primary/10 text-primary cursor-pointer"
+                              ? "border-brand-600 dark:border-brand-300/60 bg-brand-300/25 text-brand-700 dark:text-brand-300 cursor-pointer"
                               : "bg-surface border-border text-text-muted hover:text-text-main hover:border-border-hover cursor-pointer"
                           }`}
                         >
@@ -454,7 +454,7 @@ export default function HermesToolCard({
                       onClick={() => copyCommand(profiles.find((p) => p.name === activeProfile)?.command || "hermes")}
                       className={`p-0.5 rounded transition-colors ${
                         copiedCommand === (profiles.find((p) => p.name === activeProfile)?.command || "hermes")
-                          ? "text-green-600"
+                          ? "text-success"
                           : "text-text-muted hover:text-text-main"
                       }`}
                       title="Copy command"
@@ -504,18 +504,18 @@ export default function HermesToolCard({
                   <span className="text-xs font-semibold text-text-main sm:text-right sm:text-sm">Default Model</span>
                   <span className="material-symbols-outlined hidden text-text-muted text-[14px] sm:inline">arrow_forward</span>
                   <div className="relative w-full min-w-0">
-                    <input type="text" value={selectedModel} onChange={(e) => setSelectedModel(e.target.value)} placeholder="provider/model-id" className="w-full min-w-0 pl-2 pr-7 py-2 bg-surface rounded border border-border text-xs focus:outline-none focus:ring-1 focus:ring-primary/50 sm:py-1.5" />
-                    {selectedModel && <button onClick={() => setSelectedModel("")} className="absolute right-1 top-1/2 -translate-y-1/2 p-0.5 text-text-muted hover:text-red-500 rounded transition-colors" title="Clear"><span className="material-symbols-outlined text-[14px]">close</span></button>}
+                    <input type="text" value={selectedModel} onChange={(e) => setSelectedModel(e.target.value)} placeholder="provider/model-id" className="w-full min-w-0 pl-2 pr-7 py-2 bg-surface rounded border-2 border-ink text-xs focus:outline-none focus:ring-1 focus:ring-brand-600 dark:ring-brand-300/50 sm:py-1.5" />
+                    {selectedModel && <button onClick={() => setSelectedModel("")} className="absolute right-1 top-1/2 -translate-y-1/2 p-0.5 text-text-muted hover:text-danger rounded transition-colors" title="Clear"><span className="material-symbols-outlined text-[14px]">close</span></button>}
                   </div>
-                  <button onClick={() => openModelModal("default")} disabled={!hasActiveProviders} className={`w-full sm:w-auto rounded border px-2 py-2 text-xs transition-colors sm:py-1.5 whitespace-nowrap sm:shrink-0 ${hasActiveProviders ? "bg-surface border-border text-text-main hover:border-primary cursor-pointer" : "opacity-50 cursor-not-allowed border-border"}`}>Select</button>
+                  <button onClick={() => openModelModal("default")} disabled={!hasActiveProviders} className={`w-full sm:w-auto rounded border px-2 py-2 text-xs transition-colors sm:py-1.5 whitespace-nowrap sm:shrink-0 ${hasActiveProviders ? "bg-surface border-border text-text-main hover:border-brand-600 dark:border-brand-300/60 cursor-pointer" : "opacity-50 cursor-not-allowed border-border"}`}>Select</button>
                 </div>
 
                 <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-[8rem_auto_1fr_auto] sm:items-center sm:gap-2">
                   <span className="text-xs font-semibold text-text-main sm:text-right sm:text-sm">Audio STT</span>
                   <span className="material-symbols-outlined hidden text-text-muted text-[14px] sm:inline">arrow_forward</span>
-                  <label className="flex items-center gap-2 text-xs text-text-muted cursor-pointer" title="Route Hermes voice & audio transcription through 9router's /v1/audio/transcriptions — usage is tracked on this instance">
+                  <label className="flex items-center gap-2 text-xs text-text-muted cursor-pointer" title="Route Hermes voice & audio transcription through Ryo's /v1/audio/transcriptions — usage is tracked on this instance">
                     <input type="checkbox" checked={audioEnabled} onChange={(e) => setAudioEnabled(e.target.checked)} className="w-3.5 h-3.5 accent-primary cursor-pointer shrink-0" />
-                    <span>Transcribe voice &amp; audio via 9router (per-profile)</span>
+                    <span>Transcribe voice &amp; audio via Ryo (per-profile)</span>
                   </label>
                   <span />
                 </div>
@@ -525,15 +525,15 @@ export default function HermesToolCard({
                     <span className="text-xs font-semibold text-text-main sm:text-right sm:text-sm">STT Model</span>
                     <span className="material-symbols-outlined hidden text-text-muted text-[14px] sm:inline">arrow_forward</span>
                     <div className="relative w-full min-w-0">
-                      <input type="text" value={sttModel} onChange={(e) => setSttModel(e.target.value)} placeholder="provider/whisper-model-id" className="w-full min-w-0 pl-2 pr-7 py-2 bg-surface rounded border border-border text-xs focus:outline-none focus:ring-1 focus:ring-primary/50 sm:py-1.5" />
-                      {sttModel && <button onClick={() => setSttModel("")} className="absolute right-1 top-1/2 -translate-y-1/2 p-0.5 text-text-muted hover:text-red-500 rounded transition-colors" title="Clear"><span className="material-symbols-outlined text-[14px]">close</span></button>}
+                      <input type="text" value={sttModel} onChange={(e) => setSttModel(e.target.value)} placeholder="provider/whisper-model-id" className="w-full min-w-0 pl-2 pr-7 py-2 bg-surface rounded border-2 border-ink text-xs focus:outline-none focus:ring-1 focus:ring-brand-600 dark:ring-brand-300/50 sm:py-1.5" />
+                      {sttModel && <button onClick={() => setSttModel("")} className="absolute right-1 top-1/2 -translate-y-1/2 p-0.5 text-text-muted hover:text-danger rounded transition-colors" title="Clear"><span className="material-symbols-outlined text-[14px]">close</span></button>}
                     </div>
-                    <button onClick={() => openModelModal("stt")} disabled={!hasActiveProviders} className={`w-full sm:w-auto rounded border px-2 py-2 text-xs transition-colors sm:py-1.5 whitespace-nowrap sm:shrink-0 ${hasActiveProviders ? "bg-surface border-border text-text-main hover:border-primary cursor-pointer" : "opacity-50 cursor-not-allowed border-border"}`}>Select</button>
+                    <button onClick={() => openModelModal("stt")} disabled={!hasActiveProviders} className={`w-full sm:w-auto rounded border px-2 py-2 text-xs transition-colors sm:py-1.5 whitespace-nowrap sm:shrink-0 ${hasActiveProviders ? "bg-surface border-border text-text-main hover:border-brand-600 dark:border-brand-300/60 cursor-pointer" : "opacity-50 cursor-not-allowed border-border"}`}>Select</button>
                   </div>
                 )}
 
                 <details className="group">
-                  <summary className="cursor-pointer select-none text-xs font-semibold text-text-main hover:text-primary transition-colors">
+                  <summary className="cursor-pointer select-none text-xs font-semibold text-text-main hover:text-brand-700 dark:text-brand-300 transition-colors">
                     <span className="material-symbols-outlined align-middle text-[16px] text-text-muted group-open:rotate-90 transition-transform">chevron_right</span>
                     Model Roles (optional)
                   </summary>
@@ -548,12 +548,12 @@ export default function HermesToolCard({
                             value={roleModels[role.id] || ""}
                             onChange={(e) => setRoleModels((prev) => ({ ...prev, [role.id]: e.target.value }))}
                             placeholder="inherit default"
-                            className="w-full min-w-0 pl-2 pr-7 py-2 bg-surface rounded border border-border text-xs focus:outline-none focus:ring-1 focus:ring-primary/50 sm:py-1.5"
+                            className="w-full min-w-0 pl-2 pr-7 py-2 bg-surface rounded border-2 border-ink text-xs focus:outline-none focus:ring-1 focus:ring-brand-600 dark:ring-brand-300/50 sm:py-1.5"
                           />
                           {roleModels[role.id] && (
                             <button
                               onClick={() => setRoleModels((prev) => ({ ...prev, [role.id]: "" }))}
-                              className="absolute right-1 top-1/2 -translate-y-1/2 p-0.5 text-text-muted hover:text-red-500 rounded transition-colors"
+                              className="absolute right-1 top-1/2 -translate-y-1/2 p-0.5 text-text-muted hover:text-danger rounded transition-colors"
                               title="Clear"
                             >
                               <span className="material-symbols-outlined text-[14px]">close</span>
@@ -563,7 +563,7 @@ export default function HermesToolCard({
                         <button
                           onClick={() => openModelModal(role.id)}
                           disabled={!hasActiveProviders}
-                          className={`w-full sm:w-auto rounded border px-2 py-2 text-xs transition-colors sm:py-1.5 whitespace-nowrap sm:shrink-0 ${hasActiveProviders ? "bg-surface border-border text-text-main hover:border-primary cursor-pointer" : "opacity-50 cursor-not-allowed border-border"}`}
+                          className={`w-full sm:w-auto rounded border px-2 py-2 text-xs transition-colors sm:py-1.5 whitespace-nowrap sm:shrink-0 ${hasActiveProviders ? "bg-surface border-border text-text-main hover:border-brand-600 dark:border-brand-300/60 cursor-pointer" : "opacity-50 cursor-not-allowed border-border"}`}
                         >
                           Select
                         </button>
@@ -575,7 +575,7 @@ export default function HermesToolCard({
               </div>
 
               {message && (
-                <div className={`flex items-center gap-2 px-2 py-1.5 rounded text-xs ${message.type === "success" ? "bg-green-500/10 text-green-600" : "bg-red-500/10 text-red-600"}`}>
+                <div className={`flex items-center gap-2 px-2 py-1.5 rounded text-xs ${message.type === "success" ? "bg-success/10 text-success" : "bg-danger/10 text-danger"}`}>
                   <span className="material-symbols-outlined text-[14px]">{message.type === "success" ? "check_circle" : "error"}</span>
                   <span>{message.text}</span>
                 </div>
@@ -591,7 +591,7 @@ export default function HermesToolCard({
                     size="sm"
                     onClick={handleApplyAll}
                     loading={applyingAll}
-                    title="Set the endpoint and API key on every profile that routes through 9router. Each profile keeps its own model."
+                    title="Set the endpoint and API key on every profile that routes through Ryo. Each profile keeps its own model."
                     className="w-full sm:w-auto"
                   >
                     <span className="material-symbols-outlined text-[14px] mr-1">groups</span>Apply to All Profiles
@@ -618,7 +618,7 @@ export default function HermesToolCard({
           activeProviders={activeProviders}
           modelAliases={modelAliases}
           kindFilter={modalTarget === "stt" ? "stt" : undefined}
-          title={modalTarget === "stt" ? "Select STT Model — audio transcription via 9router" : `Select Model for Hermes Agent${modalTarget !== "default" ? ` — ${HERMES_ROLES.find((r) => r.id === modalTarget)?.label || modalTarget}` : ""}`}
+          title={modalTarget === "stt" ? "Select STT Model — audio transcription via Ryo" : `Select Model for Hermes Agent${modalTarget !== "default" ? ` — ${HERMES_ROLES.find((r) => r.id === modalTarget)?.label || modalTarget}` : ""}`}
         />
       )}
 

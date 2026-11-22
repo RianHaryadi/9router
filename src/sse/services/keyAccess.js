@@ -70,6 +70,17 @@ export function extractClientApiKey(request) {
 export async function getKeyAccessContext(request) {
   const apiKey = extractClientApiKey(request);
   if (!apiKey) return null;
+  return accessContextForKey(apiKey);
+}
+
+/**
+ * The access context of one key.
+ *
+ * @param {string} apiKey - the raw key (server-side only)
+ * @returns {Promise<object|null>} null when the key is unknown or unrestricted
+ */
+export async function accessContextForKey(apiKey) {
+  if (!apiKey) return null;
   const record = await getApiKeyByKey(apiKey);
   if (!record?.access?.restricted) return null;
   return {

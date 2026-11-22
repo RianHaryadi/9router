@@ -35,11 +35,13 @@ describe("detectRequiredCapabilities", () => {
     expect(r.has("vision")).toBe(true);
   });
 
-  it("web_search tool -> search", () => {
+  it("web_search tool -> no search capability", () => {
+    // Search auto-switch is disabled on purpose (the feature is not wired yet);
+    // upstream recorded this as the current contract in decolua/9router#3665.
     const r = detectRequiredCapabilities({ messages: [{ role: "user", content: "q" }], tools: [
       { type: "web_search" },
     ] });
-    expect(r.has("search")).toBe(true);
+    expect(r.has("search")).toBe(false);
   });
 
   it("responses input_image -> vision", () => {
@@ -68,7 +70,11 @@ describe("reorderByCapabilities", () => {
   it("keeps order when no model matches", () => {
     const models = ["deepseek/deepseek-chat", "deepseek/deepseek-reasoner"];
     const out = reorderByCapabilities(models, new Set(["vision"]));
-    expect(out).toBe(models);
+    // Reorder returns a copy (upstream decolua/9router#3665): identity can never hold.
+    expect(out).toEqual(models);
+    // ...and the caller's array is never mutated.
+    expect(models).toEqual(["deepseek/deepseek-chat", "deepseek/deepseek-reasoner"]);
+    expect(out).not.toBe(models);
   });
 
   it("single model -> unchanged", () => {

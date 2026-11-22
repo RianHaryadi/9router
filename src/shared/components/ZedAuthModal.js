@@ -295,8 +295,8 @@ export default function ZedAuthModal({ isOpen, providerInfo, onSuccess, onClose 
     <Modal isOpen={isOpen} title={title} onClose={handleClose} size="lg">
       <div className="flex flex-col gap-4">
         {(phase === "booting" || phase === "importing") && (
-          <div className="flex items-center gap-2 px-3 py-2 border border-border rounded-lg bg-sidebar/50">
-            <span className="material-symbols-outlined text-base text-primary animate-spin">
+          <div className="flex items-center gap-2 px-3 py-2 border-2 border-ink rounded-lg bg-sidebar/50">
+            <span className="material-symbols-outlined text-base text-brand-700 dark:text-brand-300 animate-spin">
               progress_activity
             </span>
             <span className="text-sm">
@@ -309,12 +309,12 @@ export default function ZedAuthModal({ isOpen, providerInfo, onSuccess, onClose 
 
         {phase === "ide-found" && ideSession && (
           <div className="space-y-3">
-            <div className="bg-green-50 dark:bg-green-900/20 p-3 rounded-lg border border-green-200 dark:border-green-800">
+            <div className="bg-success p-3 rounded-lg border border-success dark:border-success">
               <div className="flex gap-2">
-                <span className="material-symbols-outlined text-green-600 dark:text-green-400">
+                <span className="material-symbols-outlined text-success dark:text-success">
                   check_circle
                 </span>
-                <p className="text-sm text-green-800 dark:text-green-200">
+                <p className="text-sm text-success dark:text-success">
                   Zed IDE session detected (user {ideSession.userId}). Import failed — retry or use browser sign-in below.
                 </p>
               </div>
@@ -326,15 +326,15 @@ export default function ZedAuthModal({ isOpen, providerInfo, onSuccess, onClose 
         )}
 
         {phase === "success" && (
-          <div className="bg-green-50 dark:bg-green-900/20 p-3 rounded-lg border border-green-200 dark:border-green-800 text-sm text-green-800 dark:text-green-200">
+          <div className="bg-success p-3 rounded-lg border border-success text-sm text-success dark:text-success">
             Connected successfully.
           </div>
         )}
 
         {showBrowserUi && (
           <>
-            <div className="flex items-center gap-2 px-3 py-2 border border-border rounded-lg bg-sidebar/50">
-              <span className="material-symbols-outlined text-base text-primary animate-spin">
+            <div className="flex items-center gap-2 px-3 py-2 border-2 border-ink rounded-lg bg-sidebar/50">
+              <span className="material-symbols-outlined text-base text-brand-700 dark:text-brand-300 animate-spin">
                 progress_activity
               </span>
               <span className="text-sm">Waiting for popup authorization…</span>
@@ -383,8 +383,8 @@ export default function ZedAuthModal({ isOpen, providerInfo, onSuccess, onClose 
             </div>
 
             {error && (
-              <div className="bg-red-50 dark:bg-red-900/20 p-3 rounded-lg border border-red-200 dark:border-red-800">
-                <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
+              <div className="bg-danger p-3 rounded-lg border border-danger dark:border-danger">
+                <p className="text-sm text-danger dark:text-danger">{error}</p>
               </div>
             )}
 

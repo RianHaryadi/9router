@@ -14,7 +14,7 @@ import {
 } from "recharts";
 import Card from "@/shared/components/Card";
 
-const COLORS = ["#6366f1", "#14b8a6", "#f59e0b", "#ef4444", "#8b5cf6"];
+const COLORS = ["var(--chart-1)", "var(--chart-2)", "var(--chart-3)", "var(--chart-4)", "var(--chart-5)"];
 
 const fmtTokens = (n) => {
   if (n >= 1000000) return `${(n / 1000000).toFixed(1)}M`;
@@ -47,16 +47,16 @@ export default function TopModelsChart({ byModel }) {
     <Card className="flex min-w-0 flex-col gap-3 p-3 sm:p-4">
       <div className="flex items-center justify-between gap-2">
         <span className="text-sm font-semibold text-text-muted uppercase tracking-wide">Top Models</span>
-        <div className="grid grid-cols-2 items-center gap-1 rounded-lg border border-border bg-bg-subtle p-1">
+        <div className="grid grid-cols-2 items-center gap-1 rounded-[12px] border-2 border-ink bg-bg-subtle p-1">
           <button
             onClick={() => setViewMode("tokens")}
-            className={`px-2.5 py-0.5 rounded-md text-xs font-medium transition-colors ${viewMode === "tokens" ? "bg-primary text-white shadow-sm" : "text-text-muted hover:text-text hover:bg-bg-hover"}`}
+            className={`px-2.5 py-0.5 rounded-[12px] text-xs font-medium transition-colors ${viewMode === "tokens" ? "bg-ink text-[#FAF7F0] shadow-[3px_3px_0_0_var(--color-shadow)]" : "text-text-muted hover:text-text hover:bg-bg-hover"}`}
           >
             Tokens
           </button>
           <button
             onClick={() => setViewMode("requests")}
-            className={`px-2.5 py-0.5 rounded-md text-xs font-medium transition-colors ${viewMode === "requests" ? "bg-primary text-white shadow-sm" : "text-text-muted hover:text-text hover:bg-bg-hover"}`}
+            className={`px-2.5 py-0.5 rounded-[12px] text-xs font-medium transition-colors ${viewMode === "requests" ? "bg-ink text-[#FAF7F0] shadow-[3px_3px_0_0_var(--color-shadow)]" : "text-text-muted hover:text-text hover:bg-bg-hover"}`}
           >
             Requests
           </button>

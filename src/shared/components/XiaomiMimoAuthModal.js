@@ -190,10 +190,10 @@ export default function XiaomiMimoAuthModal({ isOpen, onSuccess, onClose }) {
 
   // The server-login card, shown in both the found and not-found states
   const renderServerLogin = () => (
-    <div className="bg-card p-3 rounded-lg border border-border flex flex-col gap-2">
+    <div className="bg-card p-3 rounded-lg border-2 border-ink flex flex-col gap-2">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-1.5">
-          <span className="material-symbols-outlined text-primary text-base">login</span>
+          <span className="material-symbols-outlined text-brand-700 dark:text-brand-300 text-base">login</span>
           <span className="text-xs sm:text-sm font-semibold">Browser Login</span>
           <span className="text-[11px] text-text-muted">No Desktop required</span>
         </div>
@@ -220,7 +220,7 @@ export default function XiaomiMimoAuthModal({ isOpen, onSuccess, onClose }) {
           {sessBusy ? "Starting..." : "Choose cluster & sign in"}
         </Button>
       )}
-      {sessError && <p className="text-[11px] text-red-500">{translate(sessError)}</p>}
+      {sessError && <p className="text-[11px] text-danger">{translate(sessError)}</p>}
     </div>
   );
 
@@ -230,8 +230,8 @@ export default function XiaomiMimoAuthModal({ isOpen, onSuccess, onClose }) {
         {/* Detecting */}
         {phase === "detecting" && (
           <div className="text-center py-6">
-            <div className="size-12 mx-auto mb-3 rounded-full bg-primary/10 flex items-center justify-center">
-              <span className="material-symbols-outlined text-2xl text-primary animate-spin">
+            <div className="size-12 mx-auto mb-3 rounded-full bg-brand-300/25 flex items-center justify-center">
+              <span className="material-symbols-outlined text-2xl text-brand-700 dark:text-brand-300 animate-spin">
                 progress_activity
               </span>
             </div>
@@ -242,8 +242,8 @@ export default function XiaomiMimoAuthModal({ isOpen, onSuccess, onClose }) {
         {/* Importing */}
         {phase === "importing" && (
           <div className="text-center py-6">
-            <div className="size-12 mx-auto mb-3 rounded-full bg-primary/10 flex items-center justify-center">
-              <span className="material-symbols-outlined text-2xl text-primary animate-spin">
+            <div className="size-12 mx-auto mb-3 rounded-full bg-brand-300/25 flex items-center justify-center">
+              <span className="material-symbols-outlined text-2xl text-brand-700 dark:text-brand-300 animate-spin">
                 progress_activity
               </span>
             </div>
@@ -255,17 +255,17 @@ export default function XiaomiMimoAuthModal({ isOpen, onSuccess, onClose }) {
         {phase === "found" && detectResult && (
           <div className="flex flex-col gap-3">
             <div className="flex items-center gap-1.5 text-xs font-semibold text-text-muted px-0.5">
-              <span className="material-symbols-outlined text-primary text-sm">desktop_windows</span>
+              <span className="material-symbols-outlined text-brand-700 dark:text-brand-300 text-sm">desktop_windows</span>
               <span>Desktop Plan · Local credentials</span>
             </div>
 
             {existingConnection ? (
-              <div className="bg-blue-50 dark:bg-blue-900/20 p-3 rounded-lg border border-blue-200 dark:border-blue-800">
+              <div className="bg-info p-3 rounded-lg border border-info dark:border-info">
                 <div className="flex gap-2.5 items-start">
-                  <span className="material-symbols-outlined text-blue-600 dark:text-blue-400 text-lg mt-0.5">
+                  <span className="material-symbols-outlined text-info text-lg mt-0.5">
                     check_circle
                   </span>
-                  <div className="text-sm text-blue-800 dark:text-blue-200">
+                  <div className="text-sm text-info dark:text-info">
                     <p className="font-medium">This account is already connected (no need to import again)</p>
                     <p className="text-xs mt-0.5 opacity-80">
                       UID: {detectResult.uid || "—"} · Status: {existingConnection.testStatus === "active" ? "Active" : "Untested"}
@@ -274,12 +274,12 @@ export default function XiaomiMimoAuthModal({ isOpen, onSuccess, onClose }) {
                 </div>
               </div>
             ) : (
-              <div className="bg-green-50 dark:bg-green-900/20 p-3 rounded-lg border border-green-200 dark:border-green-800">
+              <div className="bg-success p-3 rounded-lg border border-success dark:border-success">
                 <div className="flex gap-2.5 items-start">
-                  <span className="material-symbols-outlined text-green-600 dark:text-green-400 text-lg mt-0.5">
+                  <span className="material-symbols-outlined text-success text-lg mt-0.5">
                     check_circle
                   </span>
-                  <div className="text-sm text-green-800 dark:text-green-200">
+                  <div className="text-sm text-success dark:text-success">
                     <p className="font-medium">Xiaomi MiMo Desktop credentials found!</p>
                     <p className="text-xs mt-0.5 opacity-80">
                       UID: {detectResult.uid || "—"} · Source: {detectResult.source?.split(/[\\/]/).pop()}
@@ -290,8 +290,8 @@ export default function XiaomiMimoAuthModal({ isOpen, onSuccess, onClose }) {
             )}
 
             {error && (
-              <div className="bg-red-50 dark:bg-red-900/20 p-2.5 rounded-lg border border-red-200 dark:border-red-800">
-                <p className="text-xs text-red-600 dark:text-red-400">{translate(error)}</p>
+              <div className="bg-danger p-2.5 rounded-lg border border-danger dark:border-danger">
+                <p className="text-xs text-danger dark:text-danger">{translate(error)}</p>
               </div>
             )}
 
@@ -306,7 +306,7 @@ export default function XiaomiMimoAuthModal({ isOpen, onSuccess, onClose }) {
 
             <div className="relative my-1">
               <div className="absolute inset-0 flex items-center">
-                <div className="w-full border-t border-border" />
+                <div className="w-full border-t-2 border-ink" />
               </div>
               <div className="relative flex justify-center text-xs text-text-muted">
                 <span className="bg-card px-2">or</span>
@@ -320,10 +320,10 @@ export default function XiaomiMimoAuthModal({ isOpen, onSuccess, onClose }) {
         {/* No local desktop credentials */}
         {phase === "not-found" && (
           <div className="flex flex-col gap-3">
-            <div className="bg-amber-50 dark:bg-amber-900/20 p-3 rounded-lg border border-amber-200 dark:border-amber-800">
+            <div className="bg-warning p-3 rounded-lg border border-warning dark:border-warning">
               <div className="flex gap-2.5 items-start">
-                <span className="material-symbols-outlined text-amber-600 dark:text-amber-400 text-lg mt-0.5">info</span>
-                <div className="text-sm text-amber-800 dark:text-amber-200">
+                <span className="material-symbols-outlined text-warning text-lg mt-0.5">info</span>
+                <div className="text-sm text-warning dark:text-warning">
                   <p className="font-medium">No local Desktop credentials found</p>
                   <p className="text-xs mt-0.5 opacity-80">
                     You can still sign in via browser — no Desktop client needed.
@@ -345,10 +345,10 @@ export default function XiaomiMimoAuthModal({ isOpen, onSuccess, onClose }) {
         {/* Cluster selection sub-modal */}
         {showClusterModal && (
           <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-150">
-            <div className="relative w-full max-w-sm bg-surface border border-border-subtle rounded-[14px] shadow-2xl p-5 flex flex-col gap-3.5 animate-in zoom-in-95 duration-150">
+            <div className="relative w-full max-w-sm bg-surface border-2 border-ink/15 rounded-[12px] shadow-2xl p-5 flex flex-col gap-3.5 animate-in zoom-in-95 duration-150">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <span className="material-symbols-outlined text-primary text-lg">public</span>
+                  <span className="material-symbols-outlined text-brand-700 dark:text-brand-300 text-lg">public</span>
                   <h3 className="text-sm font-semibold">Select account cluster</h3>
                 </div>
                 <button
@@ -368,11 +368,11 @@ export default function XiaomiMimoAuthModal({ isOpen, onSuccess, onClose }) {
                     key={c.id}
                     type="button"
                     onClick={() => startSessionLogin(c.id)}
-                    className="p-3 rounded-lg border border-border hover:border-primary hover:bg-primary/5 transition-all text-left flex items-start gap-3 group cursor-pointer"
+                    className="p-3 rounded-lg border-2 border-ink hover:border-brand-600 dark:border-brand-300/60 hover:bg-brand-300/15 transition-all text-left flex items-start gap-3 group cursor-pointer"
                   >
                     <span className="text-2xl mt-0.5">{c.flag}</span>
                     <div className="flex-1 min-w-0">
-                      <div className="text-sm font-semibold group-hover:text-primary transition-colors">
+                      <div className="text-sm font-semibold group-hover:text-brand-700 dark:text-brand-300 transition-colors">
                         {c.name}
                       </div>
                       <div className="text-xs text-text-muted mt-0.5">{c.host}</div>

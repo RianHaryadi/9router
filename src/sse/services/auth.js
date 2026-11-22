@@ -4,6 +4,8 @@ import { formatRetryAfter, checkFallbackError, isModelLockActive, buildModelLock
 import { MAX_RATE_LIMIT_COOLDOWN_MS } from "open-sse/config/errorConfig.js";
 import { resolveProviderId, FREE_PROVIDERS } from "@/shared/constants/providers.js";
 import { getAntigravityQuotaCache, getAntigravityModelQuota } from "./antigravityQuota.js";
+import { filterByHealth } from "./healthBreaker.js";
+import { classifyError } from "@/custom/guard/errorTaxonomy.js";
 import * as log from "../utils/logger.js";
 
 // Mutex to prevent race conditions during account selection
@@ -84,7 +86,7 @@ export async function getProviderCredentials(provider, excludeConnectionIds = nu
     const antigravityQuotaCache = isAntigravity && model ? getAntigravityQuotaCache() : null;
 
     // Filter out model-locked, excluded, and Antigravity quota-exhausted connections.
-    const availableConnections = connections.filter(c => {
+    const baseAvailable = connections.filter(c => {
       if (excludeSet.has(c.id)) return false;
       if (isModelLockActive(c, model)) return false;
       const enabled = c.providerSpecificData?.enabledModels;
@@ -101,6 +103,20 @@ export async function getProviderCredentials(provider, excludeConnectionIds = nu
       }
       return true;
     });
+
+    // Health breaker (state.md "Keputusan desain" #4): skip connections whose
+    // breaker is open for this model — but only while at least one healthy
+    // alternative exists. If every candidate is breaker-blocked, fall back to
+    // the pre-breaker list: the open state stays informational (surfaced in
+    // the UI) instead of deadlocking account selection.
+    const { healthy, blocked: breakerBlocked } = filterByHealth(baseAvailable, providerId, model);
+    if (breakerBlocked.length > 0) {
+      log.debug(
+        "AUTH",
+        `${provider} | breaker blocked ${breakerBlocked.length}/${baseAvailable.length} connection(s) for ${model || "any model"}${healthy.length === 0 ? " — all blocked, using pre-breaker list" : ""}`
+      );
+    }
+    const availableConnections = healthy.length > 0 ? healthy : baseAvailable;
 
     log.debug("AUTH", `${provider} | available: ${availableConnections.length}/${connections.length}`);
     connections.forEach(c => {
@@ -237,6 +253,23 @@ export async function getProviderCredentials(provider, excludeConnectionIds = nu
 /**
  * Mark account+model as unavailable — locks modelLock_${model} in DB.
  * All errors (429, 401, 5xx, etc.) lock per model, not per account.
+ *
+ * Fork (T4b): before writing a DB lock we ask the error taxonomy what the
+ * failure actually is. Upstream's checkFallbackError() has no rule for the
+ * Qoder model-queue signal (code 10605), so such a refusal fell through to
+ * the generic transient default and wrote modelLock_<model> on EVERY account
+ * in turn — five healthy accounts (quota 275/300, isQuotaExceeded=false) were
+ * locked one after another for the same model that was merely out of capacity.
+ *
+ * The taxonomy decides the blast radius:
+ *   - action "ignore"          -> local bug, the provider is fine. No lock.
+ *   - action "wait-progressing"-> the model is queued upstream. No account lock;
+ *                                the caller just moves on to another account.
+ *   - scope  "model"           -> the fault belongs to the model, not the
+ *                                account, so the account is not punished.
+ *   - scope  "account"         -> the account really is at fault, lock it.
+ * Anything the taxonomy does not know keeps upstream's behaviour verbatim.
+ *
  * @param {string} connectionId
  * @param {number} status - HTTP status code from upstream
  * @param {string} errorText
@@ -253,6 +286,40 @@ export async function markAccountUnavailable(connectionId, status, errorText, pr
   // GitHub premium-request exhaustion is account-wide until the next UTC month.
   const githubResetAtMs = githubMonthlyResetMs(status, errorText, provider);
 
+  // Fork (T4b): classify first. Unknown failures keep upstream's behaviour.
+  const classified = classifyError({
+    provider: resolveProviderId(provider),
+    model,
+    status,
+    errorText,
+  });
+
+  // A local bug (e.g. "model_config for X not yet known") says nothing about
+  // the credential. Locking the account here only removes a healthy
+  // connection from rotation and hides the real cause.
+  if (classified.action === "ignore") {
+    log.debug("AUTH", `${provider} | ${classified.kind} — not locking account (${classified.reason})`);
+    return { shouldFallback: false, cooldownMs: 0 };
+  }
+
+  // The model is queued upstream (Qoder 10605): the account is healthy, the
+  // model is busy. Fall back to another account WITHOUT locking this one.
+  if (classified.kind === "queue" && classified.action === "wait-progressing") {
+    log.debug("AUTH", `${provider} | ${classified.kind} (${classified.scope}) — not locking account, trying next`);
+    return { shouldFallback: true, cooldownMs: 0 };
+  }
+
+  // The taxonomy owns the cooldown ONLY for failure modes upstream has no
+  // rule for. Upstream's own rules for 401/402/404 are provider-aware (e.g. a
+  // GitHub 402 that is not the monthly exhaustion stays model-scoped for two
+  // minutes), and overriding them here would change a contract upstream
+  // tests. For those kinds the taxonomy still decides the blast radius
+  // (scope) above; the duration stays upstream's.
+  const taxonomyCooldownMs =
+    classified.kind === "queue" && classified.action === "exclude"
+      ? classified.cooldownMs
+      : null;
+
   // Provider-specific precise cooldown (e.g. codex usage_limit_reached resets_at) overrides backoff
   let shouldFallback, cooldownMs, newBackoffLevel;
   if (githubResetAtMs) {
@@ -268,6 +335,16 @@ export async function markAccountUnavailable(connectionId, status, errorText, pr
     newBackoffLevel = 0;
   } else {
     ({ shouldFallback, cooldownMs, newBackoffLevel } = checkFallbackError(status, errorText, backoffLevel, resolveProviderId(provider)));
+    // A classified queue exclusion (Qoder daily-count limit) has no upstream
+    // rule at all: upstream fell through to the generic 30s transient
+    // cooldown, which retries a limit that only resets daily. The taxonomy
+    // owns that duration.
+    if (taxonomyCooldownMs != null && shouldFallback) {
+      cooldownMs = taxonomyCooldownMs;
+      // A classified exclusion is not a rate-limit escalation, so the
+      // backoff level must not climb on every retry.
+      newBackoffLevel = 0;
+    }
   }
   if (!shouldFallback) return { shouldFallback: false, cooldownMs: 0 };
 

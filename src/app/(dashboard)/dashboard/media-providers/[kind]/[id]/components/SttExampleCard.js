@@ -132,7 +132,7 @@ export function SttExampleCard({ providerId }) {
             <select
               value={selectedModel}
               onChange={(e) => setSelectedModel(e.target.value)}
-              className="w-full px-3 py-1.5 text-sm border border-border rounded-lg bg-background focus:outline-none focus:border-primary"
+              className="w-full px-3 py-1.5 text-sm border-2 border-ink rounded-lg bg-background focus:outline-none focus:border-brand-600 dark:border-brand-300/60"
             >
               {sttModels.map((m) => (
                 <option key={m.id} value={m.id}>{m.name || m.id}</option>
@@ -145,7 +145,7 @@ export function SttExampleCard({ providerId }) {
               value={selectedModel}
               onChange={(e) => setSelectedModel(e.target.value)}
               placeholder="Enter model id"
-              className="w-full px-3 py-1.5 text-sm border border-border rounded-lg bg-background focus:outline-none focus:border-primary font-mono"
+              className="w-full px-3 py-1.5 text-sm border-2 border-ink rounded-lg bg-background focus:outline-none focus:border-brand-600 dark:border-brand-300/60 font-mono"
             />
           </Row>
         )}
@@ -161,7 +161,7 @@ export function SttExampleCard({ providerId }) {
                 onClick={() => setUseTunnel((v) => !v)}
                 title={useTunnel ? "Using tunnel" : "Using local"}
                 className={`flex items-center gap-1 text-xs px-2 py-1.5 rounded-lg border shrink-0 transition-colors ${
-                  useTunnel ? "border-primary/40 bg-primary/10 text-primary" : "border-border text-text-muted hover:text-primary"
+                  useTunnel ? "border-brand-600/40 dark:border-brand-300/50 bg-brand-300/25 text-brand-700 dark:text-brand-300" : "border-border text-text-muted hover:text-brand-700 dark:text-brand-300"
                 }`}
               >
                 <span className="material-symbols-outlined text-[14px]">wifi_tethering</span>
@@ -202,7 +202,7 @@ export function SttExampleCard({ providerId }) {
               value={language}
               onChange={(e) => setLanguage(e.target.value)}
               placeholder="e.g. en, vi, ja (auto-detect if empty)"
-              className="w-full px-3 py-1.5 text-sm border border-border rounded-lg bg-background focus:outline-none focus:border-primary font-mono"
+              className="w-full px-3 py-1.5 text-sm border-2 border-ink rounded-lg bg-background focus:outline-none focus:border-brand-600 dark:border-brand-300/60 font-mono"
             />
           </Row>
         )}
@@ -214,7 +214,7 @@ export function SttExampleCard({ providerId }) {
               value={prompt}
               onChange={(e) => setPrompt(e.target.value)}
               placeholder="optional context to improve accuracy"
-              className="w-full px-3 py-1.5 text-sm border border-border rounded-lg bg-background focus:outline-none focus:border-primary"
+              className="w-full px-3 py-1.5 text-sm border-2 border-ink rounded-lg bg-background focus:outline-none focus:border-brand-600 dark:border-brand-300/60"
             />
           </Row>
         )}
@@ -230,7 +230,7 @@ export function SttExampleCard({ providerId }) {
               value={temperature}
               onChange={(e) => setTemperature(e.target.value)}
               placeholder="0 - 1 (default 0)"
-              className="w-full px-3 py-1.5 text-sm border border-border rounded-lg bg-background focus:outline-none focus:border-primary"
+              className="w-full px-3 py-1.5 text-sm border-2 border-ink rounded-lg bg-background focus:outline-none focus:border-brand-600 dark:border-brand-300/60"
             />
           </Row>
         )}
@@ -241,7 +241,7 @@ export function SttExampleCard({ providerId }) {
             <select
               value={responseFormat}
               onChange={(e) => setResponseFormat(e.target.value)}
-              className="w-full px-3 py-1.5 text-sm border border-border rounded-lg bg-background focus:outline-none focus:border-primary"
+              className="w-full px-3 py-1.5 text-sm border-2 border-ink rounded-lg bg-background focus:outline-none focus:border-brand-600 dark:border-brand-300/60"
             >
               {responseFormats.map((format) => <option key={format} value={format}>{format}</option>)}
             </select>
@@ -254,7 +254,7 @@ export function SttExampleCard({ providerId }) {
             <select
               value={granularity}
               onChange={(e) => setGranularity(e.target.value)}
-              className="w-full px-3 py-1.5 text-sm border border-border rounded-lg bg-background focus:outline-none focus:border-primary"
+              className="w-full px-3 py-1.5 text-sm border-2 border-ink rounded-lg bg-background focus:outline-none focus:border-brand-600 dark:border-brand-300/60"
             >
               <option value="">provider default</option>
               <option value="word">word</option>
@@ -303,7 +303,7 @@ export function SttExampleCard({ providerId }) {
               onChange={(e) => setNumSpeakers(e.target.value)}
               disabled={diarize}
               placeholder="auto-detect"
-              className="w-full px-3 py-1.5 text-sm border border-border rounded-lg bg-background focus:outline-none focus:border-primary disabled:opacity-50"
+              className="w-full px-3 py-1.5 text-sm border-2 border-ink rounded-lg bg-background focus:outline-none focus:border-brand-600 dark:border-brand-300/60 disabled:opacity-50"
             />
           </Row>
         )}
@@ -315,7 +315,7 @@ export function SttExampleCard({ providerId }) {
             <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
               <button
                 onClick={() => copyCurl(curlSnippet)}
-                className="inline-flex items-center gap-1 text-xs text-text-muted hover:text-primary transition-colors"
+                className="inline-flex items-center gap-1 text-xs text-text-muted hover:text-brand-700 dark:text-brand-300 transition-colors"
               >
                 <span className="material-symbols-outlined text-[14px]">{copiedCurl ? "check" : "content_copy"}</span>
                 {copiedCurl ? "Copied" : "Copy"}
@@ -323,7 +323,7 @@ export function SttExampleCard({ providerId }) {
               <button
                 onClick={handleRun}
                 disabled={running || !audioFile || !modelFull}
-                className="flex w-full sm:w-auto items-center justify-center gap-1.5 px-3 py-1 rounded-lg bg-primary text-white text-xs font-medium hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                className="flex w-full sm:w-auto items-center justify-center gap-1.5 px-3 py-1 rounded-lg bg-ink text-[#FAF7F0] text-xs font-medium hover:bg-brand-300/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <span className="material-symbols-outlined text-[14px]" style={running ? { animation: "spin 1s linear infinite" } : undefined}>
                   play_arrow
@@ -335,7 +335,7 @@ export function SttExampleCard({ providerId }) {
           <pre className="bg-sidebar rounded-lg px-3 py-2.5 text-xs font-mono text-text-main overflow-x-auto whitespace-pre-wrap break-all">{curlSnippet}</pre>
         </div>
 
-        {error && <p className="text-xs text-red-500 break-words">{error}</p>}
+        {error && <p className="text-xs text-danger break-words">{error}</p>}
 
         {/* Response */}
         <div>
@@ -346,7 +346,7 @@ export function SttExampleCard({ providerId }) {
             {result && (
               <button
                 onClick={() => copyRes(resultStr)}
-                className="inline-flex items-center gap-1 text-xs text-text-muted hover:text-primary transition-colors"
+                className="inline-flex items-center gap-1 text-xs text-text-muted hover:text-brand-700 dark:text-brand-300 transition-colors"
               >
                 <span className="material-symbols-outlined text-[14px]">{copiedRes ? "check" : "content_copy"}</span>
                 {copiedRes ? "Copied" : "Copy"}

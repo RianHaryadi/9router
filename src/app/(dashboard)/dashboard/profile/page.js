@@ -26,6 +26,7 @@ export default function ProfilePage() {
   const [shutdownOpen, setShutdownOpen] = useState(false);
   const [isShuttingDown, setIsShuttingDown] = useState(false);
   const [settings, setSettings] = useState({ fallbackStrategy: "fill-first" });
+  const [complexityTierDraft, setComplexityTierDraft] = useState({});
   const [loading, setLoading] = useState(true);
   const [passwords, setPasswords] = useState({ current: "", new: "", confirm: "" });
   const [passStatus, setPassStatus] = useState({ type: "", message: "" });
@@ -92,6 +93,7 @@ export default function ProfilePage() {
       .then((res) => res.json())
       .then((data) => {
         setSettings(data);
+        setComplexityTierDraft(data?.complexityRoutingTiers || {});
         setOidcForm({
           authMode: data?.authMode || "password",
           oidcIssuerUrl: data?.oidcIssuerUrl || "",
@@ -649,12 +651,91 @@ export default function ProfilePage() {
     }
   };
 
+  const updatePromptInspectionEnabled = async (enabled) => {
+    try {
+      const res = await fetch("/api/settings", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ promptInspectionEnabled: enabled }),
+      });
+      if (res.ok) {
+        setSettings(prev => ({ ...prev, promptInspectionEnabled: enabled }));
+      }
+    } catch (err) {
+      console.error("Failed to update promptInspectionEnabled:", err);
+    }
+  };
+
+  const updateGuardrailsEnabled = async (enabled) => {
+    try {
+      const res = await fetch("/api/settings", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ guardrailsEnabled: enabled }),
+      });
+      if (res.ok) {
+        setSettings(prev => ({ ...prev, guardrailsEnabled: enabled }));
+      }
+    } catch (err) {
+      console.error("Failed to update guardrailsEnabled:", err);
+    }
+  };
+
+  const updateComplexityRoutingEnabled = async (enabled) => {
+    try {
+      const res = await fetch("/api/settings", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ complexityRoutingEnabled: enabled }),
+      });
+      if (res.ok) {
+        setSettings(prev => ({ ...prev, complexityRoutingEnabled: enabled }));
+      }
+    } catch (err) {
+      console.error("Failed to update complexityRoutingEnabled:", err);
+    }
+  };
+
+  const updateComplexityRoutingTiers = async (tiers) => {
+    try {
+      const res = await fetch("/api/settings", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ complexityRoutingTiers: tiers }),
+      });
+      if (res.ok) {
+        const saved = await res.json();
+        const next = saved.complexityRoutingTiers || {};
+        setComplexityTierDraft(next);
+        setSettings(prev => ({ ...prev, complexityRoutingTiers: next }));
+      }
+    } catch (err) {
+      console.error("Failed to update complexityRoutingTiers:", err);
+    }
+  };
+
+  const updatePiiRedactionEnabled = async (enabled) => {
+    try {
+      const res = await fetch("/api/settings", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ piiRedactionEnabled: enabled }),
+      });
+      if (res.ok) {
+        setSettings(prev => ({ ...prev, piiRedactionEnabled: enabled }));
+      }
+    } catch (err) {
+      console.error("Failed to update piiRedactionEnabled:", err);
+    }
+  };
+
   const reloadSettings = async () => {
     try {
       const res = await fetch("/api/settings");
       if (!res.ok) return;
       const data = await res.json();
       setSettings(data);
+      setComplexityTierDraft(data.complexityRoutingTiers || {});
     } catch (err) {
       console.error("Failed to reload settings:", err);
     }
@@ -740,6 +821,11 @@ export default function ProfilePage() {
   };
 
   const observabilityEnabled = settings.enableObservability === true;
+  const piiRedactionEnabled = settings.piiRedactionEnabled === true;
+  const promptInspectionEnabled = settings.promptInspectionEnabled === true;
+  const guardrailsEnabled = settings.guardrailsEnabled === true;
+  const complexityRoutingEnabled = settings.complexityRoutingEnabled === true;
+  const complexityTiers = complexityTierDraft;
 
   const handleShutdown = async () => {
     setIsShuttingDown(true);
@@ -770,7 +856,7 @@ export default function ProfilePage() {
         <Card>
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
             <div className="flex items-center gap-3 sm:gap-4">
-              <div className="size-10 sm:size-12 rounded-lg bg-green-500/10 text-green-500 flex items-center justify-center shrink-0">
+              <div className="size-10 sm:size-12 rounded-lg bg-success/10 text-success flex items-center justify-center shrink-0">
                 <span className="material-symbols-outlined text-xl sm:text-2xl">computer</span>
               </div>
               <div>
@@ -799,8 +885,8 @@ export default function ProfilePage() {
               ))}
             </div>
           </div>
-          <div className="flex flex-col gap-3 pt-4 border-t border-border">
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between p-3 rounded-lg bg-bg border border-border gap-2">
+          <div className="flex flex-col gap-3 pt-4 border-t-2 border-ink">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between p-3 rounded-lg bg-bg border-2 border-ink gap-2">
               <div>
                 <p className="font-medium text-sm sm:text-base">Database Location</p>
                 <p className="text-xs sm:text-sm text-text-muted font-mono break-all">~/.9router/db/data.sqlite</p>
@@ -834,7 +920,7 @@ export default function ProfilePage() {
               />
             </div>
             {dbStatus.message && (
-              <p className={`text-sm ${dbStatus.type === "error" ? "text-red-500" : "text-green-600 dark:text-green-400"}`}>
+              <p className={`text-sm ${dbStatus.type === "error" ? "text-danger" : "text-success dark:text-success"}`}>
                 {dbStatus.message}
               </p>
             )}
@@ -844,14 +930,14 @@ export default function ProfilePage() {
         {/* Language */}
         <Card>
           <div className="flex items-center gap-3 mb-4">
-            <div className="size-10 rounded-lg bg-blue-500/10 text-blue-500 flex items-center justify-center shrink-0">
+            <div className="size-10 rounded-lg bg-info/10 text-info flex items-center justify-center shrink-0">
               <span className="material-symbols-outlined text-[20px]">language</span>
             </div>
             <h3 className="text-base sm:text-lg font-semibold">Language</h3>
           </div>
           <button
             onClick={() => setLangOpen(true)}
-            className="flex items-center justify-between w-full p-3 rounded-lg bg-bg border border-border hover:border-primary/50 transition-colors"
+            className="flex items-center justify-between w-full p-3 rounded-lg bg-bg border-2 border-ink hover:border-brand-600/50 dark:border-brand-300/60 transition-colors"
             data-i18n-skip="true"
           >
             <span className="text-sm text-text-muted">Display language</span>
@@ -862,7 +948,7 @@ export default function ProfilePage() {
         {/* Security */}
         <Card>
           <div className="flex items-center gap-3 mb-4">
-            <div className="p-2 rounded-lg bg-primary/10 text-primary shrink-0">
+            <div className="p-2 rounded-lg bg-brand-300/25 text-brand-700 dark:text-brand-300 shrink-0">
               <span className="material-symbols-outlined text-[20px]">shield</span>
             </div>
             <h3 className="text-base sm:text-lg font-semibold">Security</h3>
@@ -882,7 +968,7 @@ export default function ProfilePage() {
               />
             </div>
             {settings.requireLogin === true && (
-              <form onSubmit={handlePasswordChange} className="flex flex-col gap-4 pt-4 border-t border-border/50">
+              <form onSubmit={handlePasswordChange} className="flex flex-col gap-4 pt-4 border-t-2 border-ink/50">
                 {settings.hasPassword && (
                   <div className="flex flex-col gap-2">
                     <label className="text-xs sm:text-sm font-medium">Current Password</label>
@@ -896,9 +982,9 @@ export default function ProfilePage() {
                   </div>
                 )}
                 {/* {!settings.hasPassword && (
-                  <div className="p-3 rounded-lg bg-blue-500/10 border border-blue-500/20">
-                    <p className="text-sm text-blue-600 dark:text-blue-400">
-                      Setting password for the first time. Leave current password empty or use default: <code className="bg-blue-500/20 px-1 rounded">123456</code>
+                  <div className="p-3 rounded-lg bg-info/10 border border-info/20">
+                    <p className="text-sm text-info dark:text-info">
+                      Setting password for the first time. Leave current password empty or use default: <code className="bg-info/20 px-1 rounded">123456</code>
                     </p>
                   </div>
                 )} */}
@@ -926,7 +1012,7 @@ export default function ProfilePage() {
                 </div>
 
                 {passStatus.message && (
-                  <p className={`text-xs sm:text-sm ${passStatus.type === "error" ? "text-red-500" : "text-green-500"}`}>
+                  <p className={`text-xs sm:text-sm ${passStatus.type === "error" ? "text-danger" : "text-success"}`}>
                     {passStatus.message}
                   </p>
                 )}
@@ -948,7 +1034,7 @@ export default function ProfilePage() {
             onClick={() => setOidcExpanded((v) => !v)}
             className="w-full flex items-center gap-3 text-left"
           >
-            <div className="p-2 rounded-lg bg-indigo-500/10 text-indigo-500 shrink-0">
+            <div className="p-2 rounded-lg bg-brand/10 text-brand shrink-0">
               <span className="material-symbols-outlined text-[20px]">lock_open</span>
             </div>
             <div className="flex-1 min-w-0">
@@ -974,7 +1060,7 @@ export default function ProfilePage() {
               {/* SSO Protocol Switcher Tabs */}
               <div className="flex flex-col gap-2">
                 <label className="font-medium text-sm sm:text-base">SSO Protocol</label>
-                <div className="flex p-1 rounded-lg bg-black/5 dark:bg-white/5 border border-border">
+                <div className="flex p-1 rounded-lg bg-black/5 dark:bg-white/5 border-2 border-ink">
                   <button
                     type="button"
                     onClick={() => setSsoTypeTab("saml")}
@@ -1038,7 +1124,7 @@ export default function ProfilePage() {
                         className={cn(
                           "text-left rounded-lg border p-3 transition-colors",
                           active
-                            ? "border-primary bg-primary/5"
+                            ? "border-brand-600 dark:border-brand-300/60 bg-brand-300/15"
                             : "border-border bg-bg hover:bg-black/5 dark:hover:bg-white/5"
                         )}
                         disabled={loading || oidcLoading || samlLoading}
@@ -1053,16 +1139,16 @@ export default function ProfilePage() {
 
               {ssoTypeTab === "saml" ? (
                 /* SAML Configuration Panel */
-                <div className="flex flex-col gap-4 pt-2 border-t border-border/50">
+                <div className="flex flex-col gap-4 pt-2 border-t-2 border-ink/50">
                   {/* IdP Setup Guidelines Banner & Collapsible Drawer */}
-                  <div className="rounded-lg border border-border bg-bg/80 overflow-hidden">
+                  <div className="rounded-lg border-2 border-ink bg-bg/80 overflow-hidden">
                     <button
                       type="button"
                       onClick={() => setShowSamlGuide((prev) => !prev)}
                       className="w-full p-3 flex items-center justify-between gap-2 text-left hover:bg-surface/50 transition-colors"
                     >
                       <div className="flex items-center gap-2">
-                        <span className="material-symbols-outlined text-primary text-lg">menu_book</span>
+                        <span className="material-symbols-outlined text-brand-700 dark:text-brand-300 text-lg">menu_book</span>
                         <div>
                           <p className="font-semibold text-xs sm:text-sm text-text-main">
                             IdP Setup Guidelines & Provider Configuration Instructions
@@ -1081,8 +1167,8 @@ export default function ProfilePage() {
                     </button>
 
                     {showSamlGuide && (
-                      <div className="p-4 border-t border-border bg-surface/30 text-xs text-text-main flex flex-col gap-3">
-                        <div className="p-2.5 rounded border border-primary/20 bg-primary/5 text-primary text-xs">
+                      <div className="p-4 border-t-2 border-ink bg-surface/30 text-xs text-text-main flex flex-col gap-3">
+                        <div className="p-2.5 rounded border border-brand-600/30 dark:border-brand-300/40 bg-brand-300/15 text-brand-700 dark:text-brand-300 text-xs">
                           <p className="font-semibold mb-1">🔑 Required Service Provider (SP) Values for your IdP Setup:</p>
                           <ul className="list-disc pl-4 space-y-1 font-mono text-[11px]">
                             <li>
@@ -1101,7 +1187,7 @@ export default function ProfilePage() {
                         </div>
 
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
-                          <div className="p-3 rounded border border-border bg-bg/50 flex flex-col gap-1.5">
+                          <div className="p-3 rounded border-2 border-ink bg-bg/50 flex flex-col gap-1.5">
                             <p className="font-semibold text-text-main flex items-center gap-1.5">
                               <span>☁️</span> AWS IAM Identity Center
                             </p>
@@ -1114,7 +1200,7 @@ export default function ProfilePage() {
                             </ol>
                           </div>
 
-                          <div className="p-3 rounded border border-border bg-bg/50 flex flex-col gap-1.5">
+                          <div className="p-3 rounded border-2 border-ink bg-bg/50 flex flex-col gap-1.5">
                             <p className="font-semibold text-text-main flex items-center gap-1.5">
                               <span>🔷</span> Microsoft Entra ID (Azure AD)
                             </p>
@@ -1127,7 +1213,7 @@ export default function ProfilePage() {
                             </ol>
                           </div>
 
-                          <div className="p-3 rounded border border-border bg-bg/50 flex flex-col gap-1.5">
+                          <div className="p-3 rounded border-2 border-ink bg-bg/50 flex flex-col gap-1.5">
                             <p className="font-semibold text-text-main flex items-center gap-1.5">
                               <span>🟢</span> Okta / Auth0
                             </p>
@@ -1140,7 +1226,7 @@ export default function ProfilePage() {
                             </ol>
                           </div>
 
-                          <div className="p-3 rounded border border-border bg-bg/50 flex flex-col gap-1.5">
+                          <div className="p-3 rounded border-2 border-ink bg-bg/50 flex flex-col gap-1.5">
                             <p className="font-semibold text-text-main flex items-center gap-1.5">
                               <span>🛡️</span> Keycloak / Authentik
                             </p>
@@ -1157,7 +1243,7 @@ export default function ProfilePage() {
                   </div>
 
                   {/* Quick Import Card */}
-                  <div className="p-3 rounded-lg border border-dashed border-primary/40 bg-primary/5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div className="p-3 rounded-lg border border-dashed border-brand-600/40 dark:border-brand-300/50 bg-brand-300/15 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                     <div>
                       <p className="font-medium text-sm text-text-main">1-Click IdP Metadata XML Import</p>
                       <p className="text-xs text-text-muted">Auto-fill SSO URL, Issuer & Cert from XML metadata</p>
@@ -1226,7 +1312,7 @@ export default function ProfilePage() {
                         placeholder="-----BEGIN CERTIFICATE-----&#10;MIIC...&#10;-----END CERTIFICATE-----"
                         value={samlForm.samlCert}
                         onChange={(e) => updateSamlForm("samlCert", e.target.value)}
-                        className="w-full p-2.5 rounded-lg border border-border bg-bg text-xs font-mono text-text-main focus:outline-none focus:border-primary"
+                        className="w-full p-2.5 rounded-lg border-2 border-ink bg-bg text-xs font-mono text-text-main focus:outline-none focus:border-brand-600 dark:border-brand-300/60"
                         disabled={loading || samlLoading}
                       />
                       <p className="text-xs text-text-muted">Paste raw Base64 certificate or PEM block.</p>
@@ -1265,7 +1351,7 @@ export default function ProfilePage() {
                     </div>
                   </div>
 
-                  <div className="flex flex-col gap-2 p-3 rounded-lg border border-border bg-bg text-xs sm:text-sm text-text-muted">
+                  <div className="flex flex-col gap-2 p-3 rounded-lg border-2 border-ink bg-bg text-xs sm:text-sm text-text-muted">
                     <div className="flex items-center justify-between gap-2">
                       <div>
                         <p className="font-medium text-text-main">ACS Callback URL</p>
@@ -1284,7 +1370,7 @@ export default function ProfilePage() {
                         Copy
                       </Button>
                     </div>
-                    <div className="flex items-center justify-between gap-2 pt-2 border-t border-border/50">
+                    <div className="flex items-center justify-between gap-2 pt-2 border-t-2 border-ink/50">
                       <div>
                         <p className="font-medium text-text-main">SP XML Metadata</p>
                         <code className="block break-all font-mono text-xs">{samlMetadataUrl}</code>
@@ -1294,7 +1380,7 @@ export default function ProfilePage() {
                         target="_blank"
                         rel="noopener noreferrer"
                         download="9router-sp-metadata.xml"
-                        className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
+                        className="inline-flex items-center gap-1 text-xs font-medium text-brand-700 dark:text-brand-300 hover:underline"
                       >
                         <span className="material-symbols-outlined text-[16px]">download</span>
                         Download XML
@@ -1302,7 +1388,7 @@ export default function ProfilePage() {
                     </div>
                   </div>
 
-                  <div className="flex flex-col sm:flex-row gap-2 pt-2 border-t border-border/50">
+                  <div className="flex flex-col sm:flex-row gap-2 pt-2 border-t-2 border-ink/50">
                     <Button
                       type="button"
                       variant="primary"
@@ -1324,25 +1410,25 @@ export default function ProfilePage() {
                   </div>
 
                   {samlTestStatus.message && (
-                    <p className={`text-xs sm:text-sm ${samlTestStatus.type === "error" ? "text-red-500" : "text-green-500"}`}>
+                    <p className={`text-xs sm:text-sm ${samlTestStatus.type === "error" ? "text-danger" : "text-success"}`}>
                       {samlTestStatus.message}
                     </p>
                   )}
 
                   {samlStatus.message && (
-                    <p className={`text-xs sm:text-sm ${samlStatus.type === "error" ? "text-red-500" : "text-green-500"}`}>
+                    <p className={`text-xs sm:text-sm ${samlStatus.type === "error" ? "text-danger" : "text-success"}`}>
                       {samlStatus.message}
                     </p>
                   )}
                 </div>
               ) : (
                 /* OIDC Panel */
-                <div className="flex flex-col gap-4 pt-2 border-t border-border/50">
+                <div className="flex flex-col gap-4 pt-2 border-t-2 border-ink/50">
                   <div className="grid grid-cols-1 gap-4">
                     <div className="flex flex-col gap-2">
                       <label className="font-medium text-sm sm:text-base">Issuer URL</label>
                       <Input
-                        placeholder="https://auth.example.com/application/o/9router/"
+                        placeholder="https://auth.example.com/application/o/Ryo/"
                         value={oidcForm.oidcIssuerUrl}
                         onChange={(e) => updateOidcForm("oidcIssuerUrl", e.target.value)}
                         disabled={loading || oidcLoading}
@@ -1392,12 +1478,12 @@ export default function ProfilePage() {
                     </div>
                   </div>
 
-                  <div className="rounded-lg border border-border bg-bg p-3 text-xs sm:text-sm text-text-muted">
+                  <div className="rounded-lg border-2 border-ink bg-bg p-3 text-xs sm:text-sm text-text-muted">
                     <p className="font-medium text-text-main mb-1">Redirect URI</p>
                     <code className="block break-all font-mono">{oidcRedirectUri}</code>
                   </div>
 
-                  <div className="flex flex-col sm:flex-row gap-2 pt-2 border-t border-border/50">
+                  <div className="flex flex-col sm:flex-row gap-2 pt-2 border-t-2 border-ink/50">
                     <Button type="button" variant="primary" loading={oidcLoading} onClick={() => saveOidcSettings()} className="w-full sm:w-auto">
                       Save OIDC settings
                     </Button>
@@ -1407,13 +1493,13 @@ export default function ProfilePage() {
                   </div>
 
                   {oidcTestStatus.message && (
-                    <p className={`text-xs sm:text-sm ${oidcTestStatus.type === "error" ? "text-red-500" : "text-green-500"}`}>
+                    <p className={`text-xs sm:text-sm ${oidcTestStatus.type === "error" ? "text-danger" : "text-success"}`}>
                       {oidcTestStatus.message}
                     </p>
                   )}
 
                   {oidcStatus.message && (
-                    <p className={`text-xs sm:text-sm ${oidcStatus.type === "error" ? "text-red-500" : "text-green-500"}`}>
+                    <p className={`text-xs sm:text-sm ${oidcStatus.type === "error" ? "text-danger" : "text-success"}`}>
                       {oidcStatus.message}
                     </p>
                   )}
@@ -1421,13 +1507,13 @@ export default function ProfilePage() {
               )}
 
               {settings.authMode === "oidc" || settings.authMode === "saml" || settings.authMode === "sso" ? (
-                <p className="text-xs sm:text-sm text-amber-600 dark:text-amber-400">
+                <p className="text-xs sm:text-sm text-warning dark:text-warning">
                   SSO login ({settings.ssoType === "saml" ? "SAML 2.0" : "OIDC"}) is currently active. Password login is disabled until you switch back.
                 </p>
               ) : null}
 
               {settings.authMode === "both" && (
-                <p className="text-xs sm:text-sm text-amber-600 dark:text-amber-400">
+                <p className="text-xs sm:text-sm text-warning dark:text-warning">
                   Password and SSO login ({settings.ssoType === "saml" ? "SAML 2.0" : "OIDC"}) are both active.
                 </p>
               )}
@@ -1438,7 +1524,7 @@ export default function ProfilePage() {
         {/* Routing Preferences */}
         <Card>
           <div className="flex items-center gap-3 mb-4">
-            <div className="p-2 rounded-lg bg-blue-500/10 text-blue-500 shrink-0">
+            <div className="p-2 rounded-lg bg-info/10 text-info shrink-0">
               <span className="material-symbols-outlined text-[20px]">route</span>
             </div>
             <h3 className="text-base sm:text-lg font-semibold">Routing Strategy</h3>
@@ -1460,7 +1546,7 @@ export default function ProfilePage() {
 
             {/* Sticky Round Robin Limit */}
             {settings.fallbackStrategy === "round-robin" && (
-              <div className="flex items-start sm:items-center justify-between gap-4 pt-2 border-t border-border/50">
+              <div className="flex items-start sm:items-center justify-between gap-4 pt-2 border-t-2 border-ink/50">
                 <div className="flex-1 min-w-0">
                   <p className="font-medium text-sm sm:text-base">Sticky Limit</p>
                   <p className="text-xs sm:text-sm text-text-muted">
@@ -1480,7 +1566,7 @@ export default function ProfilePage() {
             )}
 
             {/* Combo Round Robin */}
-            <div className="flex items-start sm:items-center justify-between gap-4 pt-4 border-t border-border/50">
+            <div className="flex items-start sm:items-center justify-between gap-4 pt-4 border-t-2 border-ink/50">
               <div className="flex-1 min-w-0">
                 <p className="font-medium text-sm sm:text-base">Combo Round Robin</p>
                 <p className="text-xs sm:text-sm text-text-muted">
@@ -1496,7 +1582,7 @@ export default function ProfilePage() {
 
             {/* Combo Sticky Round Robin Limit */}
             {settings.comboStrategy === "round-robin" && (
-              <div className="flex items-center justify-between pt-2 border-t border-border/50">
+              <div className="flex items-center justify-between pt-2 border-t-2 border-ink/50">
                 <div>
                   <p className="font-medium">Combo Sticky Limit</p>
                   <p className="text-sm text-text-muted">
@@ -1515,7 +1601,7 @@ export default function ProfilePage() {
               </div>
             )}
 
-            <p className="text-xs text-text-muted italic pt-2 border-t border-border/50">
+            <p className="text-xs text-text-muted italic pt-2 border-t-2 border-ink/50">
               {settings.fallbackStrategy === "round-robin"
                 ? `Currently distributing requests across all available accounts with ${settings.stickyRoundRobinLimit || 3} calls per account.`
                 : "Currently using accounts in priority order (Fill First)."}
@@ -1529,7 +1615,7 @@ export default function ProfilePage() {
         {/* Network */}
         <Card>
           <div className="flex items-center gap-3 mb-4">
-            <div className="p-2 rounded-lg bg-purple-500/10 text-purple-500 shrink-0">
+            <div className="p-2 rounded-lg bg-brand/10 text-brand shrink-0">
               <span className="material-symbols-outlined text-[20px]">wifi</span>
             </div>
             <h3 className="text-base sm:text-lg font-semibold">Network</h3>
@@ -1549,7 +1635,7 @@ export default function ProfilePage() {
             </div>
 
             {settings.outboundProxyEnabled === true && (
-              <form onSubmit={updateOutboundProxy} className="flex flex-col gap-4 pt-2 border-t border-border/50">
+              <form onSubmit={updateOutboundProxy} className="flex flex-col gap-4 pt-2 border-t-2 border-ink/50">
                 <div className="flex flex-col gap-2">
                   <label className="font-medium text-sm sm:text-base">Proxy URL</label>
                   <Input
@@ -1561,7 +1647,7 @@ export default function ProfilePage() {
                   <p className="text-xs sm:text-sm text-text-muted">Leave empty to inherit existing env proxy (if any).</p>
                 </div>
 
-                <div className="flex flex-col gap-2 pt-2 border-t border-border/50">
+                <div className="flex flex-col gap-2 pt-2 border-t-2 border-ink/50">
                   <label className="font-medium text-sm sm:text-base">No Proxy</label>
                   <Input
                     placeholder="localhost,127.0.0.1"
@@ -1572,7 +1658,7 @@ export default function ProfilePage() {
                   <p className="text-xs sm:text-sm text-text-muted">Comma-separated hostnames/domains to bypass the proxy.</p>
                 </div>
 
-                <div className="pt-2 border-t border-border/50 flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                <div className="pt-2 border-t-2 border-ink/50 flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
                   <Button
                     type="button"
                     variant="secondary"
@@ -1591,7 +1677,7 @@ export default function ProfilePage() {
             )}
 
             {proxyStatus.message && (
-              <p className={`text-xs sm:text-sm ${proxyStatus.type === "error" ? "text-red-500" : "text-green-500"} pt-2 border-t border-border/50`}>
+              <p className={`text-xs sm:text-sm ${proxyStatus.type === "error" ? "text-danger" : "text-success"} pt-2 border-t-2 border-ink/50`}>
                 {proxyStatus.message}
               </p>
             )}
@@ -1601,7 +1687,7 @@ export default function ProfilePage() {
         {/* Observability Settings */}
         <Card>
           <div className="flex items-center gap-3 mb-4">
-            <div className="p-2 rounded-lg bg-orange-500/10 text-orange-500 shrink-0">
+            <div className="p-2 rounded-lg bg-warning/10 text-warning shrink-0">
               <span className="material-symbols-outlined text-[20px]">monitoring</span>
             </div>
             <h3 className="text-base sm:text-lg font-semibold">Observability</h3>
@@ -1619,7 +1705,83 @@ export default function ProfilePage() {
               disabled={loading}
             />
           </div>
+          <div className="mt-4 flex items-start sm:items-center justify-between gap-4 border-t border-ink/10 pt-4 dark:border-white/10">
+            <div className="flex-1 min-w-0">
+              <p className="font-medium text-sm sm:text-base">Redact PII in logs</p>
+              <p className="text-xs sm:text-sm text-text-muted">
+                Masks emails, phone numbers, national IDs and API keys in request details and provider payloads
+              </p>
+            </div>
+            <Toggle
+              checked={piiRedactionEnabled}
+              onChange={updatePiiRedactionEnabled}
+              disabled={loading}
+            />
+          </div>
+          <div className="mt-4 flex items-start sm:items-center justify-between gap-4 border-t border-ink/10 pt-4 dark:border-white/10">
+            <div className="flex-1 min-w-0">
+              <p className="font-medium text-sm sm:text-base">Allow prompt inspection</p>
+              <p className="text-xs sm:text-sm text-text-muted">
+                Show stored prompts and responses in the Usage &rarr; Request Details tab. The conversation history of every user becomes readable by anyone with a dashboard session — only enable this on a dashboard that only you can reach.
+              </p>
+            </div>
+            <Toggle
+              checked={promptInspectionEnabled}
+              onChange={updatePromptInspectionEnabled}
+              disabled={loading}
+            />
+          </div>
+          <div className="mt-4 flex items-start sm:items-center justify-between gap-4 border-t border-ink/10 pt-4 dark:border-white/10">
+            <div className="flex-1 min-w-0">
+              <p className="font-medium text-sm sm:text-base">Guardrails</p>
+              <p className="text-xs sm:text-sm text-text-muted">
+                Scans inbound tool results for prompt injection and stops an agent that repeats the same tool call without progress. Both guards fail open and stay off until you turn them on.
+              </p>
+            </div>
+            <Toggle
+              checked={guardrailsEnabled}
+              onChange={updateGuardrailsEnabled}
+              disabled={loading}
+            />
+          </div>
+
+          <div className="mt-4 flex items-start sm:items-center justify-between gap-4 border-t border-ink/10 pt-4 dark:border-white/10">
+            <div className="flex-1 min-w-0">
+              <p className="font-medium text-sm sm:text-base">Complexity routing</p>
+              <p className="text-xs sm:text-sm text-text-muted">
+                Sends a simple request to a cheaper model and a heavy one to a stronger model. A level without a model keeps the model the client asked for.
+              </p>
+            </div>
+            <Toggle
+              checked={complexityRoutingEnabled}
+              onChange={updateComplexityRoutingEnabled}
+              disabled={loading}
+            />
+          </div>
+
+          {complexityRoutingEnabled && (
+            <div className="mt-3 grid gap-3 sm:grid-cols-3">
+              {["simple", "medium", "complex"].map((level) => (
+                <Input
+                  key={level}
+                  label={`${level[0].toUpperCase()}${level.slice(1)} model`}
+                  placeholder="provider/model"
+                  value={complexityTiers[level] || ""}
+                  disabled={loading}
+                  onChange={(e) => {
+                    // Local only — the PATCH fires on blur, not per keystroke.
+                    const next = { ...complexityTiers, [level]: e.target.value };
+                    setComplexityTierDraft(next);
+                    setSettings(prev => ({ ...prev, complexityRoutingTiers: next }));
+                  }}
+                  onBlur={() => updateComplexityRoutingTiers(complexityTierDraft)}
+                />
+              ))}
+            </div>
+          )}
         </Card>
+
+        {/* Teammates live on their own page: Dashboard → Team. */}
 
         {/* Account actions */}
         <div className="flex flex-col sm:flex-row gap-2">
@@ -1628,7 +1790,7 @@ export default function ProfilePage() {
             fullWidth
             icon="power_settings_new"
             onClick={() => setShutdownOpen(true)}
-            className="text-red-500 border-red-200 hover:bg-red-50 hover:border-red-300"
+            className="text-danger border-danger hover:bg-danger hover:border-danger"
           >
             Shutdown
           </Button>

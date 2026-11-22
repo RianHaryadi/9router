@@ -135,7 +135,7 @@ export async function GET(request) {
   }
 }
 
-// Endpoint + API key across every profile: refresh the 9router blocks each profile already
+// Endpoint + API key across every profile: refresh the Ryo blocks each profile already
 // has (models stay per-profile), and wire up profiles that have no main model yet using the
 // model chosen in this request. Profiles on another provider are reported, never rewritten.
 const applyToAllProfiles = async ({ normalizedBaseUrl, apiKey, model }) => {
@@ -204,9 +204,9 @@ export async function POST(request) {
       return NextResponse.json({ error: "baseUrl and model are required" }, { status: 400 });
     }
 
-    // audio: { enabled, model } — wire Hermes speech-to-text through 9router's
+    // audio: { enabled, model } — wire Hermes speech-to-text through Ryo's
     // /v1/audio/transcriptions. Absent = leave the stt section untouched (legacy CLI
-    // callers). enabled:true needs a provider-qualified STT model (9router routes on it);
+    // callers). enabled:true needs a provider-qualified STT model (Ryo routes on it);
     // enabled:false removes exactly the wiring this endpoint writes.
     const audioEnabled = audio ? truthy(audio.enabled) : false;
     const audioModel = typeof audio?.model === "string" ? audio.model.trim() : "";
@@ -294,7 +294,7 @@ export async function DELETE(request) {
       throw readError;
     }
 
-    // Only drop blocks 9router wrote (custom provider) — a model/delegation/aux block owned
+    // Only drop blocks Ryo wrote (custom provider) — a model/delegation/aux block owned
     // by another provider is this profile's own configuration and must survive a reset.
     const removed = { model: false, delegation: false, auxiliary: [], stt: false };
     const kept = [];

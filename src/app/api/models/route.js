@@ -2,14 +2,61 @@ import { NextResponse } from "next/server";
 import { getModelAliases, setModelAlias, getCustomModels } from "@/models";
 import { getDisabledModels } from "@/lib/disabledModelsDb";
 import { AI_MODELS } from "@/shared/constants/config";
-import { getProviderAlias, ALIAS_TO_ID } from "@/shared/constants/providers";
+import { getProviderAlias, ALIAS_TO_ID, resolveProviderId } from "@/shared/constants/providers";
 import { getCapabilitiesForModel } from "open-sse/providers/capabilities.js";
+import { isMemberSession, getSession } from "@/dashboardGuard";
+import { getApiKeys, getCombos } from "@/lib/localDb";
+
+/**
+ * The targets a restricted key may call, as a set of lowercase names.
+ *
+ * The allow-list holds combos, "provider/model" pairs or bare providers. A
+ * combo expands to its members, so the member's picker shows the seats the
+ * combo actually routes to.
+ */
+async function resolveAllowedTargets(allowSet) {
+  const combos = await getCombos().catch(() => []);
+  const out = new Set();
+  for (const entry of allowSet) {
+    const lower = String(entry).toLowerCase();
+    out.add(lower);
+    const combo = combos.find((c) => String(c.name).toLowerCase() === lower);
+    if (combo) {
+      for (const seat of combo.models || []) {
+        out.add(String(seat).toLowerCase());
+        const slash = seat.indexOf("/");
+        if (slash > 0) out.add(String(seat).slice(0, slash).toLowerCase());
+      }
+      continue;
+    }
+    const slash = entry.indexOf("/");
+    if (slash > 0) out.add(String(entry).slice(0, slash).toLowerCase());
+  }
+  return out;
+}
 
 // GET /api/models - Get models with aliases
-export async function GET() {
+export async function GET(request) {
   try {
     const modelAliases = await getModelAliases();
     const disabled = await getDisabledModels();
+
+    // A teammate member only sees the models their key may call. The picker
+    // and the router then agree: what is offered is what is reachable.
+    let memberAllow = null;
+    if (await isMemberSession(request)) {
+      const session = await getSession(request);
+      const ref = session?.keyRef || null;
+      if (ref) {
+        try {
+          const keys = await getApiKeys();
+          const key = keys.find((k) => k.keyRef === ref && k.isActive !== false);
+          if (key?.access?.restricted) {
+            memberAllow = new Set((key.access.allow || []).map((e) => String(e).toLowerCase()));
+          }
+        } catch { /* fall through to the full list */ }
+      }
+    }
 
     const models = AI_MODELS
       .filter((m) => {
@@ -73,6 +120,19 @@ export async function GET() {
           ...(m.caps || {}),
         },
       });
+    }
+
+    // A teammate member only sees the models their key may call, so the
+    // picker and the router agree: what is offered is what is reachable.
+    if (memberAllow) {
+      const allowed = await resolveAllowedTargets(memberAllow);
+      const filtered = models.filter((m) =>
+        allowed.has(String(m.fullModel || "").toLowerCase()) ||
+        allowed.has(String(m.routedModel || "").toLowerCase()) ||
+        allowed.has(String(m.alias || "").toLowerCase()) ||
+        allowed.has(String(m.model || "").toLowerCase())
+      );
+      return NextResponse.json({ models: filtered });
     }
 
     return NextResponse.json({ models });

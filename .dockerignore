@@ -30,3 +30,6 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
+
+# Local orchestration state (never part of the image)
+.loop

@@ -22,9 +22,8 @@ import { handleStreamingResponse, buildOnStreamComplete } from "./chatCore/strea
 import { detectClientTool, isNativePassthrough } from "../utils/clientDetector.js";
 import { dedupeTools } from "../utils/toolDeduper.js";
 import { takeRenamedToolNames } from "../utils/opencodeFingerprint.js";
-import { injectCaveman } from "../rtk/caveman.js";
-import { injectPonytail } from "../rtk/ponytail.js";
 import { injectCustomPrompt } from "../rtk/customPrompt.js";
+import { guardedInjectCaveman, guardedInjectPonytail } from "@/custom/transform/index.js";
 import { compressMessages, formatRtkLog } from "../rtk/index.js";
 import { compressWithHeadroom, formatHeadroomLog, formatHeadroomSizeLog, isHeadroomPhantomSavings } from "../rtk/headroom.js";
 import { compressWithPxpipe } from "../rtk/pxpipe.js";
@@ -33,6 +32,35 @@ import { stripUnsupportedModalities } from "../translator/concerns/modality.js";
 import { prefetchRemoteImages } from "../translator/concerns/prefetch.js";
 import { defaultClaudeToolType, shouldDefaultClaudeToolType } from "../translator/concerns/toolCall.js";
 import { resolveSessionId } from "../utils/sessionManager.js";
+import { runCustomPipeline } from "@/custom/pipeline.js";
+import { executeWithRetry } from "@/custom/guard/transientRetry.js";
+
+const PII_TEXT_KEYS = new Set(["text", "content", "input_text", "instructions", "output"]);
+const PII_PATTERNS = [
+  [/(?<![A-Za-z0-9])(?:sk-[A-Za-z0-9_-]{20,}|sk_live_[A-Za-z0-9]{16,}|AIza[A-Za-z0-9_-]{30,}|gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,})(?![A-Za-z0-9])/g, "[REDACTED_SECRET]"],
+  [/(?<!\d)\d{16}(?!\d)/g, "[REDACTED_NIK]"],
+  [/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi, "[REDACTED_EMAIL]"],
+  [/(?<!\d)(?:\+\d{1,3}[ .()-]?)?\(?\d{3}\)?[ .-]\d{3}[ .-]\d{4}(?!\d)|(?<!\d)\d{10}(?!\d)/g, "[REDACTED_PHONE]"],
+];
+
+function redactText(value) {
+  return PII_PATTERNS.reduce((text, [pattern, replacement]) => text.replace(pattern, replacement), value);
+}
+
+export function redactChatText(body, enabled = true) {
+  if (!enabled || !body || typeof body !== "object") return body;
+  const visit = (value, key = "") => {
+    if (typeof value === "string") return PII_TEXT_KEYS.has(key) ? redactText(value) : value;
+    if (Array.isArray(value)) return value.map((item) => visit(item, key));
+    if (value && typeof value === "object") {
+      const copy = {};
+      for (const [childKey, child] of Object.entries(value)) copy[childKey] = visit(child, childKey);
+      return copy;
+    }
+    return value;
+  };
+  return visit(body);
+}
 
 /**
  * Core chat handler - shared between SSE and Worker
@@ -61,7 +89,7 @@ export function stripContinuityFields(body) {
   return body;
 }
 
-export async function handleChatCore({ body, modelInfo, credentials, log, onCredentialsRefreshed, onRequestSuccess, onDisconnect, clientRawRequest, connectionId, userAgent, apiKey, ccFilterNaming, rtkEnabled, headroomEnabled, headroomUrl, headroomCompressUserMessages, headroomTimeoutMs, cavemanEnabled, cavemanLevel, ponytailEnabled, ponytailLevel, customPromptEnabled, customPrompt, pxpipeEnabled, pxpipeMinChars, pxpipeTimeoutMs, pxpipeTransform, onPxpipeEvent, sourceFormatOverride, providerThinking, providerOverrides }) {
+export async function handleChatCore({ body, modelInfo, credentials, log, onCredentialsRefreshed, onRequestSuccess, onDisconnect, clientRawRequest, connectionId, userAgent, apiKey, ccFilterNaming, rtkEnabled, headroomEnabled, headroomUrl, headroomCompressUserMessages, headroomTimeoutMs, cavemanEnabled, cavemanLevel, ponytailEnabled, ponytailLevel, customPromptEnabled, customPrompt, pxpipeEnabled, pxpipeMinChars, pxpipeTimeoutMs, pxpipeTransform, onPxpipeEvent, sourceFormatOverride, providerThinking, providerOverrides, piiRedactionEnabled = false }) {
   const { provider, model } = modelInfo;
   const requestStartTime = Date.now();
   // Stable per-session color so all lines of one CLI conversation share a tag
@@ -168,8 +196,9 @@ export async function handleChatCore({ body, modelInfo, credentials, log, onCred
   }
 
   const reqLogger = await createRequestLogger(sourceFormat, targetFormat, model);
-  if (clientRawRequest) reqLogger.logClientRawRequest(clientRawRequest.endpoint, clientRawRequest.body, clientRawRequest.headers);
-  reqLogger.logRawRequest(body);
+  const loggingBody = redactChatText(body, piiRedactionEnabled);
+  if (clientRawRequest) reqLogger.logClientRawRequest(clientRawRequest.endpoint, piiRedactionEnabled ? JSON.stringify(loggingBody) : clientRawRequest.body, clientRawRequest.headers);
+  reqLogger.logRawRequest(loggingBody);
   log?.debug?.("FORMAT", `${sourceFormat} → ${targetFormat} | stream=${stream}`);
 
   // Native passthrough: CLI tool and provider are the same ecosystem
@@ -216,7 +245,7 @@ export async function handleChatCore({ body, modelInfo, credentials, log, onCred
   } else {
     translatedBody = translateRequest(sourceFormat, targetFormat, upstreamModel, body, stream, credentials, provider, reqLogger, stripList, connectionId, clientTool);
     if (!translatedBody) {
-      trackPendingRequest(model, provider, connectionId, false, true);
+      trackPendingRequest(model, provider, connectionId, false, true, apiKey);
       return createErrorResult(HTTP_STATUS.BAD_REQUEST, `Failed to translate request for ${sourceFormat} → ${targetFormat}`);
     }
     toolNameMap = translatedBody._toolNameMap;
@@ -230,7 +259,7 @@ export async function handleChatCore({ body, modelInfo, credentials, log, onCred
   // Tool normalization: MCP-equivalent built-in dedup (Claude clients) + same-name
   // dedup for DeepSeek models (upstream rejects duplicate tool names on all endpoints).
   if (Array.isArray(translatedBody.tools)) {
-    const { tools: deduped, stripped } = dedupeTools(translatedBody.tools, { clientTool, model });
+    const { tools: deduped, stripped } = dedupeTools(translatedBody.tools, { clientTool, model, messages: translatedBody.messages });
     if (stripped.length > 0) {
       translatedBody.tools = deduped;
       log?.debug?.("TOOLDEDUP", `stripped ${stripped.length}: ${stripped.slice(0, 3).join(", ")}${stripped.length > 3 ? "..." : ""}`);
@@ -298,16 +327,21 @@ export async function handleChatCore({ body, modelInfo, credentials, log, onCred
 
   if (rtkStats?.hits?.length) xf.push(`RTK:${rtkStats.hits.length}`);
 
+  const endUserFacing = clientRawRequest?.headers?.["x-end-user-facing"] === "true" || body?.endUserFacing === true;
+  const transformGuard = { clientTool, endUserFacing };
+
   // Caveman: inject terse-style system prompt
   if (tokenSaverEnabled && cavemanEnabled && cavemanLevel) {
-    injectCaveman(translatedBody, finalFormat, cavemanLevel);
-    xf.push(`CAVEMAN:${cavemanLevel}`);
+    if (guardedInjectCaveman(translatedBody, finalFormat, cavemanLevel, transformGuard)) {
+      xf.push(`CAVEMAN:${cavemanLevel}`);
+    }
   }
 
   // Ponytail: inject lazy-senior-dev system prompt
   if (tokenSaverEnabled && ponytailEnabled && ponytailLevel) {
-    injectPonytail(translatedBody, finalFormat, ponytailLevel);
-    xf.push(`PONYTAIL:${ponytailLevel}`);
+    if (guardedInjectPonytail(translatedBody, finalFormat, ponytailLevel, transformGuard)) {
+      xf.push(`PONYTAIL:${ponytailLevel}`);
+    }
   }
 
   // Custom prompt: user-authored instruction, independent of the savers above
@@ -328,14 +362,29 @@ export async function handleChatCore({ body, modelInfo, credentials, log, onCred
     try { onPxpipeEvent?.({ provider, model, ...pxpipeSummary }); } catch { /* stats must not break requests */ }
   }
 
+  // Custom transform pipeline (src/custom) — one fail-open hook after every
+  // saver so custom behaviours layer cleanly. No-op unless config adds them.
+  const customDiag = runCustomPipeline({
+    body: translatedBody,
+    finalFormat,
+    modelInfo: { provider, model },
+    clientTool,
+    ctx: { lastProvider: provider },
+    config: { tokens: false }, // telemetry off by default; wire on via settings
+  });
+  if (customDiag?.applied?.length && customDiag.applied.length > 0) xf.push(`CUSTOM:${customDiag.applied.length}`);
+  if (customDiag?.toolWarnings?.length) xf.push(`RT:${customDiag.toolWarnings.length}`);
+
   if (xf.length && log?.line) log.line(reqTag, "⚙", xf.join(" · "));
 
   // Pin cache breakpoints to the final body — every saver above can reshape
   // system/tools/messages, and a stale anchor costs a full prefix rewrite.
   if (passthrough && clientTool === "claude") anchorClaudeCache(translatedBody);
 
+  const providerBody = redactChatText(translatedBody, piiRedactionEnabled);
+
   const executor = getExecutor(provider);
-  trackPendingRequest(model, provider, connectionId, true);
+  trackPendingRequest(model, provider, connectionId, true, false, apiKey);
   appendRequestLog({ model, provider, connectionId, status: "PENDING" }).catch(() => { });
 
   const msgCount = translatedBody.messages?.length || translatedBody.input?.length || translatedBody.contents?.length || translatedBody.request?.contents?.length || 0;
@@ -343,10 +392,10 @@ export async function handleChatCore({ body, modelInfo, credentials, log, onCred
 
   const streamController = createStreamController({
     onDisconnect: (reason) => {
-      trackPendingRequest(model, provider, connectionId, false);
+      trackPendingRequest(model, provider, connectionId, false, false, apiKey);
       if (onDisconnect) onDisconnect(reason);
     },
-    onError: () => trackPendingRequest(model, provider, connectionId, false),
+    onError: () => trackPendingRequest(model, provider, connectionId, false, false, apiKey),
     log, provider, model, reqTag
   });
 
@@ -393,9 +442,13 @@ export async function handleChatCore({ body, modelInfo, credentials, log, onCred
   // exception: it is decoded by the executor into OpenAI-compatible output.
   let providerResponseFormat = targetFormat;
   try {
-    const result = await executor.execute({
+    // Fork: a transport hiccup (socket reset, DNS blip, connect timeout) used
+    // to kill the request with a bare 502 even though the provider was fine.
+    // Retry ONLY while the executor threw before any response byte exists —
+    // once bytes are on the wire the request is no longer replayable.
+    const result = await executeWithRetry(() => executor.execute({
       model,
-      body: translatedBody,
+      body: providerBody,
       stream,
       credentials,
       providerSessionId: sessionSeed,
@@ -404,6 +457,11 @@ export async function handleChatCore({ body, modelInfo, credentials, log, onCred
       log,
       proxyOptions,
       providerOverrides,
+    }), {
+      signal: streamController.signal,
+      onRetry: ({ attempt, error, delayMs }) => {
+        log?.warn?.("RETRY", `${provider.toUpperCase()} | ${model} | transport failure, retry ${attempt} in ${delayMs}ms | ${error?.message || error}`);
+      },
     });
     providerResponse = result.response;
     providerUrl = result.url;
@@ -414,16 +472,16 @@ export async function handleChatCore({ body, modelInfo, credentials, log, onCred
     if (renamedToolNames?.size) {
       toolNameMap = new Map([...(toolNameMap || []), ...renamedToolNames]);
     }
-    reqLogger.logTargetRequest(providerUrl, providerHeaders, finalBody);
+    reqLogger.logTargetRequest(providerUrl, providerHeaders, providerBody);
   } catch (error) {
-    trackPendingRequest(model, provider, connectionId, false, true);
+    trackPendingRequest(model, provider, connectionId, false, true, apiKey);
     appendRequestLog({ model, provider, connectionId, status: `FAILED ${error.name === "AbortError" ? 499 : HTTP_STATUS.BAD_GATEWAY}` }).catch(() => { });
     saveRequestDetail(buildRequestDetail({
-      provider, model, connectionId,
+      provider, model, connectionId, clientRawRequest,
       latency: { ttft: 0, total: Date.now() - requestStartTime },
       tokens: { prompt_tokens: 0, completion_tokens: 0 },
-      request: extractRequestConfig(body, stream),
-      providerRequest: translatedBody || null,
+      request: extractRequestConfig(redactChatText(body, piiRedactionEnabled), stream),
+      providerRequest: providerBody || null,
       response: { error: error.message || String(error), status: error.name === "AbortError" ? 499 : 502, thinking: null },
       pxpipe: pxpipeSummary,
       status: "error"
@@ -464,7 +522,7 @@ export async function handleChatCore({ body, modelInfo, credentials, log, onCred
         try {
           const retryResult = await executor.execute({
             model,
-            body: translatedBody,
+            body: providerBody,
             stream,
             credentials,
             providerSessionId: sessionSeed,
@@ -490,15 +548,15 @@ export async function handleChatCore({ body, modelInfo, credentials, log, onCred
 
   // Provider returned error
   if (!providerResponse.ok) {
-    trackPendingRequest(model, provider, connectionId, false, true);
+    trackPendingRequest(model, provider, connectionId, false, true, apiKey);
     const { statusCode, message, resetsAtMs } = await parseUpstreamError(providerResponse, executor);
     appendRequestLog({ model, provider, connectionId, status: `FAILED ${statusCode}` }).catch(() => { });
     saveRequestDetail(buildRequestDetail({
-      provider, model, connectionId,
+      provider, model, connectionId, clientRawRequest,
       latency: { ttft: 0, total: Date.now() - requestStartTime },
       tokens: { prompt_tokens: 0, completion_tokens: 0 },
-      request: extractRequestConfig(body, stream),
-      providerRequest: finalBody || translatedBody || null,
+      request: extractRequestConfig(redactChatText(body, piiRedactionEnabled), stream),
+      providerRequest: providerBody || null,
       response: { error: message, status: statusCode, thinking: null },
       pxpipe: pxpipeSummary,
       status: "error"
@@ -509,13 +567,13 @@ export async function handleChatCore({ body, modelInfo, credentials, log, onCred
       const urlStr = providerUrl ? `\n    URL: ${providerUrl}` : "";
       log.errorLine(reqTag, "✗", `ERROR ${statusCode} · ${provider}/${model} · ${Date.now() - requestStartTime}ms${urlStr}\n    ${errMsg}`);
     }
-    reqLogger.logError(new Error(message), finalBody || translatedBody);
+    reqLogger.logError(new Error(message), providerBody);
     return createErrorResult(statusCode, errMsg, resetsAtMs, upstreamResponseHeaders(providerResponse.headers));
   }
 
   const sharedCtx = { provider, model, body, stream, translatedBody, finalBody, requestStartTime, connectionId, apiKey, clientRawRequest, onRequestSuccess, pxpipe: pxpipeSummary, reqTag, log };
   const appendLog = (extra) => appendRequestLog({ model, provider, connectionId, ...extra }).catch(() => { });
-  const trackDone = () => trackPendingRequest(model, provider, connectionId, false);
+  const trackDone = () => trackPendingRequest(model, provider, connectionId, false, false, apiKey);
 
   // Provider forced streaming but client wants JSON. The Responses wire always
   // streams upstream (openaiToOpenAIResponsesRequest pins stream:true), so a

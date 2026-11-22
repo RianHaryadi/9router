@@ -1,0 +1,269 @@
+// Team members: teammates who sign in to the dashboard with a PASSWORD the
+// owner chose for them.
+//
+// The member's identity is the password (plus the member row it belongs to) —
+// not an API key. The key that bills their requests stays server-side, so a
+// leaked member password grants chat access and nothing else: it cannot be
+// replayed against /v1 as a bearer token.
+//
+// The owner's own account is NOT a row here — it stays settings.password, so
+// an existing install logs in exactly as before.
+import { v4 as uuidv4 } from "uuid";
+import bcrypt from "bcryptjs";
+import { getAdapter } from "../driver.js";
+import { MEMBER_AREA_IDS } from "@/shared/constants/memberAreas.js";
+import { getApiKeys } from "./apiKeysRepo.js";
+import { getUsageByKeyValue } from "./usageRepo.js";
+
+/** Keep only known area ids; an empty list means chat-only access. */
+function normalizeAreas(list) {
+  if (!Array.isArray(list)) return [];
+  const seen = new Set();
+  for (const id of list) {
+    if (typeof id !== "string") continue;
+    const area = id.trim();
+    if (!MEMBER_AREA_IDS.includes(area)) continue;
+    seen.add(area);
+  }
+  return [...seen];
+}
+
+function parseAreas(raw) {
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function rowToMember(row) {
+  if (!row) return null;
+  return {
+    id: row.id,
+    name: row.name,
+    // The hash never leaves the server.
+    role: "member",
+    isActive: row.isActive === 1 || row.isActive === true,
+    apiKeyRef: row.apiKeyRef || null,
+    // Alias: the session claim is called keyRef everywhere.
+    keyRef: row.apiKeyRef || null,
+    // The dashboard areas this member may reach.
+    areas: normalizeAreas(parseAreas(row.areas)),
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+  };
+}
+
+export async function getTeamMembers() {
+  const db = await getAdapter();
+  return db.all(`SELECT * FROM teamMembers ORDER BY createdAt ASC`).map(rowToMember);
+}
+
+export async function getTeamMemberById(id) {
+  if (!id) return null;
+  const db = await getAdapter();
+  return rowToMember(db.get(`SELECT * FROM teamMembers WHERE id = ?`, [id]));
+}
+
+/**
+ * Create a teammate.
+ *
+ * @param {{name: string, password: string, apiKeyRef?: string}} data
+ */
+export async function createTeamMember(data = {}) {
+  const name = String(data.name || "").trim();
+  if (!name) throw new Error("name is required");
+  if (!data.password || String(data.password).length < 4) {
+    throw new Error("password must be at least 4 characters");
+  }
+  const db = await getAdapter();
+  const now = new Date().toISOString();
+  const areas = normalizeAreas(data.areas);
+  const member = {
+    id: uuidv4(),
+    name,
+    passwordHash: await bcrypt.hash(String(data.password), 10),
+    apiKeyRef: data.apiKeyRef || null,
+    areas: JSON.stringify(areas),
+    isActive: true,
+    createdAt: now,
+    updatedAt: now,
+  };
+  db.run(
+    `INSERT INTO teamMembers(id, name, passwordHash, apiKeyRef, areas, isActive, createdAt, updatedAt)
+     VALUES(?, ?, ?, ?, ?, 1, ?, ?)`,
+    [member.id, member.name, member.passwordHash, member.apiKeyRef, member.areas, member.createdAt, member.updatedAt]
+  );
+  return rowToMember(member);
+}
+
+export async function updateTeamMember(id, data = {}) {
+  const db = await getAdapter();
+  const row = db.get(`SELECT * FROM teamMembers WHERE id = ?`, [id]);
+  if (!row) return null;
+  const existing = rowToMember(row);
+
+  const next = { ...existing };
+  if (data.name !== undefined) {
+    const name = String(data.name).trim();
+    if (!name) throw new Error("name cannot be empty");
+    next.name = name;
+  }
+  if (data.apiKeyRef !== undefined) next.apiKeyRef = data.apiKeyRef;
+  if (data.areas !== undefined) next.areas = normalizeAreas(data.areas);
+  if (data.isActive !== undefined) next.isActive = data.isActive === true;
+  next.updatedAt = new Date().toISOString();
+
+  const passwordHash = data.password
+    ? await bcrypt.hash(String(data.password), 10)
+    : row.passwordHash;
+
+  db.run(
+    `UPDATE teamMembers SET name = ?, apiKeyRef = ?, areas = ?, isActive = ?, passwordHash = ?, updatedAt = ? WHERE id = ?`,
+    [next.name, next.apiKeyRef, JSON.stringify(next.areas), next.isActive ? 1 : 0, passwordHash, next.updatedAt, id]
+  );
+  return rowToMember(db.get(`SELECT * FROM teamMembers WHERE id = ?`, [id]));
+}
+
+export async function deleteTeamMember(id) {
+  const db = await getAdapter();
+  const res = db.run(`DELETE FROM teamMembers WHERE id = ?`, [id]);
+  return (res?.changes ?? 0) > 0;
+}
+
+/**
+ * Verify a member's password.
+ *
+ * Every active member's hash is checked, because a teammate only ever types
+ * a password — there is no username to narrow the row down. bcrypt's cost
+ * makes this expensive enough to resist brute force, and the login limiter
+ * caps attempts per IP on top.
+ *
+ * @returns {Promise<object|null>} the member, or null.
+ */
+export async function verifyTeamMemberPassword(password) {
+  if (!password || typeof password !== "string") return null;
+  let rows = [];
+  try {
+    const db = await getAdapter();
+    rows = db.all(`SELECT * FROM teamMembers WHERE isActive = 1`);
+  } catch {
+    return null;
+  }
+  for (const row of rows) {
+    try {
+      if (await bcrypt.compare(password, row.passwordHash)) return rowToMember(row);
+    } catch {
+      /* a malformed hash must not abort the scan */
+    }
+  }
+  return null;
+}
+
+/** The raw API key behind a member's key fingerprint (server-side only). */
+export async function getTeamMemberApiKey(member) {
+  const ref = member?.apiKeyRef || null;
+  if (!ref) return null;
+  try {
+    const db = await getAdapter();
+    const row = db.get(`SELECT key FROM apiKeys WHERE keyRef = ? AND isActive = 1`, [ref]);
+    return row?.key || null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The teammates with their spend, request count and key budget.
+ *
+ * The spend comes from the usage rows of the key the teammate is assigned
+ * to: usageHistory stores the key FINGERPRINT, which is exactly the
+ * keyRef the member row points at. The window is the key's own budget
+ * window (budgetStartedAt), so the number shown is the number the budget
+ * is measured against. A key without a budget has no window: the lifetime
+ * total is shown instead.
+ *
+ * A teammate WITHOUT a key of their own chats on the owner's shared key:
+ * their requests cannot be told apart from the owner's, so the usage is
+ * reported as shared rather than as a personal number.
+ *
+ * @returns {Promise<Array<object>>}
+ */
+export async function getTeamMembersWithUsage() {
+  const members = await getTeamMembers();
+  let keys = [];
+  try { keys = await getApiKeys(); } catch { /* no key table */ }
+
+  const usageCache = new Map();
+  const usageFor = async (startDate) => {
+    const cacheKey = startDate || "all";
+    if (!usageCache.has(cacheKey)) {
+      try { usageCache.set(cacheKey, await getUsageByKeyValue(startDate)); }
+      catch { usageCache.set(cacheKey, {}); }
+    }
+    return usageCache.get(cacheKey);
+  };
+
+  const out = [];
+  for (const member of members) {
+    const key = keys.find((k) => k.keyRef && k.keyRef === member.apiKeyRef) || null;
+    // A member WITHOUT a key of their own chats on the owner's shared key:
+    // their requests cannot be told apart from the owner's, so the usage is
+    // reported as shared rather than as a personal number.
+    if (!member.apiKeyRef) {
+      out.push({
+        ...member,
+        keyName: null,
+        keyRef: null,
+        keyIsActive: null,
+        usage: { requests: 0, cost: 0, promptTokens: 0, completionTokens: 0 },
+        budget: null,
+        sharedKey: true,
+        keyMissing: false,
+      });
+      continue;
+    }
+    // The member points at a key that is GONE: they cannot chat at all.
+    // This is not the shared key — report it as a broken assignment.
+    if (!key) {
+      out.push({
+        ...member,
+        keyName: null,
+        keyRef: member.apiKeyRef,
+        keyIsActive: false,
+        usage: { requests: 0, cost: 0, promptTokens: 0, completionTokens: 0 },
+        budget: null,
+        sharedKey: false,
+        keyMissing: true,
+      });
+      continue;
+    }
+    // Rows written before the fingerprint migration hold the raw key.
+    const usage = await usageFor(key.budgetLimitCents != null ? key.budgetStartedAt : null);
+    const row = usage[key.keyRef] || usage[key.key] || null;
+    const limit = key.budgetLimitCents;
+    const spent = key.budgetSpentCents || 0;
+    out.push({
+      ...member,
+      keyName: key.name,
+      keyRef: key.keyRef,
+      keyIsActive: key.isActive !== false,
+      usage: row || { requests: 0, cost: 0, promptTokens: 0, completionTokens: 0 },
+      budget: {
+        limitCents: limit,
+        spentCents: spent,
+        remainingCents: limit == null ? null : Math.max(0, limit - spent),
+        period: key.budgetPeriod || "monthly",
+        startedAt: key.budgetStartedAt || null,
+      },
+      // The spend is measured over the key's BUDGET window when it has one,
+      // and over the whole lifetime otherwise. The label must say which.
+      usageWindow: key.budgetLimitCents != null && key.budgetStartedAt ? "budget" : "all",
+      sharedKey: false,
+      keyMissing: false,
+    });
+  }
+  return out;
+}

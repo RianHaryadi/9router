@@ -1,14 +1,14 @@
 import { NextResponse } from "next/server";
-import { getSettings } from "@/lib/localDb";
+import { getSettings, getApiKeyByKey, verifyTeamMemberPassword } from "@/lib/localDb";
 import bcrypt from "bcryptjs";
 import { cookies } from "next/headers";
-import { setDashboardAuthCookie } from "@/lib/auth/dashboardSession";
+import { setDashboardAuthCookie, DASHBOARD_ROLE_OWNER, DASHBOARD_ROLE_MEMBER } from "@/lib/auth/dashboardSession";
 import { isOidcConfigured } from "@/lib/auth/oidc";
 import { isSamlConfigured } from "@/lib/auth/saml.js";
 import { checkLock, recordFail, recordSuccess, getClientIp } from "@/lib/auth/loginLimiter";
 import { isLocalRequest } from "@/dashboardGuard";
 
-const RESET_HINT = "Forgot password? Reset to default via 9Router CLI → Settings → Reset Password to Default.";
+const RESET_HINT = "Forgot password? Reset to default via Ryo CLI → Settings → Reset Password to Default.";
 const NO_STORE_HEADERS = { "Cache-Control": "no-store" };
 
 function isTunnelRequest(request, settings) {
@@ -29,16 +29,13 @@ export async function POST(request) {
       );
     }
 
-    const { password } = await request.json();
+    const { password, username, apiKey } = await request.json();
     const settings = await getSettings();
 
     // Block login via tunnel/tailscale if dashboard access is disabled
     if (isTunnelRequest(request, settings) && settings.tunnelDashboardAccess !== true) {
       return NextResponse.json({ error: "Dashboard access via tunnel is disabled" }, { status: 403 });
     }
-
-    // Default password is '123456' if not set
-    const storedHash = settings.password;
 
     if (settings.authMode === "sso" || settings.authMode === "saml" || settings.authMode === "oidc") {
       const ssoType = settings.ssoType || (settings.authMode === "saml" ? "saml" : "oidc");
@@ -51,12 +48,52 @@ export async function POST(request) {
     }
 
     let isValid = false;
-    if (storedHash) {
-      isValid = await bcrypt.compare(password, storedHash);
-    } else {
-      // Use env var or default
-      const initialPassword = process.env.INITIAL_PASSWORD || "123456";
-      isValid = password === initialPassword;
+    let member = null;
+    let role = DASHBOARD_ROLE_OWNER;
+
+    if (password && !apiKey) {
+      // ── Password sign-in ────────────────────────────────────────────
+      // One field: the password. The owner's shared dashboard password
+      // wins; otherwise it is a teammate's password, which identifies the
+      // member (and the key their requests are billed to).
+      const storedHash = settings.password;
+      let ownerMatch = false;
+      if (storedHash) {
+        ownerMatch = await bcrypt.compare(password, storedHash);
+      } else {
+        const initialPassword = process.env.INITIAL_PASSWORD || "123456";
+        ownerMatch = password === initialPassword;
+      }
+
+      if (ownerMatch) {
+        isValid = true;
+      } else {
+        member = await verifyTeamMemberPassword(password);
+        isValid = !!member;
+        if (isValid) role = DASHBOARD_ROLE_MEMBER;
+      }
+    } else if (apiKey) {
+      // ── Key sign-in ────────────────────────────────────────────────
+      // A teammate signs in with their API key. The key IS the identity:
+      // the session is bound to the key's fingerprint, so every request
+      // they make is billed to THAT key and is subject to THAT key's
+      // allow-list, budget and rate limits. No separate user table, no
+      // second password to leak.
+      const record = await getApiKeyByKey(String(apiKey).trim());
+      if (!record || record.isActive === false) {
+        const { remainingBeforeLock } = recordFail(ip);
+        return NextResponse.json(
+          { error: `Invalid API key. ${remainingBeforeLock} attempt(s) left before lockout.`, remainingBeforeLock },
+          { status: 401 }
+        );
+      }
+      member = {
+        id: null,
+        username: record.name || null,
+        keyRef: record.keyRef,
+      };
+      isValid = true;
+      role = DASHBOARD_ROLE_MEMBER;
     }
 
     if (isValid) {
@@ -65,7 +102,7 @@ export async function POST(request) {
       // Default password still in use on a remote client → force a password
       // change before the dashboard is exposed remotely (keeps local UX intact).
       const mustChangePassword =
-        !storedHash && !process.env.INITIAL_PASSWORD && !isLocalRequest(request);
+        !member && !settings.password && !process.env.INITIAL_PASSWORD && !isLocalRequest(request);
 
       if (mustChangePassword) {
         // Do NOT issue a session token: a fresh install's default password is
@@ -88,9 +125,24 @@ export async function POST(request) {
       }
 
       const cookieStore = await cookies();
-      await setDashboardAuthCookie(cookieStore, request);
+      await setDashboardAuthCookie(cookieStore, request, {
+        role,
+        userId: member?.id || null,
+        // The teammate's display name.
+        username: member?.name || member?.username || null,
+        // The key fingerprint this session is bound to. The chat route bills
+        // the member's requests to exactly this key.
+        keyRef: member?.keyRef || member?.apiKeyRef || null,
+        // The dashboard areas this member may reach. Read from the row at
+        // sign-in; the owner changes them from the dashboard, and the member
+        // signs in again to pick them up.
+        areas: member?.areas || [],
+      });
 
-      return NextResponse.json({ success: true, mustChangePassword: false }, { headers: NO_STORE_HEADERS });
+      return NextResponse.json(
+        { success: true, mustChangePassword: false, role, username: member?.name || member?.username || null },
+        { headers: NO_STORE_HEADERS }
+      );
     }
 
     const { remainingBeforeLock } = recordFail(ip);

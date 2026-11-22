@@ -95,9 +95,9 @@ export default function PricingModal({ isOpen, onClose, onSave }) {
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-bg-base border border-border rounded-lg shadow-xl max-w-6xl w-full max-h-[90vh] overflow-hidden flex flex-col">
+      <div className="bg-bg-base border-2 border-ink rounded-lg shadow-xl max-w-6xl w-full max-h-[90vh] overflow-hidden flex flex-col">
         {/* Header */}
-        <div className="p-4 border-b border-border flex items-center justify-between">
+        <div className="p-4 border-b-2 border-ink flex items-center justify-between">
           <h2 className="text-xl font-semibold">Pricing Configuration</h2>
           <button
             onClick={onClose}
@@ -114,7 +114,7 @@ export default function PricingModal({ isOpen, onClose, onSave }) {
           ) : (
             <div className="space-y-6">
               {/* Instructions */}
-              <div className="bg-bg-subtle border border-border rounded-lg p-3 text-sm">
+              <div className="bg-bg-subtle border-2 border-ink rounded-lg p-3 text-sm">
                 <p className="font-medium mb-1">Pricing Rates Format</p>
                 <p className="text-text-muted">
                   All rates are in <strong>dollars per million tokens</strong> ($/1M tokens).
@@ -126,7 +126,7 @@ export default function PricingModal({ isOpen, onClose, onSave }) {
               {allProviders.map(provider => {
                 const models = Object.keys(pricingData[provider]).sort();
                 return (
-                  <div key={provider} className="border border-border rounded-lg overflow-hidden">
+                  <div key={provider} className="border-2 border-ink rounded-lg overflow-hidden">
                     <div className="bg-bg-subtle px-4 py-2 font-semibold text-sm">
                       {provider.toUpperCase()}
                     </div>
@@ -154,7 +154,7 @@ export default function PricingModal({ isOpen, onClose, onSave }) {
                                     min="0"
                                     value={pricingData[provider][model][field] || 0}
                                     onChange={(e) => handlePricingChange(provider, model, field, e.target.value)}
-                                    className="w-20 px-2 py-1 text-right bg-bg-base border border-border rounded focus:outline-none focus:border-primary"
+                                    className="w-20 px-2 py-1 text-right bg-bg-base border-2 border-ink rounded focus:outline-none focus:border-brand-600 dark:border-brand-300/60"
                                   />
                                 </td>
                               ))}
@@ -177,10 +177,10 @@ export default function PricingModal({ isOpen, onClose, onSave }) {
         </div>
 
         {/* Footer */}
-        <div className="p-4 border-t border-border flex items-center justify-between gap-2">
+        <div className="p-4 border-t-2 border-ink flex items-center justify-between gap-2">
           <button
             onClick={handleReset}
-            className="px-4 py-2 text-sm text-red-500 hover:bg-red-500/10 rounded border border-red-500/20 transition-colors"
+            className="px-4 py-2 text-sm text-danger hover:bg-danger/10 rounded border border-danger/20 transition-colors"
             disabled={saving}
           >
             Reset to Defaults
@@ -188,14 +188,14 @@ export default function PricingModal({ isOpen, onClose, onSave }) {
           <div className="flex gap-2">
             <button
               onClick={onClose}
-              className="px-4 py-2 text-sm text-text-muted hover:text-text border border-border rounded transition-colors"
+              className="px-4 py-2 text-sm text-text-muted hover:text-text border-2 border-ink rounded transition-colors"
               disabled={saving}
             >
               Cancel
             </button>
             <button
               onClick={handleSave}
-              className="px-4 py-2 text-sm bg-primary text-white rounded hover:bg-primary/90 transition-colors disabled:opacity-50"
+              className="px-4 py-2 text-sm bg-ink text-[#FAF7F0] rounded hover:bg-brand-300/90 transition-colors disabled:opacity-50"
               disabled={saving}
             >
               {saving ? "Saving..." : "Save Changes"}

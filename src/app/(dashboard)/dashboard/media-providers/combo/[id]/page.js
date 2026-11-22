@@ -244,18 +244,18 @@ export default function ComboDetailPage() {
       {/* Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-3 min-w-0">
-          <Link href={backHref} className="text-text-muted hover:text-primary">
+          <Link href={backHref} className="text-text-muted hover:text-brand-700 dark:text-brand-300">
             <span className="material-symbols-outlined">arrow_back</span>
           </Link>
-          <div className="size-10 rounded-lg bg-primary/10 flex items-center justify-center">
-            <span className="material-symbols-outlined text-primary">layers</span>
+          <div className="size-10 rounded-lg bg-brand-300/25 flex items-center justify-center">
+            <span className="material-symbols-outlined text-brand-700 dark:text-brand-300">layers</span>
           </div>
           <div className="min-w-0">
             <p className="text-xs text-text-muted">{kindLabel} Combo</p>
             <code className="text-lg font-semibold font-mono">{combo.name}</code>
           </div>
         </div>
-        <Button variant="outline" icon="delete" onClick={handleDelete} className="text-red-500 border-red-200 hover:bg-red-50">
+        <Button variant="outline" icon="delete" onClick={handleDelete} className="text-danger border-danger hover:bg-danger">
           Delete
         </Button>
       </div>
@@ -312,13 +312,13 @@ export default function ComboDetailPage() {
                     {model && <code className="text-[10px] text-text-muted font-mono truncate block">{model}</code>}
                   </div>
                   <div className="flex items-center gap-0.5">
-                    <button onClick={() => handleMove(idx, -1)} disabled={idx === 0} className={`p-1 rounded ${idx === 0 ? "text-text-muted/20" : "text-text-muted hover:text-primary hover:bg-black/5"}`} title="Move up">
+                    <button onClick={() => handleMove(idx, -1)} disabled={idx === 0} className={`p-1 rounded ${idx === 0 ? "text-text-muted/20" : "text-text-muted hover:text-brand-700 dark:text-brand-300 hover:bg-black/5"}`} title="Move up">
                       <span className="material-symbols-outlined text-[16px]">arrow_upward</span>
                     </button>
-                    <button onClick={() => handleMove(idx, 1)} disabled={idx === providers.length - 1} className={`p-1 rounded ${idx === providers.length - 1 ? "text-text-muted/20" : "text-text-muted hover:text-primary hover:bg-black/5"}`} title="Move down">
+                    <button onClick={() => handleMove(idx, 1)} disabled={idx === providers.length - 1} className={`p-1 rounded ${idx === providers.length - 1 ? "text-text-muted/20" : "text-text-muted hover:text-brand-700 dark:text-brand-300 hover:bg-black/5"}`} title="Move down">
                       <span className="material-symbols-outlined text-[16px]">arrow_downward</span>
                     </button>
-                    <button onClick={() => handleRemoveProvider(idx)} className="p-1 rounded text-text-muted hover:text-red-500 hover:bg-red-500/10" title="Remove">
+                    <button onClick={() => handleRemoveProvider(idx)} className="p-1 rounded text-text-muted hover:text-danger hover:bg-danger/10" title="Remove">
                       <span className="material-symbols-outlined text-[16px]">close</span>
                     </button>
                   </div>
@@ -342,7 +342,7 @@ export default function ComboDetailPage() {
             {curlExample}
           </pre>
           {testError && (
-            <p className="mt-3 text-xs text-red-500 break-words">{testError}</p>
+            <p className="mt-3 text-xs text-danger break-words">{testError}</p>
           )}
           {testResult && (
             <div className="mt-3 flex flex-col gap-3">
@@ -352,18 +352,18 @@ export default function ComboDetailPage() {
               {testResult.imageUrl && (
                 <div>
                   <div className="flex items-center justify-end mb-1.5">
-                    <a href={testResult.imageUrl} download="image.png" className="inline-flex items-center gap-1 text-xs text-text-muted hover:text-primary transition-colors">
+                    <a href={testResult.imageUrl} download="image.png" className="inline-flex items-center gap-1 text-xs text-text-muted hover:text-brand-700 dark:text-brand-300 transition-colors">
                       <span className="material-symbols-outlined text-[14px]">download</span>
                       Download
                     </a>
                   </div>
-                  <img src={testResult.imageUrl} alt="Generated" className="max-w-full rounded-lg border border-border" loading="lazy" decoding="async" />
+                  <img src={testResult.imageUrl} alt="Generated" className="max-w-full rounded-lg border-2 border-ink" loading="lazy" decoding="async" />
                 </div>
               )}
               {testResult.audioUrl && (
                 <div>
                   <div className="flex items-center justify-end mb-1.5">
-                    <a href={testResult.audioUrl} download="speech.mp3" className="inline-flex items-center gap-1 text-xs text-text-muted hover:text-primary transition-colors">
+                    <a href={testResult.audioUrl} download="speech.mp3" className="inline-flex items-center gap-1 text-xs text-text-muted hover:text-brand-700 dark:text-brand-300 transition-colors">
                       <span className="material-symbols-outlined text-[14px]">download</span>
                       Download
                     </a>

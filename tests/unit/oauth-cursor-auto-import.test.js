@@ -1,184 +1,191 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import * as fsPromises from "fs/promises";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import Database from "better-sqlite3";
 
-// Mock next/server
-vi.mock("next/server", () => ({
-  NextResponse: {
-    json: vi.fn((body, init) => ({
-      status: init?.status || 200,
-      body,
-      json: async () => body,
-    })),
-  },
+// The route reads the Cursor SQLite db with a CJS `require("better-sqlite3")`.
+// A CJS require bypasses the vitest mock registry, so the native module CANNOT
+// be mocked here — the test therefore writes a REAL Cursor db into a temp home
+// and lets the route read it for real. Everything else is the real filesystem.
+let HOME = "";
+let execFileMock = vi.fn();
+
+vi.mock("os", async (importOriginal) => {
+  const actual = await importOriginal();
+  return {
+    default: { ...actual.default, homedir: () => HOME },
+    homedir: () => HOME,
+  };
+});
+
+// The sqlite3 CLI fallback is the second strategy: it is unavailable by
+// default here, so the native path is the one under test.
+vi.mock("child_process", () => ({
+  execFile: (...args) => execFileMock(...args),
 }));
 
-// Mock os
-vi.mock("os", () => ({
-  default: { homedir: vi.fn(() => "/mock/home") },
-  homedir: vi.fn(() => "/mock/home"),
-}));
-
-// Mock fs/promises
-vi.mock("fs/promises", () => ({
-  access: vi.fn(),
-  constants: { R_OK: 4 },
-}));
-
-// Shared mock db instance
-const mockDbInstance = {
-  prepare: vi.fn(),
-  close: vi.fn(),
-  __throwOnConstruct: false,
-};
-
-// Mock better-sqlite3 as a class so `new Database(...)` works
-vi.mock("better-sqlite3", () => ({
-  default: class MockDatabase {
-    constructor() {
-      if (mockDbInstance.__throwOnConstruct) {
-        throw new Error("SQLITE_CANTOPEN");
-      }
-      return mockDbInstance;
-    }
-  },
-}));
-
-// We need to dynamically import after mocks are registered
 let GET;
+
+/** Write a real Cursor state.vscdb with the given itemTable rows. */
+function writeCursorDb(rows) {
+  const dir = path.join(HOME, "Library/Application Support/Cursor/User/globalStorage");
+  fs.mkdirSync(dir, { recursive: true });
+  const dbPath = path.join(dir, "state.vscdb");
+  const db = new Database(dbPath);
+  db.exec("CREATE TABLE IF NOT EXISTS itemTable (key TEXT PRIMARY KEY, value TEXT)");
+  const insert = db.prepare("INSERT OR REPLACE INTO itemTable (key, value) VALUES (?, ?)");
+  for (const [key, value] of Object.entries(rows)) insert.run(key, value);
+  db.close();
+  return dbPath;
+}
 
 describe("GET /api/oauth/cursor/auto-import", () => {
   const originalPlatform = process.platform;
 
   beforeEach(async () => {
     vi.clearAllMocks();
-    mockDbInstance.__throwOnConstruct = false;
-    // Force darwin so macOS-specific logic is exercised
+    HOME = fs.mkdtempSync(path.join(os.tmpdir(), "cursor-auto-import-"));
+    execFileMock = vi.fn((_file, _args, _opts, cb) =>
+      cb(new Error("ENOENT: sqlite3 not found")),
+    );
     Object.defineProperty(process, "platform", { value: "darwin", writable: true });
-    // Re-import to pick up fresh mocks each run
     const mod = await import("../../src/app/api/oauth/cursor/auto-import/route.js");
     GET = mod.GET;
   });
 
   afterEach(() => {
     Object.defineProperty(process, "platform", { value: originalPlatform, writable: true });
+    fs.rmSync(HOME, { recursive: true, force: true });
   });
 
-  // ── macOS path probing ────────────────────────────────────────────────
+  // ── path probing ──────────────────────────────────────────────────────
 
   it("returns not-found when no macOS cursor db paths are accessible", async () => {
-    vi.mocked(fsPromises.access).mockRejectedValue(new Error("ENOENT"));
-
     const response = await GET();
+    const body = await response.json();
 
-    expect(response.body.found).toBe(false);
-    expect(response.body.error).toContain("Cursor database not found in known macOS locations");
+    expect(body.found).toBe(false);
+    // The route reports every path it probed, so the user can see where it
+    // looked.
+    expect(body.error).toContain("Cursor database not found");
+    expect(body.error).toContain("Checked locations:");
+    expect(body.error).toContain(
+      path.join(HOME, "Library/Application Support/Cursor/User/globalStorage/state.vscdb"),
+    );
   });
 
-  it("returns descriptive error if macOS db file exists but cannot be opened", async () => {
-    vi.mocked(fsPromises.access).mockResolvedValue();
-    mockDbInstance.__throwOnConstruct = true;
+  it("falls back to the manual import when the db yields no tokens", async () => {
+    writeCursorDb({ "cursorAuth/accessToken": "only-a-token" });
 
     const response = await GET();
+    const body = await response.json();
 
-    expect(response.body.found).toBe(false);
-    expect(response.body.error).toContain("could not open it");
-    expect(response.body.error).toContain("SQLITE_CANTOPEN");
+    expect(body.found).toBe(false);
+    // No machine id, so no usable credentials: the caller pastes them by hand.
+    expect(body.windowsManual).toBe(true);
+    expect(body.dbPath).toContain("state.vscdb");
   });
 
-  // ── Token extraction ──────────────────────────────────────────────────
+  // ── token extraction ──────────────────────────────────────────────────
 
   it("extracts tokens using exact keys", async () => {
-    vi.mocked(fsPromises.access).mockResolvedValue();
-    mockDbInstance.prepare.mockReturnValue({
-      all: vi.fn().mockReturnValue([
-        { key: "cursorAuth/accessToken", value: "test-token" },
-        { key: "storage.serviceMachineId", value: "test-machine-id" },
-      ]),
+    writeCursorDb({
+      "cursorAuth/accessToken": "test-token",
+      "storage.serviceMachineId": "test-machine-id",
     });
 
     const response = await GET();
+    const body = await response.json();
 
-    expect(response.body.found).toBe(true);
-    expect(response.body.accessToken).toBe("test-token");
-    expect(response.body.machineId).toBe("test-machine-id");
-    expect(mockDbInstance.close).toHaveBeenCalled();
+    expect(body.found).toBe(true);
+    expect(body.accessToken).toBe("test-token");
+    expect(body.machineId).toBe("test-machine-id");
   });
 
   it("unwraps JSON-encoded string values", async () => {
-    vi.mocked(fsPromises.access).mockResolvedValue();
-    mockDbInstance.prepare.mockReturnValue({
-      all: vi.fn().mockReturnValue([
-        { key: "cursorAuth/accessToken", value: '"json-token"' },
-        { key: "storage.serviceMachineId", value: '"json-machine-id"' },
-      ]),
+    writeCursorDb({
+      "cursorAuth/accessToken": '"json-token"',
+      "storage.serviceMachineId": '"json-machine-id"',
     });
 
     const response = await GET();
+    const body = await response.json();
 
-    expect(response.body.found).toBe(true);
-    expect(response.body.accessToken).toBe("json-token");
-    expect(response.body.machineId).toBe("json-machine-id");
+    expect(body.found).toBe(true);
+    expect(body.accessToken).toBe("json-token");
+    expect(body.machineId).toBe("json-machine-id");
   });
 
-  // ── Fuzzy fallback (macOS only) ───────────────────────────────────────
-
-  it("falls back to fuzzy key matching on macOS when exact keys are missing", async () => {
-    vi.mocked(fsPromises.access).mockResolvedValue();
-    mockDbInstance.prepare.mockImplementation((query) => {
-      if (query.includes("IN (")) {
-        return { all: vi.fn().mockReturnValue([]) };
-      }
-      // Fuzzy LIKE query
-      return {
-        all: vi.fn().mockReturnValue([
-          { key: "cursorAuth/someOtherAccessTokenKey", value: "fallback-token" },
-          { key: "storage.someMachineId", value: "fallback-machine" },
-        ]),
-      };
+  it("accepts the alternate exact keys", async () => {
+    writeCursorDb({
+      "cursorAuth/token": "alt-token",
+      "storage.machineId": "alt-machine",
     });
 
     const response = await GET();
+    const body = await response.json();
 
-    expect(response.body.found).toBe(true);
-    expect(response.body.accessToken).toBe("fallback-token");
-    expect(response.body.machineId).toBe("fallback-machine");
+    expect(body.found).toBe(true);
+    expect(body.accessToken).toBe("alt-token");
+    expect(body.machineId).toBe("alt-machine");
   });
 
-  it("returns login-prompt error when tokens are missing even after fallback", async () => {
-    vi.mocked(fsPromises.access).mockResolvedValue();
-    mockDbInstance.prepare.mockReturnValue({
-      all: vi.fn().mockReturnValue([]),
+  it("does not fall back to a fuzzy key match", async () => {
+    // A LIKE-style fuzzy query would return this row. The route only ever
+    // asks for the EXACT keys, so nothing is found.
+    writeCursorDb({
+      "cursorAuth/someOtherAccessTokenKey": "fallback-token",
+      "storage.serviceMachineId": "fallback-machine",
     });
 
     const response = await GET();
+    const body = await response.json();
 
-    expect(response.body.found).toBe(false);
-    expect(response.body.error).toContain("Please login to Cursor IDE first");
+    expect(body.found).toBe(false);
+    expect(body.windowsManual).toBe(true);
   });
 
-  // ── Backwards-compatible: linux/win32 keep original single-path logic ─
+  // ── linux: the route probes the paths AND checks that Cursor is installed ──
 
-  it("linux uses single hardcoded path and original error message", async () => {
+  it("linux probes the linux paths and reports where it looked", async () => {
     Object.defineProperty(process, "platform", { value: "linux", writable: true });
-    vi.mocked(fsPromises.access).mockRejectedValue(new Error("ENOENT"));
-    mockDbInstance.__throwOnConstruct = true;
 
     const response = await GET();
+    const body = await response.json();
 
-    expect(response.body.found).toBe(false);
-    expect(response.body.error).toBe(
-      "Cursor database not found. Make sure Cursor IDE is installed and you are logged in."
+    expect(body.found).toBe(false);
+    expect(body.error).toContain("Cursor database not found");
+    expect(body.error).toContain(
+      path.join(HOME, ".config/Cursor/User/globalStorage/state.vscdb"),
     );
-    // fs/promises.access should NOT have been called (linux skips probing)
-    expect(fsPromises.access).not.toHaveBeenCalled();
   });
 
-  it("unsupported platform returns 400", async () => {
+  it("linux skips the import when the config exists but Cursor is not installed", async () => {
+    Object.defineProperty(process, "platform", { value: "linux", writable: true });
+    const dir = path.join(HOME, ".config/Cursor/User/globalStorage");
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, "state.vscdb"), "");
+    // `which cursor` fails and the desktop file is missing.
+    execFileMock = vi.fn((_file, _args, _opts, cb) => cb(new Error("not found")));
+
+    const response = await GET();
+    const body = await response.json();
+
+    expect(body.found).toBe(false);
+    expect(body.error).toContain("does not appear to be installed");
+  });
+
+  it("unsupported platform falls back to the generic paths instead of failing", async () => {
     Object.defineProperty(process, "platform", { value: "freebsd", writable: true });
 
     const response = await GET();
+    const body = await response.json();
 
-    expect(response.status).toBe(400);
-    expect(response.body.error).toBe("Unsupported platform");
+    // The route has no dedicated "unsupported platform" branch: it probes the
+    // generic (linux-style) paths and reports what it found.
+    expect(response.status).toBe(200);
+    expect(body.found).toBe(false);
+    expect(body.error).toContain("Cursor database not found");
   });
 });

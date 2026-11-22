@@ -1,7 +1,7 @@
 <div align="center">
   <img src="./images/9router.png?1" alt="9Router Dashboard" width="800"/>
   
-  # 9Router - FREE AI Router & Token Saver
+  # Ryo - FREE AI Router & Token Saver
   
   **Never stop coding. Save 20-40% tokens with RTK + auto-fallback to FREE & cheap AI models.**
   
@@ -1480,7 +1480,7 @@ Notes:
 
 ## 🛠️ Tech Stack
 
-- **Runtime**: Node.js 20+
+- **Runtime**: Node.js 20.18.1+ (22 LTS recommended)
 - **Framework**: Next.js 16
 - **UI**: React 19 + Tailwind CSS 4
 - **Database**: SQLite (better-sqlite3 / node:sqlite / sql.js fallback)
