@@ -17,7 +17,7 @@ describe("API key visibility guidance source verification", () => {
   });
 
   it("retains the list's reveal and copy controls", () => {
-    expect(source).toContain("visibleKeys.has(key.id) ? key.key : maskKey(key.key)");
+    expect(source).toContain("keyMaskView(key.key, keysMasked, visibleKeys.has(key.id))");
     expect(source).toContain("onClick={() => toggleKeyVisibility(key.id)}");
     expect(source).toContain("onClick={() => copy(key.key, key.id)}");
   });

@@ -19,18 +19,33 @@ const VISIBLE_MEDIA_KINDS = ["embedding", "image", "video", "tts", "stt", "syste
 // Combined entry: webSearch + webFetch share one page at /dashboard/media-providers/web
 const COMBINED_WEB_ITEM = { id: "web", label: "Web Fetch & Search", icon: "travel_explore", href: "/dashboard/media-providers/web" };
 
-const navItems = [
-  { href: "/dashboard/endpoint", label: "Endpoint & Key", icon: "api" },
-  { href: "/dashboard/providers", label: "Providers", icon: "dns" },
-  { href: "/dashboard/basic-chat", label: "Basic Chat", icon: "chat" },
-  { href: "/dashboard/combos", label: "Combo & Vision Adapter", icon: "layers" },
-  { href: "/dashboard/prompts", label: "Prompt Library", icon: "prompt_suggestion" },
-  { href: "/dashboard/usage", label: "Usage", icon: "bar_chart" },
-  { href: "/dashboard/health", label: "Health & Spend", icon: "monitor_heart" },
-  { href: "/dashboard/quota", label: "Quota Tracker", icon: "data_usage" },
-  { href: "/dashboard/token-saver", label: "Token Saver", icon: "savings" },
-  // { href: "/dashboard/pxpipe", label: "PXPIPE", icon: "image" },
-  { href: "/dashboard/cli-tools", label: "CLI Tools", icon: "terminal" },
+const NAV_GROUPS = [
+  {
+    title: "Workspace",
+    items: [
+      { href: "/dashboard/endpoint", label: "Endpoint & Key", icon: "api" },
+      { href: "/dashboard/providers", label: "Providers", icon: "dns" },
+      { href: "/dashboard/basic-chat", label: "Basic Chat", icon: "chat" },
+      { href: "/dashboard/combos", label: "Combo & Vision Adapter", icon: "layers" },
+      { href: "/dashboard/prompts", label: "Prompt Library", icon: "prompt_suggestion" },
+    ],
+  },
+  {
+    title: "Monitor",
+    items: [
+      { href: "/dashboard/usage", label: "Usage", icon: "bar_chart" },
+      { href: "/dashboard/health", label: "Health & Spend", icon: "monitor_heart" },
+      { href: "/dashboard/quota", label: "Quota Tracker", icon: "data_usage" },
+    ],
+  },
+  {
+    title: "Tools",
+    items: [
+      { href: "/dashboard/token-saver", label: "Token Saver", icon: "savings" },
+      // { href: "/dashboard/pxpipe", label: "PXPIPE", icon: "image" },
+      { href: "/dashboard/cli-tools", label: "CLI Tools", icon: "terminal" },
+    ],
+  },
 ];
 
 const debugItems = [
@@ -58,12 +73,15 @@ export default function Sidebar({ onClose }) {
   // A teammate member sees only the nav entries of the areas the owner
   // granted. The server enforces the same rule — this only hides what is
   // already refused.
-  const visibleNavItems = isMember
-    ? navItems.filter((item) => {
-        const area = AREA_FOR_NAV[item.href];
-        return area && areas.includes(area);
-      })
-    : navItems;
+  const visibleGroups = NAV_GROUPS.map((group) => ({
+    ...group,
+    items: isMember
+      ? group.items.filter((item) => {
+          const area = AREA_FOR_NAV[item.href];
+          return area && areas.includes(area);
+        })
+      : group.items,
+  })).filter((group) => group.items.length > 0);
   const [mediaOpen, setMediaOpen] = useState(false);
   const [isDisconnected, setIsDisconnected] = useState(false);
   const [updateInfo, setUpdateInfo] = useState(null);
@@ -182,28 +200,35 @@ export default function Sidebar({ onClose }) {
 
         {/* Navigation */}
         <nav className="flex-1 px-4 py-2 space-y-0.5 overflow-y-auto custom-scrollbar">
-          {visibleNavItems.map((item) => (
-            <Link
-              key={item.href}
-              href={item.href}
-              onClick={onClose}
-              className={cn(
-                "flex items-center gap-2.5 px-2.5 py-1.5 rounded-[12px] transition-all group",
-                isActive(item.href)
-                  ? "bg-ink text-[#FAF7F0] border-2 border-ink font-bold shadow-[3px_3px_0_0_var(--color-shadow)]"
-                  : "text-white/70 hover:bg-white/10 hover:text-white border-2 border-transparent"
-              )}
-            >
-              <span
-                className={cn(
-                  "material-symbols-outlined text-[17px]",
-                  isActive(item.href) ? "fill-1" : "group-hover:text-brand-300 transition-colors"
-                )}
-              >
-                {item.icon}
-              </span>
-              <span className="text-[12.5px] font-bold uppercase tracking-normal">{item.label}</span>
-            </Link>
+          {visibleGroups.map((group) => (
+            <div key={group.title} className="pt-3 mt-2 space-y-0.5">
+              <p className="px-2.5 text-[10px] font-bold text-white/40 uppercase tracking-[0.08em] mb-1.5">
+                {group.title}
+              </p>
+              {group.items.map((item) => (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  onClick={onClose}
+                  className={cn(
+                    "flex items-center gap-2.5 px-2.5 py-1.5 rounded-[12px] transition-all group",
+                    isActive(item.href)
+                      ? "bg-ink text-[#FAF7F0] border-2 border-ink font-bold shadow-[3px_3px_0_0_var(--color-shadow)]"
+                      : "text-white/70 hover:bg-white/10 hover:text-white border-2 border-transparent"
+                  )}
+                >
+                  <span
+                    className={cn(
+                      "material-symbols-outlined text-[17px]",
+                      isActive(item.href) ? "fill-1" : "group-hover:text-brand-300 transition-colors"
+                    )}
+                  >
+                    {item.icon}
+                  </span>
+                  <span className="text-[12.5px] font-bold uppercase tracking-normal">{item.label}</span>
+                </Link>
+              ))}
+            </div>
           ))}
 
           {/* System section — owner only */}

@@ -19,6 +19,47 @@ import StatusAlert from "./components/StatusAlert";
 import Tooltip from "./components/Tooltip";
 import SecurityWarning from "./components/SecurityWarning";
 import KeyAccessControls from "./components/KeyAccessControls";
+
+// >>> MASK HELPERS (pure; mirrored by .loop/scratch/c-keys-check.mjs)
+const MASKED_KEY_NOTE = "Key values are only visible on the machine that runs the router — open the dashboard on the host.";
+const MASK_BULLETS = "•".repeat(8);
+const KEY_DATE_OPTIONS = { month: "short", day: "numeric", year: "numeric" };
+
+function maskKey(fullKey) {
+  if (!fullKey || typeof fullKey !== "string") return "";
+  const value = fullKey.trim();
+  if (value.length <= 10) return value.slice(0, 2) + MASK_BULLETS;
+  return value.slice(0, 6) + MASK_BULLETS + value.slice(-4);
+}
+
+function keyMaskView(keyValue, keysMasked, isVisible) {
+  if (keysMasked) {
+    const value = (keyValue || "").trim();
+    const stars = value.indexOf("***");
+    const prefix = stars >= 0 ? value.slice(0, Math.min(6, stars)) : value.slice(0, 6);
+    const suffix = stars >= 0 && value.length > 12 ? value.slice(-4) : "";
+    return {
+      value: prefix + MASK_BULLETS + suffix,
+      actionsDisabled: true,
+      note: MASKED_KEY_NOTE,
+    };
+  }
+  return {
+    value: isVisible ? keyValue : maskKey(keyValue),
+    actionsDisabled: false,
+    note: null,
+  };
+}
+
+function formatKeyDate(value) {
+  return new Date(value).toLocaleDateString("en-US", KEY_DATE_OPTIONS);
+}
+// <<< MASK HELPERS
+
+function SectionLabel({ children }) {
+  return <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-text-muted">{children}</h4>;
+}
+
 export default function APIPageClient({ machineId }) {
   const [keys, setKeys] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -78,6 +119,7 @@ export default function APIPageClient({ machineId }) {
 
   // API key visibility toggle state
   const [visibleKeys, setVisibleKeys] = useState(new Set());
+  const [keysMasked, setKeysMasked] = useState(false);
 
   // Client-side local/remote detection (UI hint only, not a security gate)
   const [isRemoteHost, setIsRemoteHost] = useState(false);
@@ -250,12 +292,13 @@ export default function APIPageClient({ machineId }) {
     try {
       const fetchKeys = async () => {
         const res = await fetch("/api/keys");
-        if (!res.ok) return [];
+        if (!res.ok) return { keys: [], masked: false };
         const data = await res.json();
-        return data.keys || [];
+        return { keys: data.keys || [], masked: data.masked === true };
       };
 
-      let existing = await fetchKeys();
+      let { keys: existing, masked } = await fetchKeys();
+      setKeysMasked(masked);
       // Auto-provision a default key for first-time users so the endpoint works out of the box.
       if (existing.length === 0) {
         try {
@@ -264,7 +307,11 @@ export default function APIPageClient({ machineId }) {
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ name: "Default Key" }),
           });
-          if (createRes.ok) existing = await fetchKeys();
+          if (createRes.ok) {
+            const next = await fetchKeys();
+            existing = next.keys;
+            setKeysMasked(next.masked);
+          }
         } catch { /* fall through to empty render */ }
       }
       setKeys(existing);
@@ -807,11 +854,6 @@ export default function APIPageClient({ machineId }) {
     }
   };
 
-  const maskKey = (fullKey) => {
-    if (!fullKey || fullKey.length <= 10) return fullKey || "";
-    return fullKey.slice(0, 6) + "•".repeat(fullKey.length - 10) + fullKey.slice(-4);
-  };
-
   const toggleKeyVisibility = (keyId) => {
     setVisibleKeys(prev => {
       const next = new Set(prev);
@@ -1132,192 +1174,238 @@ export default function APIPageClient({ machineId }) {
           </div>
         ) : (
           <div className="flex flex-col">
-            {keys.map((key) => (
-              <div
+            {keys.map((key) => {
+              const keyView = keyMaskView(key.key, keysMasked, visibleKeys.has(key.id));
+              const isPaused = key.isActive === false;
+              return (
+              <section
                 key={key.id}
-                className={`group flex items-start justify-between gap-3 py-3 border-b border-ink/[0.03] dark:border-white/[0.03] last:border-b-0 ${key.isActive === false ? "opacity-60" : ""}`}
+                className={`rounded-xl border-2 border-ink bg-surface-2 p-4 ${isPaused ? "opacity-80" : ""}`}
               >
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium">{key.name}</p>
-                  <div className="flex items-center gap-2 mt-1 min-w-0 flex-wrap">
-                    <code className="text-xs text-text-muted font-mono break-all min-w-0">
-                      {visibleKeys.has(key.id) ? key.key : maskKey(key.key)}
-                    </code>
-                    <div className="flex items-center gap-1 shrink-0">
-                      <button
-                        onClick={() => toggleKeyVisibility(key.id)}
-                        className="p-1 hover:bg-black/5 dark:hover:bg-white/5 rounded text-text-muted hover:text-brand-700 dark:text-brand-300 transition-all"
-                        title={visibleKeys.has(key.id) ? "Hide key" : "Show key"}
-                      >
-                        <span className="material-symbols-outlined text-[14px]">
-                          {visibleKeys.has(key.id) ? "visibility_off" : "visibility"}
-                        </span>
-                      </button>
-                      <button
-                        onClick={() => copy(key.key, key.id)}
-                        className="p-1 hover:bg-black/5 dark:hover:bg-white/5 rounded text-text-muted hover:text-brand-700 dark:text-brand-300 transition-all"
-                      >
-                        <span className="material-symbols-outlined text-[14px]">
-                          {copied === key.id ? "check" : "content_copy"}
-                        </span>
-                      </button>
-                    </div>
+                <header className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <SectionLabel>Credential</SectionLabel>
+                    <h3 className="text-sm font-semibold text-text-main break-words">{key.name}</h3>
+                    <p className="mt-1 text-xs text-text-muted">Created {formatKeyDate(key.createdAt)}</p>
                   </div>
-                  <p className="text-xs text-text-muted mt-1">
-                    Created {new Date(key.createdAt).toLocaleDateString()}
-                  </p>
-                  {key.isActive === false && (
-                    <p className="text-xs text-warning mt-1">Paused</p>
-                  )}
-                  <KeyAccessControls
-                    apiKey={key}
-                    onChange={(access) => handleUpdateKeyAccess(key.id, access)}
-                    onRequestRestrict={() => setConfirmState({
-                      title: "Restrict API Key",
-                      message: `Restrict API key "${key.name}"?\n\nIt will only be able to call the combos and models you add. Until you add one, it can call nothing.`,
-                      onConfirm: async () => {
-                        setConfirmState(null);
-                        handleUpdateKeyAccess(key.id, { restricted: true, allow: key.access?.allow || [] });
-                      }
-                    })}
-                  />
-                  <div className="mt-3 flex items-center gap-2 flex-wrap text-xs text-text-muted">
-                    <label htmlFor={`rpm-${key.id}`}>Requests/min:</label>
-                    <input
-                      id={`rpm-${key.id}`}
-                      aria-label={`Requests per minute for ${key.name}`}
-                      type="number"
-                      min="0"
-                      max="1000000"
-                      step="1"
-                      value={rpmDrafts[key.id] ?? String(key.rpmLimit || 0)}
-                      disabled={savingBudgetId === key.id}
-                      onChange={(e) => setRpmDrafts((prev) => ({ ...prev, [key.id]: e.target.value }))}
-                      className="w-24 rounded-md border-2 border-ink bg-bg px-2 py-1 text-sm"
-                    />
-                    <span>0 = unlimited</span>
-                    <button
-                      onClick={() => handleSaveRpm(key)}
-                      disabled={savingBudgetId === key.id}
-                      className="rounded-md bg-surface-2 px-2 py-1 text-xs text-text-main border-2 border-ink disabled:opacity-50"
-                    >Save</button>
-                    <label htmlFor={`tpm-${key.id}`}>Tokens/min:</label>
-                    <input
-                      id={`tpm-${key.id}`}
-                      aria-label={`Tokens per minute for ${key.name}`}
-                      type="number"
-                      min="0"
-                      max="1000000000"
-                      step="1"
-                      value={tpmDrafts[key.id] ?? String(key.tpmLimit || 0)}
-                      disabled={savingBudgetId === key.id}
-                      onChange={(e) => setTpmDrafts((prev) => ({ ...prev, [key.id]: e.target.value }))}
-                      className="w-24 rounded-md border-2 border-ink bg-bg px-2 py-1 text-sm"
-                    />
-                    <span>0 = unlimited</span>
-                    <button
-                      onClick={() => handleSaveTpm(key)}
-                      disabled={savingBudgetId === key.id}
-                      className="rounded-md bg-surface-2 px-2 py-1 text-xs text-text-main border-2 border-ink disabled:opacity-50"
-                    >Save</button>
-                  </div>
-                  {/* Per-key monthly budget */}
-                  <div className="mt-3 pt-3 border-t border-ink/[0.03] dark:border-white/[0.03]">
-                    {(() => {
-                      const draft = budgetDraftOf(key);
-                      const usedPct = key.budgetLimitCents == null ? null : (key.budgetLimitCents > 0 ? Math.min(100, Math.round(((key.budgetSpentCents || 0) / key.budgetLimitCents) * 100)) : 100);
-                      return (
-                        <>
-                          <div className="flex items-center gap-2 text-xs text-text-muted flex-wrap">
-                            <span>Monthly budget:</span>
-                            {key.budgetLimitCents == null ? (
-                              <span>Unlimited</span>
-                            ) : (
-                              <span>${(key.budgetSpentCents || 0) / 100} / ${key.budgetLimitCents / 100} used ({usedPct}%)</span>
-                            )}
-                          </div>
-                          {key.budgetLimitCents != null && (
-                            <div className="mt-1 h-1.5 w-full max-w-xs rounded-full bg-surface-2 overflow-hidden">
-                              <div
-                                className={`h-full ${usedPct >= 80 ? "bg-danger" : usedPct >= 50 ? "bg-warning" : "bg-success"}`}
-                                style={{ width: `${usedPct}%` }}
-                              />
-                            </div>
-                          )}
-                          <div className="mt-2 flex items-center gap-2 flex-wrap">
-                            <input
-                              aria-label="Monthly budget in USD"
-                              type="number"
-                              min="0"
-                              step="0.01"
-                              disabled={draft.unlimited || savingBudgetId === key.id}
-                              value={draft.unlimited ? "" : draft.dollars}
-                              onChange={(e) => setBudgetDraft(key.id, { dollars: e.target.value })}
-                              placeholder="0.00"
-                              className="w-24 rounded-md border-2 border-ink bg-bg px-2 py-1 text-sm"
-                            />
-                            <label className="flex items-center gap-1 text-xs text-text-muted cursor-pointer">
-                              <input
-                                type="checkbox"
-                                checked={draft.unlimited}
-                                disabled={savingBudgetId === key.id}
-                                onChange={(e) => setBudgetDraft(key.id, { unlimited: e.target.checked })}
-                                className="accent-brand-500"
-                              />
-                              Unlimited
-                            </label>
-                            <button
-                              onClick={() => handleSaveBudget(key)}
-                              disabled={savingBudgetId === key.id}
-                              className="rounded-md bg-surface-2 px-2 py-1 text-xs text-text-main border-2 border-ink disabled:opacity-50"
-                            >
-                              {savingBudgetId === key.id ? "Saving..." : "Save"}
-                            </button>
-                            {(key.budgetSpentCents || 0) > 0 && (
-                              <button
-                                onClick={() => handleResetBudget(key)}
-                                disabled={savingBudgetId === key.id}
-                                title="Reset this month's spend to zero"
-                                className="rounded-md px-2 py-1 text-xs text-danger border border-danger/30 hover:bg-danger/10 disabled:opacity-50"
-                              >
-                                Reset spend
-                              </button>
-                            )}
-                          </div>
-                        </>
-                      );
-                    })()}
-                  </div>
-                </div>
-                <div className="flex items-center gap-2 shrink-0 pt-0.5">
-                  <Toggle
-                    size="sm"
-                    checked={key.isActive ?? true}
-                    onChange={(checked) => {
-                      if (key.isActive && !checked) {
-                        setConfirmState({
-                          title: "Pause API Key",
-                          message: `Pause API key "${key.name}"?\n\nThis key will stop working immediately but can be resumed later.`,
-                          onConfirm: async () => {
-                            setConfirmState(null);
+                  <div className="flex shrink-0 items-center gap-2">
+                    <div className="flex h-9 items-center gap-2">
+                      <Toggle
+                        size="md"
+                        checked={key.isActive ?? true}
+                        onChange={(checked) => {
+                          if (key.isActive && !checked) {
+                            setConfirmState({
+                              title: "Pause API Key",
+                              message: `Pause API key "${key.name}"?\n\nThis key will stop working immediately but can be resumed later.`,
+                              onConfirm: async () => {
+                                setConfirmState(null);
+                                handleToggleKey(key.id, checked);
+                              }
+                            });
+                          } else {
                             handleToggleKey(key.id, checked);
                           }
-                        });
-                      } else {
-                        handleToggleKey(key.id, checked);
-                      }
-                    }}
-                    title={key.isActive ? "Pause key" : "Resume key"}
-                  />
-                  <button
-                    onClick={() => handleDeleteKey(key.id)}
-                    className="p-2 hover:bg-danger/10 rounded text-danger opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-all"
-                  >
-                    <span className="material-symbols-outlined text-[18px]">delete</span>
-                  </button>
+                        }}
+                        title={key.isActive ? "Pause key" : "Resume key"}
+                      />
+                      <span
+                        className={`inline-flex h-9 items-center rounded-md border px-2 text-xs font-medium ${
+                          isPaused
+                            ? "border-warning/40 bg-warning/10 text-warning"
+                            : "border-success/40 bg-success/10 text-success"
+                        }`}
+                      >
+                        {isPaused ? "Paused" : "Enabled"}
+                      </span>
+                    </div>
+                    <button
+                      onClick={() => handleDeleteKey(key.id)}
+                      title="Delete key"
+                      aria-label={`Delete API key ${key.name}`}
+                      className="flex h-9 w-9 items-center justify-center rounded-md border-2 border-ink bg-bg text-danger transition-all hover:bg-danger/10"
+                    >
+                      <span className="material-symbols-outlined text-[18px]">delete</span>
+                    </button>
+                  </div>
+                </header>
+
+                <div className="mt-4">
+                  <SectionLabel>Key value</SectionLabel>
+                  <div className="flex items-center gap-2 min-w-0">
+                    <code className="min-w-0 flex-1 select-all overflow-x-auto whitespace-nowrap rounded-md border-2 border-ink bg-bg px-3 py-2 font-mono text-sm leading-6 text-brand-700 dark:text-brand-300">
+                      {keyView.value}
+                    </code>
+                    <button
+                      onClick={() => toggleKeyVisibility(key.id)}
+                      disabled={keyView.actionsDisabled}
+                      className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border-2 border-ink bg-bg text-text-muted transition-all hover:bg-surface hover:text-brand-700 dark:text-brand-300 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-bg"
+                      title={keyView.actionsDisabled ? MASKED_KEY_NOTE : visibleKeys.has(key.id) ? "Hide key" : "Show key"}
+                      aria-label={keyView.actionsDisabled ? MASKED_KEY_NOTE : visibleKeys.has(key.id) ? "Hide key" : "Show key"}
+                    >
+                      <span className="material-symbols-outlined text-[18px]">
+                        {visibleKeys.has(key.id) ? "visibility_off" : "visibility"}
+                      </span>
+                    </button>
+                    <button
+                      onClick={() => copy(key.key, key.id)}
+                      disabled={keyView.actionsDisabled}
+                      className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border-2 border-ink bg-bg text-text-muted transition-all hover:bg-surface hover:text-brand-700 dark:text-brand-300 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-bg"
+                      title={keyView.actionsDisabled ? MASKED_KEY_NOTE : "Copy key"}
+                      aria-label={keyView.actionsDisabled ? MASKED_KEY_NOTE : "Copy key"}
+                    >
+                      <span className="material-symbols-outlined text-[18px]">
+                        {copied === key.id ? "check" : "content_copy"}
+                      </span>
+                    </button>
+                  </div>
+                  {keyView.note && <p className="mt-2 text-xs text-warning">{keyView.note}</p>}
                 </div>
-              </div>
-            ))}
+
+                <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                  <section className="min-w-0">
+                    <SectionLabel>Access</SectionLabel>
+                    <KeyAccessControls
+                      apiKey={key}
+                      onChange={(access) => handleUpdateKeyAccess(key.id, access)}
+                      onRequestRestrict={() => setConfirmState({
+                        title: "Restrict API Key",
+                        message: `Restrict API key "${key.name}"?\n\nIt will only be able to call the combos and models you add. Until you add one, it can call nothing.`,
+                        onConfirm: async () => {
+                          setConfirmState(null);
+                          handleUpdateKeyAccess(key.id, { restricted: true, allow: key.access?.allow || [] });
+                        }
+                      })}
+                    />
+                  </section>
+
+                  <div className="min-w-0 space-y-4">
+                    <section>
+                      <SectionLabel>Rate limits</SectionLabel>
+                      <div className="space-y-3">
+                        <div className="min-w-0">
+                          <label htmlFor={`rpm-${key.id}`} className="block text-xs text-text-muted">Requests/min:</label>
+                          <div className="mt-1 flex items-center gap-2">
+                            <input
+                              id={`rpm-${key.id}`}
+                              aria-label={`Requests per minute for ${key.name}`}
+                              type="number"
+                              min="0"
+                              max="1000000"
+                              step="1"
+                              value={rpmDrafts[key.id] ?? String(key.rpmLimit || 0)}
+                              disabled={savingBudgetId === key.id}
+                              onChange={(e) => setRpmDrafts((prev) => ({ ...prev, [key.id]: e.target.value }))}
+                              className="h-9 min-w-0 w-28 rounded-md border-2 border-ink bg-bg px-2 text-sm"
+                            />
+                            <span className="text-xs text-text-muted">0 = unlimited</span>
+                            <button
+                              onClick={() => handleSaveRpm(key)}
+                              disabled={savingBudgetId === key.id}
+                              className="flex h-9 items-center rounded-md bg-surface-2 px-3 text-xs text-text-main border-2 border-ink disabled:opacity-50"
+                            >Save</button>
+                          </div>
+                        </div>
+                        <div className="min-w-0">
+                          <label htmlFor={`tpm-${key.id}`} className="block text-xs text-text-muted">Tokens/min:</label>
+                          <div className="mt-1 flex items-center gap-2">
+                            <input
+                              id={`tpm-${key.id}`}
+                              aria-label={`Tokens per minute for ${key.name}`}
+                              type="number"
+                              min="0"
+                              max="100000000000"
+                              step="1"
+                              value={tpmDrafts[key.id] ?? String(key.tpmLimit || 0)}
+                              disabled={savingBudgetId === key.id}
+                              onChange={(e) => setTpmDrafts((prev) => ({ ...prev, [key.id]: e.target.value }))}
+                              className="h-9 min-w-0 w-28 rounded-md border-2 border-ink bg-bg px-2 text-sm"
+                            />
+                            <span className="text-xs text-text-muted">0 = unlimited</span>
+                            <button
+                              onClick={() => handleSaveTpm(key)}
+                              disabled={savingBudgetId === key.id}
+                              className="flex h-9 items-center rounded-md bg-surface-2 px-3 text-xs text-text-main border-2 border-ink disabled:opacity-50"
+                            >Save</button>
+                          </div>
+                        </div>
+                      </div>
+                    </section>
+
+                    {/* Per-key monthly budget */}
+                    <section>
+                      <SectionLabel>Budget</SectionLabel>
+                      {(() => {
+                        const draft = budgetDraftOf(key);
+                        const usedPct = key.budgetLimitCents == null ? null : (key.budgetLimitCents > 0 ? Math.min(100, Math.round(((key.budgetSpentCents || 0) / key.budgetLimitCents) * 100)) : 100);
+                        return (
+                          <>
+                            {key.budgetLimitCents != null && (
+                              <>
+                                <p className="text-xs text-text-muted">
+                                  ${(key.budgetSpentCents || 0) / 100} / ${key.budgetLimitCents / 100} used ({usedPct}%)
+                                </p>
+                                <div className="mt-1 h-1.5 w-full max-w-xs rounded-full bg-surface overflow-hidden">
+                                  <div
+                                    className={`h-full ${usedPct >= 80 ? "bg-danger" : usedPct >= 50 ? "bg-warning" : "bg-success"}`}
+                                    style={{ width: `${usedPct}%` }}
+                                  />
+                                </div>
+                              </>
+                            )}
+                            <div className="mt-2 flex flex-wrap items-center gap-2">
+                              <label className="flex h-9 items-center rounded-md border-2 border-ink bg-bg pl-2 text-sm text-text-muted">
+                                <span aria-hidden="true">$</span>
+                                <input
+                                  aria-label="Monthly budget in USD"
+                                  type="number"
+                                  min="0"
+                                  step="0.01"
+                                  disabled={draft.unlimited || savingBudgetId === key.id}
+                                  value={draft.unlimited ? "" : draft.dollars}
+                                  onChange={(e) => setBudgetDraft(key.id, { dollars: e.target.value })}
+                                  placeholder="0.00"
+                                  className="h-9 w-20 min-w-0 bg-transparent px-1 text-sm text-text-main focus:outline-none"
+                                />
+                              </label>
+                              <label className="flex h-9 items-center gap-1 text-xs text-text-muted cursor-pointer">
+                                <input
+                                  type="checkbox"
+                                  checked={draft.unlimited}
+                                  disabled={savingBudgetId === key.id}
+                                  onChange={(e) => setBudgetDraft(key.id, { unlimited: e.target.checked })}
+                                  className="accent-brand-500"
+                                />
+                                Unlimited budget
+                              </label>
+                              <button
+                                onClick={() => handleSaveBudget(key)}
+                                disabled={savingBudgetId === key.id}
+                                className="flex h-9 items-center rounded-md bg-surface-2 px-3 text-xs text-text-main border-2 border-ink disabled:opacity-50"
+                              >
+                                {savingBudgetId === key.id ? "Saving..." : "Save"}
+                              </button>
+                              {(key.budgetSpentCents || 0) > 0 && (
+                                <button
+                                  onClick={() => handleResetBudget(key)}
+                                  disabled={savingBudgetId === key.id}
+                                  title="Reset this month's spend to zero"
+                                  aria-label={`Reset spend for ${key.name}`}
+                                  className="flex h-9 items-center rounded-md px-2 text-xs text-danger border border-danger/30 hover:bg-danger/10 disabled:opacity-50"
+                                >
+                                  Reset spend
+                                </button>
+                              )}
+                            </div>
+                          </>
+                        );
+                      })()}
+                    </section>
+                  </div>
+                </div>
+              </section>
+              );
+            })}
           </div>
         )}
       </Card>
