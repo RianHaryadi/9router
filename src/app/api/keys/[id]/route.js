@@ -1,14 +1,28 @@
 import { NextResponse } from "next/server";
 import { deleteApiKey, getApiKeyById, updateApiKey } from "@/lib/localDb";
 import { validateKeyAccessInput } from "@/shared/utils/keyAccess.js";
+import { isLocalRequest, isMemberSession } from "@/dashboardGuard";
 
 // GET /api/keys/[id] - Get single key
+//
+// The key VALUE is a bearer secret: it must not travel with a plain read, or a
+// teammate holding the "Endpoint & Keys" area could read every key value one
+// by one. The value is served by POST /api/keys/[id]/reveal (password-gated),
+// so this route masks it like the list does.
 export async function GET(request, { params }) {
   try {
     const { id } = await params;
     const key = await getApiKeyById(id);
     if (!key) {
       return NextResponse.json({ error: "Key not found" }, { status: 404 });
+    }
+    if (!isLocalRequest(request) || (await isMemberSession(request))) {
+      const value = (key.key || "").trim();
+      const masked =
+        value.length <= 12
+          ? value.charAt(0) + "***"
+          : value.slice(0, 8) + "***" + value.slice(-4);
+      return NextResponse.json({ key: { ...key, key: masked } });
     }
     return NextResponse.json({ key });
   } catch (error) {

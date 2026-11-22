@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getApiKeys, createApiKey } from "@/lib/localDb";
 import { getConsistentMachineId } from "@/shared/utils/machineId";
-import { isLocalRequest } from "@/dashboardGuard";
+import { isLocalRequest, isMemberSession } from "@/dashboardGuard";
 
 export const dynamic = "force-dynamic";
 
@@ -10,6 +10,10 @@ export const dynamic = "force-dynamic";
 // the OWNER on the machine the router runs on; any other (remote) dashboard
 // session gets the masked form, so a leaked dashboard password cannot hand
 // out every key.
+//
+// A teammate NEVER gets a raw value, not even from the host: their session is
+// a member session wherever they sign in from. The owner can still reveal a
+// single value with the dashboard password (POST /api/keys/[id]/reveal).
 function maskKey(key) {
   if (!key || typeof key !== "string") return key;
   const trimmed = key.trim();
@@ -21,7 +25,7 @@ function maskKey(key) {
 export async function GET(request) {
   try {
     const keys = await getApiKeys();
-    const local = isLocalRequest(request);
+    const local = isLocalRequest(request) && !(await isMemberSession(request));
     return NextResponse.json({
       keys: local ? keys : keys.map((k) => ({ ...k, key: maskKey(k.key) })),
       masked: !local,

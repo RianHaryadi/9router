@@ -14,6 +14,7 @@ import {
 } from "./endpointConstants";
 import { clientPingUrl, clientPingAny } from "./endpointPing";
 import useSettingsStore from "@/store/settingsStore";
+import useSessionStore from "@/store/sessionStore";
 import EndpointRow from "./components/EndpointRow";
 import StatusAlert from "./components/StatusAlert";
 import Tooltip from "./components/Tooltip";
@@ -21,7 +22,8 @@ import SecurityWarning from "./components/SecurityWarning";
 import KeyAccessControls from "./components/KeyAccessControls";
 
 // >>> MASK HELPERS (pure; mirrored by .loop/scratch/c-keys-check.mjs)
-const MASKED_KEY_NOTE = "Key values are only visible on the machine that runs the router — open the dashboard on the host.";
+const MEMBER_KEY_NOTE = "Key values are never shown to a teammate. Ask the owner for the key.";
+const REVEAL_KEY_NOTE = "Enter the dashboard password to reveal this key.";
 const MASK_BULLETS = "•".repeat(8);
 const KEY_DATE_OPTIONS = { month: "short", day: "numeric", year: "numeric" };
 
@@ -32,20 +34,48 @@ function maskKey(fullKey) {
   return value.slice(0, 6) + MASK_BULLETS + value.slice(-4);
 }
 
-function keyMaskView(keyValue, keysMasked, isVisible) {
-  if (keysMasked) {
+// The view of one key value.
+//
+// The server never sends a raw value to a remote caller: the list comes
+// masked. The OWNER can still get the value, by re-entering the dashboard
+// password (POST /api/keys/[id]/reveal); a teammate never can.
+//
+//   revealed — the raw value was fetched: show it when isVisible, copy it always.
+//   canReveal — the owner on a remote host: the eye/copy buttons ask for the
+//               password instead of being disabled.
+//   otherwise — a teammate: the buttons are off.
+function keyMaskView(keyValue, { serverMasked, canReveal, revealed, isVisible }) {
+  if (revealed) {
+    return {
+      value: isVisible ? revealed : maskKey(revealed),
+      copyValue: revealed,
+      actionsDisabled: false,
+      note: null,
+    };
+  }
+  if (serverMasked) {
     const value = (keyValue || "").trim();
     const stars = value.indexOf("***");
     const prefix = stars >= 0 ? value.slice(0, Math.min(6, stars)) : value.slice(0, 6);
     const suffix = stars >= 0 && value.length > 12 ? value.slice(-4) : "";
+    if (!canReveal) {
+      return {
+        value: prefix + MASK_BULLETS + suffix,
+        copyValue: null,
+        actionsDisabled: true,
+        note: MEMBER_KEY_NOTE,
+      };
+    }
     return {
       value: prefix + MASK_BULLETS + suffix,
-      actionsDisabled: true,
-      note: MASKED_KEY_NOTE,
+      copyValue: null,
+      actionsDisabled: false,
+      note: REVEAL_KEY_NOTE,
     };
   }
   return {
     value: isVisible ? keyValue : maskKey(keyValue),
+    copyValue: keyValue,
     actionsDisabled: false,
     note: null,
   };
@@ -120,9 +150,23 @@ export default function APIPageClient({ machineId }) {
   // API key visibility toggle state
   const [visibleKeys, setVisibleKeys] = useState(new Set());
   const [keysMasked, setKeysMasked] = useState(false);
+  // The raw values the owner revealed (password-gated), by key id.
+  const [revealedKeys, setRevealedKeys] = useState({});
+  // The password prompt: { keyId, purpose: "reveal" | "copy" }
+  const [revealPrompt, setRevealPrompt] = useState(null);
+  const [revealPassword, setRevealPassword] = useState("");
+  const [revealError, setRevealError] = useState("");
 
   // Client-side local/remote detection (UI hint only, not a security gate)
   const [isRemoteHost, setIsRemoteHost] = useState(false);
+  // The session role decides who may reveal a key value: the owner may (with
+  // the dashboard password), a teammate never can.
+  const role = useSessionStore((s) => s.role);
+  const fetchSession = useSessionStore((s) => s.fetchSession);
+  const isMember = role === "member";
+  useEffect(() => {
+    fetchSession();
+  }, [fetchSession]);
   useEffect(() => {
     if (typeof window !== "undefined")
       setIsRemoteHost(!["localhost", "127.0.0.1", "::1"].includes(window.location.hostname));
@@ -863,6 +907,63 @@ export default function APIPageClient({ machineId }) {
     });
   };
 
+  // Fetch the raw value of one key (owner only, password-gated server-side).
+  const revealKey = async (keyId, password) => {
+    const res = await fetch(`/api/keys/${keyId}/reveal`, {
+      method: "POST",
+      headers: password ? { "x-9r-password": password } : {},
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.error || "Failed to reveal key");
+    }
+    const data = await res.json();
+    return data.key;
+  };
+
+  // The eye button: reveal (ask the password) or hide.
+  const handleToggleKeyVisibility = (key) => {
+    if (revealedKeys[key.id]) {
+      toggleKeyVisibility(key.id);
+      return;
+    }
+    if (keysMasked) {
+      setRevealPrompt({ keyId: key.id, purpose: "reveal" });
+      return;
+    }
+    toggleKeyVisibility(key.id);
+  };
+
+  // The copy button: copy the raw value, asking the password when needed.
+  const handleCopyKey = async (key) => {
+    const raw = revealedKeys[key.id] || (keysMasked ? null : key.key);
+    if (raw) {
+      copy(raw, key.id);
+      return;
+    }
+    setRevealPrompt({ keyId: key.id, purpose: "copy" });
+  };
+
+  const submitRevealPrompt = async (password) => {
+    if (!revealPrompt) return;
+    try {
+      const raw = await revealKey(revealPrompt.keyId, password);
+      setRevealedKeys((prev) => ({ ...prev, [revealPrompt.keyId]: raw }));
+      if (revealPrompt.purpose === "copy") copy(raw, revealPrompt.keyId);
+      else
+        setVisibleKeys((prev) => {
+          const next = new Set(prev);
+          next.add(revealPrompt.keyId);
+          return next;
+        });
+      setRevealPrompt(null);
+      setRevealPassword("");
+      setRevealError("");
+    } catch (error) {
+      setRevealError(error.message || "Failed to reveal key");
+    }
+  };
+
   const [baseUrl, setBaseUrl] = useState("/v1");
 
   // Hydration fix: Only access window on client side
@@ -1175,7 +1276,12 @@ export default function APIPageClient({ machineId }) {
         ) : (
           <div className="flex flex-col">
             {keys.map((key) => {
-              const keyView = keyMaskView(key.key, keysMasked, visibleKeys.has(key.id));
+              const keyView = keyMaskView(key.key, {
+                serverMasked: keysMasked,
+                canReveal: !isMember,
+                revealed: revealedKeys[key.id] || null,
+                isVisible: visibleKeys.has(key.id),
+              });
               const isPaused = key.isActive === false;
               return (
               <section
@@ -1237,22 +1343,22 @@ export default function APIPageClient({ machineId }) {
                       {keyView.value}
                     </code>
                     <button
-                      onClick={() => toggleKeyVisibility(key.id)}
+                      onClick={() => handleToggleKeyVisibility(key)}
                       disabled={keyView.actionsDisabled}
                       className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border-2 border-ink bg-bg text-text-muted transition-all hover:bg-surface hover:text-brand-700 dark:text-brand-300 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-bg"
-                      title={keyView.actionsDisabled ? MASKED_KEY_NOTE : visibleKeys.has(key.id) ? "Hide key" : "Show key"}
-                      aria-label={keyView.actionsDisabled ? MASKED_KEY_NOTE : visibleKeys.has(key.id) ? "Hide key" : "Show key"}
+                      title={keyView.actionsDisabled ? MEMBER_KEY_NOTE : visibleKeys.has(key.id) ? "Hide key" : "Show key"}
+                      aria-label={keyView.actionsDisabled ? MEMBER_KEY_NOTE : visibleKeys.has(key.id) ? "Hide key" : "Show key"}
                     >
                       <span className="material-symbols-outlined text-[18px]">
                         {visibleKeys.has(key.id) ? "visibility_off" : "visibility"}
                       </span>
                     </button>
                     <button
-                      onClick={() => copy(key.key, key.id)}
+                      onClick={() => handleCopyKey(key)}
                       disabled={keyView.actionsDisabled}
                       className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border-2 border-ink bg-bg text-text-muted transition-all hover:bg-surface hover:text-brand-700 dark:text-brand-300 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-bg"
-                      title={keyView.actionsDisabled ? MASKED_KEY_NOTE : "Copy key"}
-                      aria-label={keyView.actionsDisabled ? MASKED_KEY_NOTE : "Copy key"}
+                      title={keyView.actionsDisabled ? MEMBER_KEY_NOTE : "Copy key"}
+                      aria-label={keyView.actionsDisabled ? MEMBER_KEY_NOTE : "Copy key"}
                     >
                       <span className="material-symbols-outlined text-[18px]">
                         {copied === key.id ? "check" : "content_copy"}
@@ -1409,6 +1515,54 @@ export default function APIPageClient({ machineId }) {
           </div>
         )}
       </Card>
+
+      {/* Reveal Key Modal — the owner re-enters the dashboard password */}
+      <Modal
+        isOpen={!!revealPrompt}
+        title="Reveal API Key"
+        onClose={() => {
+          setRevealPrompt(null);
+          setRevealPassword("");
+          setRevealError("");
+        }}
+      >
+        <div className="flex flex-col gap-4">
+          <p className="text-sm text-text-muted">
+            Enter the dashboard password to show this key value. The value is
+            only sent to this browser.
+          </p>
+          <Input
+            label="Dashboard password"
+            type="password"
+            value={revealPassword}
+            error={revealError || undefined}
+            onChange={(e) => {
+              setRevealPassword(e.target.value);
+              setRevealError("");
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && revealPassword) submitRevealPrompt(revealPassword);
+            }}
+            autoFocus
+          />
+          <div className="flex gap-2">
+            <Button onClick={() => submitRevealPrompt(revealPassword)} fullWidth disabled={!revealPassword}>
+              {revealPrompt?.purpose === "copy" ? "Copy key" : "Show key"}
+            </Button>
+            <Button
+              onClick={() => {
+                setRevealPrompt(null);
+                setRevealPassword("");
+                setRevealError("");
+              }}
+              variant="ghost"
+              fullWidth
+            >
+              Cancel
+            </Button>
+          </div>
+        </div>
+      </Modal>
 
       {/* Add Key Modal */}
       <Modal

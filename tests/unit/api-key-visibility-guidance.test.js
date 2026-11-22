@@ -17,9 +17,16 @@ describe("API key visibility guidance source verification", () => {
   });
 
   it("retains the list's reveal and copy controls", () => {
-    expect(source).toContain("keyMaskView(key.key, keysMasked, visibleKeys.has(key.id))");
-    expect(source).toContain("onClick={() => toggleKeyVisibility(key.id)}");
-    expect(source).toContain("onClick={() => copy(key.key, key.id)}");
+    expect(source).toContain("keyMaskView(key.key, {");
+    expect(source).toContain("onClick={() => handleToggleKeyVisibility(key)}");
+    expect(source).toContain("onClick={() => handleCopyKey(key)}");
+  });
+
+  it("asks for the dashboard password before revealing a key value", () => {
+    // The raw value never travels with the list: the owner fetches it from the
+    // password-gated reveal route.
+    expect(source).toContain("/reveal`");
+    expect(source).toContain('"x-9r-password": password');
   });
 
   it.each(["fa", "id", "km", "pt-BR", "th", "zh-CN"])(
