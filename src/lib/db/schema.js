@@ -3,7 +3,7 @@
 // pre-change safety backup in migrate.js: when the stored version is lower,
 // one lightweight DB backup is taken before applying schema changes. Forgetting
 // to bump only skips that backup — it does NOT break the additive auto-sync.
-export const SCHEMA_VERSION = 12;
+export const SCHEMA_VERSION = 13;
 
 export const PRAGMA_SQL = `
 PRAGMA journal_mode = WAL;
@@ -183,6 +183,11 @@ export const TABLES = {
       // same provider/model/timestamp, so the dedup in saveRequestUsage()
       // could not recognise it as the same request. Additive.
       requestId: "TEXT",
+      // Fork: task attribution. The client names the task it is working on
+      // (x-task-id header, or metadata.taskId in the body) and every usage row
+      // of that task carries the label, so "what did this agent run cost me"
+      // is answerable. Additive.
+      taskId: "TEXT",
     },
     indexes: [
       "CREATE INDEX IF NOT EXISTS idx_uh_ts ON usageHistory(timestamp DESC)",
@@ -191,6 +196,7 @@ export const TABLES = {
       "CREATE INDEX IF NOT EXISTS idx_uh_conn ON usageHistory(connectionId)",
       "CREATE INDEX IF NOT EXISTS idx_uh_project ON usageHistory(projectName)",
       "CREATE INDEX IF NOT EXISTS idx_uh_request ON usageHistory(requestId)",
+      "CREATE INDEX IF NOT EXISTS idx_uh_task ON usageHistory(taskId)",
     ],
   },
   usageDaily: {

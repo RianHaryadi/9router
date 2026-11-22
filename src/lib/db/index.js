@@ -93,7 +93,7 @@ export {
 
 // Metrics (latency percentiles, spend per project, provider health)
 export {
-  getLatencyPercentiles, getSpendByProject, getProviderHealthSnapshot,
+  getLatencyPercentiles, getSpendByProject, getSpendByTask, getProviderHealthSnapshot,
 } from "./repos/metricsRepo.js";
 
 // Export/import full DB

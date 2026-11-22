@@ -25,6 +25,7 @@ import { checkBudget, isBudgetPeriodRolledOver } from "@/custom/budget/check.js"
 import { estimateBodyTokens } from "@/custom/rtk/tokenMeter.js";
 import { applyGuardrails } from "@/custom/guard/guardrailWiring.js";
 import { resolveComplexityModel } from "@/custom/routing/complexityRouting.js";
+import { parseTaskId } from "@/custom/budget/costAttribution.js";
 import { augmentModelsWithCapacityAdapter, withCapacityAdapterStripping, getActiveAdapterStrategy } from "open-sse/services/capacityAdapter.js";
 import { handleBypassRequest } from "open-sse/utils/bypassHandler.js";
 import { HTTP_STATUS } from "open-sse/config/runtimeConfig.js";
@@ -387,6 +388,12 @@ export async function handleChat(request, clientRawRequest = null) {
   clientRawRequest.requestId = requestId;
   clientRawRequest.projectName = projectName;
   clientRawRequest.fallbackCount = 0;
+  // Fork: task attribution. The client names the task it is working on
+  // (x-task-id header, or metadata.taskId in the body) so the spend of one
+  // agent task can be answered instead of only the spend of one project.
+  // clientRawRequest.headers is the plain header object (Object.fromEntries of
+  // the Headers instance), which is the shape parseTaskId() reads.
+  clientRawRequest.taskId = parseTaskId(clientRawRequest?.headers || null, body);
   const reportComboFallback = makeComboFallbackReporter({ requestId, projectName, apiKey, clientRawRequest });
 
   // Bypass naming/warmup requests before combo rotation to avoid wasting rotation slots

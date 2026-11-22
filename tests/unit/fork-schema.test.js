@@ -11,16 +11,23 @@ import {
 } from "../../src/lib/db/repos/metricsRepo.js";
 
 describe("fork schema v4/v5 — observability + per-key budget + request identity", () => {
-  it("bumps SCHEMA_VERSION to 12", () => {
+  it("bumps SCHEMA_VERSION to 13", () => {
     // v4 added apiKeys budget columns (budgetLimitCents/budgetPeriod/
     // budgetStartedAt/budgetSpentCents) for the per-key monthly budget feature
     // (Fase 2). v5 added usageHistory.requestId so a request that reports no
     // tokens can still be told apart from another one. v9 added
     // apiKeys.keyRef — the non-reversible fingerprint that usage rows store
     // instead of the raw key. v12 added the ownerId column on combos and
-    // promptTemplates, so a teammate owns the rows they create. Version bumps
-    // +1 every schema change per schema.js contract.
-    expect(SCHEMA_VERSION).toBe(12);
+    // promptTemplates, so a teammate owns the rows they create. v13 added
+    // usageHistory.taskId, so the spend of one agent task can be answered.
+    // Version bumps +1 every schema change per schema.js contract.
+    expect(SCHEMA_VERSION).toBe(13);
+  });
+
+  it("adds taskId to usageHistory and indexes it", () => {
+    expect(TABLES.usageHistory.columns.taskId).toBe("TEXT");
+    const idx = TABLES.usageHistory.indexes || [];
+    expect(idx.some((s) => s.includes("idx_uh_task") && s.includes("usageHistory(taskId)"))).toBe(true);
   });
 
   it("adds latencyMs, ttftMs, projectName, fallbackCount to usageHistory", () => {
