@@ -118,6 +118,49 @@ export async function getSpendByProject(filter = {}) {
 }
 
 /**
+ * Spend grouped by taskId (rows without a task roll into "unassigned").
+ * filter: { since, taskId }. Sorted by cost DESC.
+ */
+export async function getSpendByTask(filter = {}) {
+  try {
+    const db = await getAdapter();
+    const conds = [];
+    const params = [];
+
+    if (filter.since) { conds.push("timestamp >= ?"); params.push(filter.since); }
+    if (filter.taskId) { conds.push("taskId = ?"); params.push(filter.taskId); }
+    const where = conds.length ? `WHERE ${conds.join(" AND ")}` : "";
+
+    const rows = db.all(
+      `SELECT COALESCE(taskId, 'unassigned') as task,
+              SUM(cost) as cost,
+              SUM(promptTokens) as promptTokens,
+              SUM(completionTokens) as completionTokens,
+              COUNT(*) as requests,
+              MIN(timestamp) as firstSeen,
+              MAX(timestamp) as lastSeen
+       FROM usageHistory ${where}
+       GROUP BY COALESCE(taskId, 'unassigned')
+       ORDER BY cost DESC`,
+      params
+    );
+
+    return rows.map((r) => ({
+      task: r.task,
+      cost: r.cost || 0,
+      promptTokens: r.promptTokens || 0,
+      completionTokens: r.completionTokens || 0,
+      requests: r.requests || 0,
+      firstSeen: r.firstSeen || null,
+      lastSeen: r.lastSeen || null,
+    }));
+  } catch (e) {
+    console.error("[metricsRepo] getSpendByTask failed:", e);
+    return [];
+  }
+}
+
+/**
  * Per-provider rollup: requests, cost, average latency/TTFT and the number
  * of non-ok requests. filter: { since }. Sorted by requests DESC.
  */

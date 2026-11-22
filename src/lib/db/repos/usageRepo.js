@@ -439,7 +439,7 @@ export async function saveRequestUsage(entry) {
       }
 
       db.run(
-        `INSERT INTO usageHistory(timestamp, provider, model, connectionId, apiKey, endpoint, promptTokens, completionTokens, cost, status, tokens, meta, latencyMs, ttftMs, projectName, fallbackCount, requestId) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO usageHistory(timestamp, provider, model, connectionId, apiKey, endpoint, promptTokens, completionTokens, cost, status, tokens, meta, latencyMs, ttftMs, projectName, fallbackCount, requestId, taskId) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           entry.timestamp, entry.provider || null, entry.model || null,
           entry.connectionId || null, entry.apiKeyRef || apiKeyRef(entry.apiKey), entry.endpoint || null,
@@ -447,7 +447,7 @@ export async function saveRequestUsage(entry) {
           stringifyJson(tokens), stringifyJson({}),
           toIntOrZero(entry.latencyMs), toIntOrZero(entry.ttftMs),
           entry.projectName || null, toIntOrZero(entry.fallbackCount),
-          entry.requestId || null,
+          entry.requestId || null, entry.taskId || null,
         ]
       );
 

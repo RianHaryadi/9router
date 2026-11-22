@@ -139,16 +139,17 @@ describe("saveRequestUsage latency/project attribution", () => {
 });
 
 describe("requestObservability (meta as it rides on clientRawRequest)", () => {
-  it("reads the request's id, project and running fallback count", () => {
-    expect(requestObservability({ requestId: "req-1", projectName: "acme", fallbackCount: 3 })).toEqual({
+  it("reads the request's id, project, running fallback count and task", () => {
+    expect(requestObservability({ requestId: "req-1", projectName: "acme", fallbackCount: 3, taskId: "task-7" })).toEqual({
       requestId: "req-1",
       projectName: "acme",
       fallbackCount: 3,
+      taskId: "task-7",
     });
   });
 
   it("degrades to null/0 when chatCore was called without meta", () => {
-    expect(requestObservability(null)).toEqual({ requestId: null, projectName: null, fallbackCount: 0 });
-    expect(requestObservability({})).toEqual({ requestId: null, projectName: null, fallbackCount: 0 });
+    expect(requestObservability(null)).toEqual({ requestId: null, projectName: null, fallbackCount: 0, taskId: null });
+    expect(requestObservability({})).toEqual({ requestId: null, projectName: null, fallbackCount: 0, taskId: null });
   });
 });

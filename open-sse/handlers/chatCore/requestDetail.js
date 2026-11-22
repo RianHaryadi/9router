@@ -126,10 +126,11 @@ export function requestObservability(clientRawRequest) {
     projectName: clientRawRequest?.projectName ?? null,
     fallbackCount: clientRawRequest?.fallbackCount ?? 0,
     requestId: clientRawRequest?.requestId ?? null,
+    taskId: clientRawRequest?.taskId ?? null,
   };
 }
 
-export function saveUsageStats({ provider, model, tokens, connectionId, apiKey, endpoint, label = "USAGE", silent = false, latency = null, projectName = null, fallbackCount = null, requestId = null }) {
+export function saveUsageStats({ provider, model, tokens, connectionId, apiKey, endpoint, label = "USAGE", silent = false, latency = null, projectName = null, fallbackCount = null, requestId = null, taskId = null }) {
   if (!tokens || typeof tokens !== "object") return;
 
   const inTokens = tokens.input_tokens ?? tokens.prompt_tokens ?? 0;
@@ -173,5 +174,6 @@ export function saveUsageStats({ provider, model, tokens, connectionId, apiKey, 
     projectName: projectName ?? null,
     fallbackCount: fallbackCount ?? 0,
     requestId: requestId ?? null,
+    taskId: taskId ?? null,
   }).catch(() => {});
 }
