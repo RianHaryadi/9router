@@ -23,6 +23,7 @@ import { handleComboChat, handleFusionChat, detectRequiredCapabilities } from "o
 import { getApiKeyBudget, resetBudgetSpend } from "@/lib/db/repos/apiKeysRepo.js";
 import { checkBudget, isBudgetPeriodRolledOver } from "@/custom/budget/check.js";
 import { estimateBodyTokens } from "@/custom/rtk/tokenMeter.js";
+import { applyGuardrails } from "@/custom/guard/guardrailWiring.js";
 import { augmentModelsWithCapacityAdapter, withCapacityAdapterStripping, getActiveAdapterStrategy } from "open-sse/services/capacityAdapter.js";
 import { handleBypassRequest } from "open-sse/utils/bypassHandler.js";
 import { HTTP_STATUS } from "open-sse/config/runtimeConfig.js";
@@ -304,6 +305,37 @@ export async function handleChat(request, clientRawRequest = null) {
     } catch {
       // fail-open
     }
+  }
+
+  // ── Guardrails (pre-flight) ────────────────────────────────────────────
+  // Inbound tool results are scanned for prompt injection before the model
+  // sees them, and a runaway agent loop is stopped. Both guards are opt-in
+  // (settings.guardrailsEnabled) and fail-open: a guard error never breaks a
+  // request.
+  const guardrailDecision = applyGuardrails({
+    body,
+    settings,
+    sessionId,
+    tokenCount: Math.ceil(estimateBodyTokens(body)),
+    lastRole: Array.isArray(body.messages) && body.messages.length > 0
+      ? body.messages[body.messages.length - 1]?.role
+      : null,
+  });
+  if (guardrailDecision.injection.hits > 0) {
+    log.warn("GUARD", `injection firewall: ${guardrailDecision.injection.hits} tool result(s) sanitized`, {
+      blocked: guardrailDecision.injection.blocked,
+      stripped: guardrailDecision.injection.stripped,
+      warned: guardrailDecision.injection.warned,
+    });
+  }
+  if (guardrailDecision.loop && guardrailDecision.loop.severity !== "ok") {
+    log.warn("GUARD", `loop guard: ${guardrailDecision.loop.severity} (${guardrailDecision.loop.reason})`);
+  }
+  if (!guardrailDecision.allowed) {
+    return errorResponse(
+      HTTP_STATUS.RATE_LIMITED,
+      `Request stopped by the agent loop guard: ${guardrailDecision.reason}`
+    );
   }
 
   // Per-request observability identity (design decisions 5 & 6): ONE id and

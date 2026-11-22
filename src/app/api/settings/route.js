@@ -13,7 +13,7 @@ const SETTINGS_RESPONSE_HEADERS = {
 
 // Secrets must never be mass-assigned from request body (CWE-915)
 const PROTECTED_SETTING_KEYS = ["password", "mitmSudoEncrypted"];
-const BOOLEAN_SETTING_KEYS = ["piiRedactionEnabled", "promptInspectionEnabled"];
+const BOOLEAN_SETTING_KEYS = ["piiRedactionEnabled", "promptInspectionEnabled", "guardrailsEnabled", "injectionFirewallEnabled", "loopGuardEnabled"];
 
 export async function GET() {
   try {

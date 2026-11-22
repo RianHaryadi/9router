@@ -63,6 +63,12 @@ const DEFAULT_SETTINGS = {
   shadowRoutingEnabled: false,
   shadowRoutingRatio: 0,
   shadowRoutingTargets: [],
+  // Fork: inbound guardrails (prompt-injection firewall + agent loop guard).
+  // Off by default: an existing agent setup must not change behaviour until
+  // the owner turns the master switch on.
+  guardrailsEnabled: false,
+  injectionFirewallEnabled: true,
+  loopGuardEnabled: true,
   rtkEnabled: true,
   headroomEnabled: false,
   headroomUrl: DEFAULT_HEADROOM_URL,
