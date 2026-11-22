@@ -24,6 +24,7 @@ import { getApiKeyBudget, resetBudgetSpend } from "@/lib/db/repos/apiKeysRepo.js
 import { checkBudget, isBudgetPeriodRolledOver } from "@/custom/budget/check.js";
 import { estimateBodyTokens } from "@/custom/rtk/tokenMeter.js";
 import { applyGuardrails } from "@/custom/guard/guardrailWiring.js";
+import { resolveComplexityModel } from "@/custom/routing/complexityRouting.js";
 import { augmentModelsWithCapacityAdapter, withCapacityAdapterStripping, getActiveAdapterStrategy } from "open-sse/services/capacityAdapter.js";
 import { handleBypassRequest } from "open-sse/utils/bypassHandler.js";
 import { HTTP_STATUS } from "open-sse/config/runtimeConfig.js";
@@ -128,8 +129,10 @@ export async function handleChat(request, clientRawRequest = null) {
   // Claude Code marks a 1M-context request as `<model>[1m]`; the marker matches
   // no combo, alias or provider/model pair, so it must not reach resolution.
   // The capability travels in the anthropic-beta header, forwarded as-is.
-  const { model: modelStr, contextMarker } = stripModelContextMarker(body.model);
-  if (contextMarker) body.model = modelStr;
+  const { model: requestedModel, contextMarker } = stripModelContextMarker(body.model);
+  if (contextMarker) body.model = requestedModel;
+  // Complexity routing may replace the model (see below), so it is a `let`.
+  let modelStr = requestedModel;
 
   const session = resolveSessionIdentity({ headers: clientRawRequest?.headers, body });
   const sessionId = session?.sessionId || null;
@@ -171,6 +174,37 @@ export async function handleChat(request, clientRawRequest = null) {
   const keyAccess = await getKeyAccessContext(request);
   const keyAccessDenied = await enforceKeyAccess(keyAccess, modelStr);
   if (keyAccessDenied) return keyAccessDenied;
+
+  // ── Complexity routing ──────────────────────────────────────────────────
+  // A one-line question and a twenty-tool agent run are not the same job.
+  // When the owner configured tiers, the request's complexity decides the
+  // model. The switch is off by default and the routing never changes a
+  // request that has no tier for its level.
+  //
+  // It runs AFTER the key-access gate, and the routed model is checked
+  // against the same gate: a restricted key must not gain access to a model
+  // it could not call directly.
+  const complexityDecision = resolveComplexityModel({
+    body,
+    requestedModel: modelStr,
+    config: {
+      enabled: settings.complexityRoutingEnabled === true,
+      tiers: settings.complexityRoutingTiers,
+    },
+  });
+  if (complexityDecision.changed) {
+    const routedAccessDenied = await enforceKeyAccess(keyAccess, complexityDecision.model);
+    if (routedAccessDenied) {
+      log.warn("CHAT", "Complexity-routed model is not allowed for this key", {
+        from: modelStr,
+        to: complexityDecision.model,
+      });
+      return routedAccessDenied;
+    }
+    log.info("CHAT", `Complexity routing: ${modelStr} → ${complexityDecision.model} (${complexityDecision.level}, score ${complexityDecision.score.toFixed(2)})`);
+    modelStr = complexityDecision.model;
+    body.model = modelStr;
+  }
 
   // ── Per-key TPM gate ───────────────────────────────────────────────────
   // The token budget is charged with the ESTIMATED prompt size of the request

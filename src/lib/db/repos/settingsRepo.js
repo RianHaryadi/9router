@@ -69,6 +69,11 @@ const DEFAULT_SETTINGS = {
   guardrailsEnabled: false,
   injectionFirewallEnabled: true,
   loopGuardEnabled: true,
+  // Fork: complexity routing. A tier names the model a request of that
+  // complexity should use ("provider/model" or a registered alias). Off by
+  // default: without tiers there is nothing to route to.
+  complexityRoutingEnabled: false,
+  complexityRoutingTiers: { simple: "", medium: "", complex: "" },
   rtkEnabled: true,
   headroomEnabled: false,
   headroomUrl: DEFAULT_HEADROOM_URL,
