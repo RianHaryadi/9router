@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getSettings, updateSettings } from "@/lib/localDb";
 import { applyOutboundProxyEnv } from "@/lib/network/outboundProxy";
 import { resetComboRotation } from "open-sse/services/combo.js";
+import { normalizeShadowSettings } from "@/custom/routing/shadowSettings.js";
 import bcrypt from "bcryptjs";
 
 export const dynamic = "force-dynamic";
@@ -13,7 +14,7 @@ const SETTINGS_RESPONSE_HEADERS = {
 
 // Secrets must never be mass-assigned from request body (CWE-915)
 const PROTECTED_SETTING_KEYS = ["password", "mitmSudoEncrypted"];
-const BOOLEAN_SETTING_KEYS = ["piiRedactionEnabled", "promptInspectionEnabled", "guardrailsEnabled", "injectionFirewallEnabled", "loopGuardEnabled"];
+const BOOLEAN_SETTING_KEYS = ["piiRedactionEnabled", "promptInspectionEnabled", "guardrailsEnabled", "injectionFirewallEnabled", "loopGuardEnabled", "shadowRoutingEnabled"];
 
 export async function GET() {
   try {
@@ -79,6 +80,14 @@ export async function PATCH(request) {
     if (Object.prototype.hasOwnProperty.call(body, "oidcClientSecret")) {
       if (!body.oidcClientSecret || !String(body.oidcClientSecret).trim()) {
         delete body.oidcClientSecret;
+      }
+    }
+
+    if (Object.prototype.hasOwnProperty.call(body, "shadowRoutingRatio") ||
+        Object.prototype.hasOwnProperty.call(body, "shadowRoutingTargets")) {
+      const shadow = normalizeShadowSettings(body);
+      if (!shadow.ok) {
+        return NextResponse.json({ error: shadow.error }, { status: 400 });
       }
     }
 
