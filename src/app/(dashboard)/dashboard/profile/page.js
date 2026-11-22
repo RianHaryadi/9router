@@ -26,6 +26,7 @@ export default function ProfilePage() {
   const [shutdownOpen, setShutdownOpen] = useState(false);
   const [isShuttingDown, setIsShuttingDown] = useState(false);
   const [settings, setSettings] = useState({ fallbackStrategy: "fill-first" });
+  const [complexityTierDraft, setComplexityTierDraft] = useState({});
   const [loading, setLoading] = useState(true);
   const [passwords, setPasswords] = useState({ current: "", new: "", confirm: "" });
   const [passStatus, setPassStatus] = useState({ type: "", message: "" });
@@ -92,6 +93,7 @@ export default function ProfilePage() {
       .then((res) => res.json())
       .then((data) => {
         setSettings(data);
+        setComplexityTierDraft(data?.complexityRoutingTiers || {});
         setOidcForm({
           authMode: data?.authMode || "password",
           oidcIssuerUrl: data?.oidcIssuerUrl || "",
@@ -679,6 +681,39 @@ export default function ProfilePage() {
     }
   };
 
+  const updateComplexityRoutingEnabled = async (enabled) => {
+    try {
+      const res = await fetch("/api/settings", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ complexityRoutingEnabled: enabled }),
+      });
+      if (res.ok) {
+        setSettings(prev => ({ ...prev, complexityRoutingEnabled: enabled }));
+      }
+    } catch (err) {
+      console.error("Failed to update complexityRoutingEnabled:", err);
+    }
+  };
+
+  const updateComplexityRoutingTiers = async (tiers) => {
+    try {
+      const res = await fetch("/api/settings", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ complexityRoutingTiers: tiers }),
+      });
+      if (res.ok) {
+        const saved = await res.json();
+        const next = saved.complexityRoutingTiers || {};
+        setComplexityTierDraft(next);
+        setSettings(prev => ({ ...prev, complexityRoutingTiers: next }));
+      }
+    } catch (err) {
+      console.error("Failed to update complexityRoutingTiers:", err);
+    }
+  };
+
   const updatePiiRedactionEnabled = async (enabled) => {
     try {
       const res = await fetch("/api/settings", {
@@ -700,6 +735,7 @@ export default function ProfilePage() {
       if (!res.ok) return;
       const data = await res.json();
       setSettings(data);
+      setComplexityTierDraft(data.complexityRoutingTiers || {});
     } catch (err) {
       console.error("Failed to reload settings:", err);
     }
@@ -788,6 +824,8 @@ export default function ProfilePage() {
   const piiRedactionEnabled = settings.piiRedactionEnabled === true;
   const promptInspectionEnabled = settings.promptInspectionEnabled === true;
   const guardrailsEnabled = settings.guardrailsEnabled === true;
+  const complexityRoutingEnabled = settings.complexityRoutingEnabled === true;
+  const complexityTiers = complexityTierDraft;
 
   const handleShutdown = async () => {
     setIsShuttingDown(true);
@@ -1706,6 +1744,41 @@ export default function ProfilePage() {
               disabled={loading}
             />
           </div>
+
+          <div className="mt-4 flex items-start sm:items-center justify-between gap-4 border-t border-ink/10 pt-4 dark:border-white/10">
+            <div className="flex-1 min-w-0">
+              <p className="font-medium text-sm sm:text-base">Complexity routing</p>
+              <p className="text-xs sm:text-sm text-text-muted">
+                Sends a simple request to a cheaper model and a heavy one to a stronger model. A level without a model keeps the model the client asked for.
+              </p>
+            </div>
+            <Toggle
+              checked={complexityRoutingEnabled}
+              onChange={updateComplexityRoutingEnabled}
+              disabled={loading}
+            />
+          </div>
+
+          {complexityRoutingEnabled && (
+            <div className="mt-3 grid gap-3 sm:grid-cols-3">
+              {["simple", "medium", "complex"].map((level) => (
+                <Input
+                  key={level}
+                  label={`${level[0].toUpperCase()}${level.slice(1)} model`}
+                  placeholder="provider/model"
+                  value={complexityTiers[level] || ""}
+                  disabled={loading}
+                  onChange={(e) => {
+                    // Local only — the PATCH fires on blur, not per keystroke.
+                    const next = { ...complexityTiers, [level]: e.target.value };
+                    setComplexityTierDraft(next);
+                    setSettings(prev => ({ ...prev, complexityRoutingTiers: next }));
+                  }}
+                  onBlur={() => updateComplexityRoutingTiers(complexityTierDraft)}
+                />
+              ))}
+            </div>
+          )}
         </Card>
 
         {/* Teammates live on their own page: Dashboard → Team. */}

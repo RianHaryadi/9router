@@ -3,6 +3,7 @@ import { getSettings, updateSettings } from "@/lib/localDb";
 import { applyOutboundProxyEnv } from "@/lib/network/outboundProxy";
 import { resetComboRotation } from "open-sse/services/combo.js";
 import { normalizeShadowSettings } from "@/custom/routing/shadowSettings.js";
+import { normalizeComplexityTiers } from "@/custom/routing/complexityRouting.js";
 import bcrypt from "bcryptjs";
 
 export const dynamic = "force-dynamic";
@@ -14,7 +15,7 @@ const SETTINGS_RESPONSE_HEADERS = {
 
 // Secrets must never be mass-assigned from request body (CWE-915)
 const PROTECTED_SETTING_KEYS = ["password", "mitmSudoEncrypted"];
-const BOOLEAN_SETTING_KEYS = ["piiRedactionEnabled", "promptInspectionEnabled", "guardrailsEnabled", "injectionFirewallEnabled", "loopGuardEnabled", "shadowRoutingEnabled"];
+const BOOLEAN_SETTING_KEYS = ["piiRedactionEnabled", "promptInspectionEnabled", "guardrailsEnabled", "injectionFirewallEnabled", "loopGuardEnabled", "shadowRoutingEnabled", "complexityRoutingEnabled"];
 
 export async function GET() {
   try {
@@ -89,6 +90,17 @@ export async function PATCH(request) {
       if (!shadow.ok) {
         return NextResponse.json({ error: shadow.error }, { status: 400 });
       }
+    }
+
+    if (Object.prototype.hasOwnProperty.call(body, "complexityRoutingTiers")) {
+      const tiers = normalizeComplexityTiers(body.complexityRoutingTiers);
+      if (Object.keys(tiers).length === 0 && body.complexityRoutingTiers && Object.keys(body.complexityRoutingTiers).length > 0) {
+        return NextResponse.json(
+          { error: "complexityRoutingTiers needs at least one level with a model" },
+          { status: 400 }
+        );
+      }
+      body.complexityRoutingTiers = tiers;
     }
 
     const settings = await updateSettings(body);
