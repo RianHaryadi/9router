@@ -45,6 +45,71 @@ T4b harus: pakai classifyError (single source of truth) untuk memutuskan apakah 
 - T4 iter1: worker selesai (f13b4e47). Reviewer GAGAL (free usage limit) -> orchestrator jalankan verifikasi independen: 12/12 klasifikasi payload produksi OK, model-scope key lintas akun OK, needsHuman OK, ignore OK. TAPI ditemukan gap: jalur modelLock_ DB belum di-wire -> T4b.
 - T4b iter1: subagent GAGAL (free usage limit) -> orchestrator kerjakan sendiri. Temuan saat investigasi: checkFallbackError() (upstream) tak punya rule 10605 -> jatuh default -> tulis modelLock_ per akun. 5 akun qoder sehat saling mengunci. Test awal salah ekspektasi (418 = requestScoped upstream) -> dikoreksi. 1 regresi baru (github-monthly-usage-lock: override cooldown 402 bentrok kontrak upstream) -> diperbaiki dgn prinsip "taksonomi menambah rule yg tak ada di upstream, tak menimpa yg sudah benar". Final: 0 regresi, build exit 0, eslint bersih.
 
+## Wave 9 (2026-11-21) — API Keys readability + sidebar grouping
+
+Goal (user): "tulisan api keynya kenapa begini ya benerin dong sama sidebarnya di kelompokin masing masing biar enak di lihatnya".
+
+| task | agent | pane_id | artifact | owns |
+|---|---|---|---|---|
+| A-keys-ui | worker-keys-ui | w1T:p2 | `.loop/tasks/A-keys-ui.result.md` | `src/app/(dashboard)/dashboard/endpoint/EndpointPageClient.js` |
+| B-sidebar-groups | worker-sidebar | w1T:p3 | `.loop/tasks/B-sidebar-groups.result.md` | `src/shared/components/Sidebar.js` |
+
+Temuan bonus (fix di A): `GET /api/keys` sudah return `masked: true` untuk sesi remote, tapi client
+DROPPED flag itu -> tombol reveal/copy operate on string yang tak pernah bisa dipakai (copy `sk-xxx***yyy`).
+Fix: simpan flag, satu gaya mask, reveal/copy disabled + nota bila masked.
+
+Verifikasi orchestrator: eslint Sidebar 0 issue; EndpointPageClient 7 issue = 5 error + 2 warning
+PRE-EXISTING (proven baseline sebelum edit, tak disentuh); `npm run build` exit 0; 2 self-check node
+PASS; browser probe (login lokal + Origin remote) masked= True -> 8 tombol disabled + 4 nota tampil,
+lokal -> 0 disabled, 0 nota; screenshot 1400x900 -> 5 grup KEY/STATUS/ACCESS/RATE LIMITS/BUDGET
+terbaca, sidebar WORKSPACE/MONITOR/TOOLS/SYSTEM. Perubahan BELUM di-commit (user belum minta).
+
+## Wave 9b (2026-11-22) — Task C: API key credential card redesign
+
+Goal (user): tulisan api key + meterai "kok ribet" — tiap credential jadi kartu sendiri, mask fixed
+length, satu right rail, budget + rate-limit rapi.
+
+Artifact: `.loop/tasks/C-keys-card.result.md` (worker C). Orchestrator verifikasi independen:
+- `npm run build` exit 0 (Next 16.4.5, 156/156 static).
+- eslint owned-file = 5 error + 2 warning (PRE-EXISTING, tak disentuh); Sidebar 0 issue.
+- `node .loop/scratch/c-keys-check.mjs` exit 0 (mask fixed 18 char / 8 bullet, masked-flag utuh,
+  tanggal `Oct 27, 2026`, label Credential/Access/Rate limits/Budget, budget dedupe, 2 Save terpisah).
+- `node .loop/scratch/c-keys-browser.mjs` exit 0: 1400x1000 & 390x844 -> 4 kartu, chip len konstan 18,
+  scrollWidth == clientWidth (no overflow), kartu border 2px radius 12px, rail kanan satu (trash flush
+  dgn content edge), rpm/tpm left sama (836 & 64). Screenshot `.loop/scratch/c-keys-card.png`;
+  vision re-review: state "Enabled" jadi chip hijau bordered, trash selalu terlihat, tanpa duplikat Active.
+- Regresi: 6 fail (cursor auto-import x5 + backupDbLite) IDENTIK dgn baseline tanpa perubahan wave 9/9b
+  (0 fail baru). Test `api-key-visibility-guidance` gagal karena source string berubah -> test di-update
+  ke kontrak baru `keyMaskView(key.key, keysMasked, visibleKeys.has(key.id))`.
+
+Perubahan (Wave 9 + 9b) BELUM di-commit — final review + hygiene audit sedang berjalan via Herdr.
+
+## Wave 10 (2026-11-22) — Herdr reconciliation + deploy-readiness audit
+
+User memberi autonomy grant: orchestrator brain-only; pane Herdr mengerjakan audit/review/fix.
+
+| task | pane | role | artifact |
+|---|---|---|---|
+| W9-final-review | `w1T:p4` | reviewer independen, read-only | `.loop/tasks/W9-final-review.review.md` |
+| T8-deploy-readiness | `w1T:p3` (`worker-sidebar`) | release audit, read-only | `.loop/tasks/T8-deploy-readiness.result.md` |
+| W9-hygiene-audit | `w1T:p2` (`worker-keys-ui`) | hygiene/secret/commit-scope audit, read-only | `.loop/tasks/W9-hygiene-audit.result.md` |
+
+Setelah 3 artifact: reconcile; FAIL -> dispatch fix ke owner pane; PASS -> commit eksplisit Wave 9/9b;
+T8 deployment tetap tidak dieksekusi sampai gate + approval side-effect terpisah.
+
+auto-loop active: poll Herdr artifacts/status, lalu cross-review/fix/global gate.
+
+Final Wave 10 status: review PASS, fixes PASS, global gate PASS (5298 total / 5193 pass / 6 baseline
+failures; failure set identical to baseline, 0 regressions), build PASS, secret cleanup complete
+(live auth cookie removed, dev.log restored, generated .vitest output restored). Product slice READY TO
+COMMIT: EndpointPageClient.js, Sidebar.js, Toggle.js, api-key-visibility-guidance.test.js,
+toggle-title.test.js. Records slice follows product commit.
+Product commit created: `cf733ed7 fix(dashboard): clarify API keys and group navigation`.
+
+T8 deploy gate: NOT READY — blockers: current fork.16 code/image unpublished, GHCR only fork.1 found,
+compose still points upstream, actual schema v12 (not stale v3->v4), production backup/deploy/rollback
+not executed. No production action taken.
+
 ## Baseline test (setelah T3, sebelum T4)
 Fork post-merge: 5034 test, 48 fail. Upstream-only v0.5.119: 4712 test, 48 fail. Set identik 2 arah.
 Kriteria regresi T4b-T7: fail set fork SETELAH task N == fail set fork SEBELUM task N, dan 0 fail baru vs upstream-only.
