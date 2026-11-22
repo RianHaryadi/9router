@@ -15,20 +15,38 @@
  * failure inside it is swallowed (a shadow must never break production).
  */
 
-import { createShadowRouter } from "../routing/shadow.js";
+import { createShadowRouter, compareResponses } from "../routing/shadow.js";
 
 let router = null;
+let routerConfigKey = null;
 const records = [];
+const MAX_RECORDS = 200;
 
-/** Build the router from the current settings (cached until settings change). */
+/**
+ * Build the router from the current settings.
+ *
+ * The router is rebuilt whenever the CONFIG changes. Caching it forever meant
+ * that turning shadow routing on, changing the ratio or editing the targets
+ * had no effect until the process restarted — the first request happened to
+ * build the router and every later request reused it with the stale config.
+ */
 function routerFor(config) {
-  if (!router) router = createShadowRouter({ config });
+  const key = JSON.stringify({
+    enabled: !!config?.enabled,
+    ratio: Number(config?.ratio) || 0,
+    targets: Array.isArray(config?.targets) ? config.targets : [],
+  });
+  if (!router || routerConfigKey !== key) {
+    router = createShadowRouter({ config });
+    routerConfigKey = key;
+  }
   return router;
 }
 
 /** Drop the cached router (used when settings change and in tests). */
 export function resetShadowRouter() {
   router = null;
+  routerConfigKey = null;
   records.length = 0;
 }
 
@@ -74,17 +92,10 @@ export async function dispatchShadow({ requestId, modelInfo, body, config, dispa
       error = e?.message || String(e);
     }
 
-    r.record({
-      requestId,
-      primary: modelInfo ? { provider: modelInfo.provider, model: modelInfo.model } : null,
-      shadow: plan.shadow,
-      primaryText,
-      shadowText,
-      latencyMs: Date.now() - startedAt,
-      error,
-    });
-    records.push({ requestId, shadow: plan.shadow, error, at: startedAt });
-    if (records.length > 200) records.shift();
+    const comparison = { requestId, primary: modelInfo ? { provider: modelInfo.provider, model: modelInfo.model } : null, shadow: plan.shadow, primaryText, shadowText, latencyMs: Date.now() - startedAt, error, at: startedAt };
+    r.record(comparison);
+    records.push(comparison);
+    if (records.length > MAX_RECORDS) records.shift();
     return null;
   } catch {
     // fail-open: shadowing must never affect the primary request
@@ -107,18 +118,54 @@ function extractText(raw) {
 }
 
 /**
- * Recent shadow dispatches, newest last. Used by the dashboard to show what
+ * Recent shadow dispatches, newest first. Used by the dashboard to show what
  * shadowing has been doing.
+ *
+ * @param {number} [limit=50]
+ * @returns {object[]}
  */
 export function recentShadowDispatches(limit = 50) {
   return records.slice(-limit).reverse();
 }
 
-/** Aggregated shadow statistics from the router. */
+/**
+ * Aggregated shadow statistics.
+ *
+ * Computed from the module-level records, NOT from the router: the router is
+ * rebuilt whenever the settings change, and its own store would start empty
+ * at that point. The module-level records survive the rebuild.
+ *
+ * @returns {{ total: number, compared: number, matched: number, errors: number,
+ *            matchRate: number, byTarget: Record<string, number> }}
+ */
 export function shadowStats() {
   try {
-    return router ? router.stats() : { total: 0, compared: 0, matched: 0, errors: 0, byTarget: {} };
+    const byTarget = {};
+    let compared = 0;
+    let matched = 0;
+    let errors = 0;
+    for (const entry of records) {
+      if (entry?.primaryText && entry?.shadowText) {
+        compared++;
+        const result = compareResponses(entry.primaryText, entry.shadowText);
+        if (result.matched) matched++;
+      }
+      if (entry?.error) errors++;
+      const shadow = entry?.shadow;
+      if (shadow && typeof shadow.provider === "string" && typeof shadow.model === "string") {
+        const key = `${shadow.provider}/${shadow.model}`;
+        byTarget[key] = (byTarget[key] ?? 0) + 1;
+      }
+    }
+    return {
+      total: records.length,
+      compared,
+      matched,
+      errors,
+      matchRate: compared > 0 ? matched / compared : 0,
+      byTarget,
+    };
   } catch {
-    return { total: 0, compared: 0, matched: 0, errors: 0, byTarget: {} };
+    return { total: 0, compared: 0, matched: 0, errors: 0, matchRate: 0, byTarget: {} };
   }
 }
