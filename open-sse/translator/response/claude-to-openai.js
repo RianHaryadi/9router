@@ -36,15 +36,20 @@ export function claudeToOpenAIResponse(chunk, state) {
         const cacheReadTokens = typeof startUsage.cache_read_input_tokens === "number" ? startUsage.cache_read_input_tokens : 0;
         const cacheCreationTokens = typeof startUsage.cache_creation_input_tokens === "number" ? startUsage.cache_creation_input_tokens : 0;
         const promptTokens = inputTokens + cacheReadTokens + cacheCreationTokens;
+        // prompt_tokens below is cache-INCLUSIVE, so the cache portion must ride
+        // in the canonical OpenAI field (cached_tokens). Emitting
+        // cache_read_input_tokens here makes canonicalizeUsage() read the object
+        // as "prompt excludes cache" and fold the cache in a second time —
+        // prompt 2x, hit% halved, cost doubled for every streamed request.
         state.usage = {
           prompt_tokens: promptTokens,
           completion_tokens: 0,
           total_tokens: promptTokens,
           input_tokens: inputTokens,
-          output_tokens: 0
+          output_tokens: 0,
+          cached_tokens: cacheReadTokens,
+          prompt_tokens_details: { cached_tokens: cacheReadTokens, cache_creation_tokens: cacheCreationTokens }
         };
-        if (cacheReadTokens > 0) state.usage.cache_read_input_tokens = cacheReadTokens;
-        if (cacheCreationTokens > 0) state.usage.cache_creation_input_tokens = cacheCreationTokens;
       }
       results.push(createChunk(state, { role: ROLE.ASSISTANT }));
       break;
@@ -123,10 +128,13 @@ export function claudeToOpenAIResponse(chunk, state) {
         const prev = state.usage || {};
         const inputTokens = typeof chunk.usage.input_tokens === "number" ? chunk.usage.input_tokens : (prev.input_tokens || 0);
         const outputTokens = typeof chunk.usage.output_tokens === "number" ? chunk.usage.output_tokens : 0;
-        const cacheReadTokens = typeof chunk.usage.cache_read_input_tokens === "number" ? chunk.usage.cache_read_input_tokens : (prev.cache_read_input_tokens || 0);
-        const cacheCreationTokens = typeof chunk.usage.cache_creation_input_tokens === "number" ? chunk.usage.cache_creation_input_tokens : (prev.cache_creation_input_tokens || 0);
+        const cacheReadTokens = typeof chunk.usage.cache_read_input_tokens === "number" ? chunk.usage.cache_read_input_tokens : (prev.cached_tokens || 0);
+        const cacheCreationTokens = typeof chunk.usage.cache_creation_input_tokens === "number" ? chunk.usage.cache_creation_input_tokens : (prev.prompt_tokens_details?.cache_creation_tokens || 0);
 
         // prompt_tokens = input_tokens + cache_read + cache_creation (all prompt-side tokens)
+        // Cache-inclusive, so the cache portion goes out as cached_tokens (see
+        // the message_start branch): cache_read_input_tokens would be folded a
+        // second time by canonicalizeUsage().
         const promptTokens = inputTokens + cacheReadTokens + cacheCreationTokens;
 
         state.usage = {
@@ -134,11 +142,10 @@ export function claudeToOpenAIResponse(chunk, state) {
           completion_tokens: outputTokens,
           total_tokens: promptTokens + outputTokens,
           input_tokens: inputTokens,
-          output_tokens: outputTokens
+          output_tokens: outputTokens,
+          cached_tokens: cacheReadTokens,
+          prompt_tokens_details: { cached_tokens: cacheReadTokens, cache_creation_tokens: cacheCreationTokens }
         };
-
-        if (cacheReadTokens > 0) state.usage.cache_read_input_tokens = cacheReadTokens;
-        if (cacheCreationTokens > 0) state.usage.cache_creation_input_tokens = cacheCreationTokens;
       }
 
       if (chunk.delta?.stop_reason) {
@@ -158,8 +165,8 @@ export function claudeToOpenAIResponse(chunk, state) {
           finalChunk.usage = toOpenAIUsage({
             input_tokens: state.usage.input_tokens || 0,
             output_tokens: state.usage.output_tokens || 0,
-            cache_read_input_tokens: state.usage.cache_read_input_tokens,
-            cache_creation_input_tokens: state.usage.cache_creation_input_tokens
+            cache_read_input_tokens: state.usage.cached_tokens,
+            cache_creation_input_tokens: state.usage.prompt_tokens_details?.cache_creation_tokens
           }, "claude");
         }
 
